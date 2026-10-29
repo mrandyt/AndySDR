@@ -302,3 +302,33 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
   .topbar-mid { display: none; }
   .modal-body dl { grid-template-columns: 1fr; }
 }
+
+/* ---------- phones (remote control) ---------- */
+.radio-body > *, .lcd, .lcd-main, .lcd-freq { min-width: 0; }
+@media (max-width: 600px) {
+  .wrap { padding: 8px; }
+  .topbar { gap: 8px; padding: 6px 10px; }
+  .brand-name { font-size: 17px; }
+  .theme-pick { font-size: 0; }
+  .theme-pick select { font-size: 12px; max-width: 135px; }
+  .help-btn { padding: 6px 10px; }
+  .radio-top { flex-direction: column; align-items: flex-start; gap: 2px; padding: 6px 12px; }
+  .model-sub { display: none; }
+  .radio-body { padding: 10px; gap: 12px; }
+  .lcd { padding: 8px 10px; min-height: 0; border-width: 6px; }
+  .lcd-flags { flex-wrap: wrap; gap: 4px; }
+  .lcd-flags span { font-size: 9px; padding: 0 3px; }
+  .lcd-freq .seg { height: 50px; width: auto; }
+  .lcd-ch .seg { height: 20px; width: auto; }
+  .lcd-freq-txt { font-size: 38px !important; }
+  .lcd-tag { font-size: 15px !important; }
+  .knobs { gap: 4px; }
+  .knob-wrap { width: 64px; }
+  .key-power { flex: 1 1 100%; }
+  .fkeys { gap: 5px; }
+  .fkeys .key { font-size: 11px; padding: 8px 0; }
+  .numkeys .num { padding: 7px 0; font-size: 16px; }
+  #spec { height: 120px; } #wf { height: 160px; }
+  .scope-bar .mini:not(:first-of-type) { display: none; }
+  #scopeInfo { display: none; }
+}

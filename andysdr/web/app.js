@@ -409,7 +409,7 @@ function onSpectrum(center, fs, freq, data) {
     sctx.fillText(db + "", 4, y - 2);
   }
   const span = fs, f0 = center - span / 2;
-  const nice = [10e3, 25e3, 50e3, 100e3, 200e3, 250e3, 500e3, 1e6, 2e6].find((s) => span / s <= 12) || 2e6;
+  const nice = [10e3, 25e3, 50e3, 100e3, 200e3, 250e3, 500e3, 1e6, 2e6].find((s) => span / s <= Math.max(3, Math.min(12, W / (95 * dpr)))) || 2e6;
   for (let f = Math.ceil(f0 / nice) * nice; f < f0 + span; f += nice) {
     const x = (f - f0) / span * W;
     sctx.beginPath(); sctx.moveTo(x, 0); sctx.lineTo(x, H); sctx.stroke();
