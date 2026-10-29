@@ -33,10 +33,13 @@ jobs:
           done
           python -m pip install pywebview pyinstaller
           python -c "import SoapySDR; print('SoapySDR', SoapySDR.getAPIVersion(), SoapySDR.listModules())"
+          # RTL-SDR (Nooelec etc.) support is essential - fail the build if its driver module is missing
+          python -c "import SoapySDR,sys; m=[x.lower() for x in SoapySDR.listModules()]; ok=any('rtlsdr' in x for x in m); print('RTL-SDR module present:', ok); sys.exit(0 if ok else 1)"
 
       - name: Build AndySDR.exe
         run: |
           pyinstaller --noconfirm AndySDR.spec
+          ls dist/AndySDR/_internal/soapy/lib/SoapySDR/*/ | tee /dev/stderr | grep -qi rtlsdr && echo "RTL-SDR driver bundled in the exe"
           mkdir -p dist/AndySDR/decoders
           cp decoders_README.txt dist/AndySDR/decoders/README.txt
           cp README.md dist/AndySDR/
