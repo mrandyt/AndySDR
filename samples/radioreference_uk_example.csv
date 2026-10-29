@@ -1,0 +1,10 @@
+Frequency Output,Frequency Input,Callsign,Agency/Category,Description,Alpha Tag,PL Tone,Mode,Class Station Code,Tag
+145.5000,,,Amateur,2m FM calling channel,2m Call,,FMN,,Ham
+145.6000,145.0000,GB3XX,Amateur,Example 2m repeater,GB3XX Rptr,CTCSS 77.0,FMN,RM,Ham
+439.6125,430.6125,GB7XX,Amateur,Example DMR repeater,GB7XX DMR,CC1,DMR,RM,Ham
+446.00625,,,PMR446,Licence-free channel 1,PMR446 1,,FMN,,Business
+156.8000,,,Marine,International distress and calling,Marine 16,,FMN,,Marine
+121.5000,,,Aviation,Emergency (Guard),Air Guard,,AM,,Aircraft
+118.7000,,,Aviation,Example approach,Approach,,AM,,Aircraft
+153.3500,,,Paging,Example pager network,Pager,,POCSAG,,Business
+137.9000,,,Weather Sat,Meteor-M LRPT,Meteor LRPT,,TELEMETRY,,Weather

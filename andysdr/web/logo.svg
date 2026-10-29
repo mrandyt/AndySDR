@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2b2f35"/>
+      <stop offset="1" stop-color="#101215"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffd166"/>
+      <stop offset="1" stop-color="#ff7a1a"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="120" height="120" rx="26" fill="url(#bg)" stroke="#3c424a" stroke-width="3"/>
+  <!-- radio waves -->
+  <g fill="none" stroke="url(#amber)" stroke-linecap="round">
+    <path d="M38 38 a36 36 0 0 0 0 44" stroke-width="7" opacity=".55"/>
+    <path d="M50 46 a22 22 0 0 0 0 28" stroke-width="7" opacity=".85"/>
+    <path d="M90 38 a36 36 0 0 1 0 44" stroke-width="7" opacity=".55"/>
+    <path d="M78 46 a22 22 0 0 1 0 28" stroke-width="7" opacity=".85"/>
+  </g>
+  <!-- antenna mast, the "A" -->
+  <path d="M64 30 L44 100 M64 30 L84 100 M51 76 H77" fill="none" stroke="#f3f5f7" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="64" cy="28" r="8" fill="url(#amber)"/>
+  <!-- waveform baseline -->
+  <path d="M18 108 h22 l5 -8 l6 14 l6 -18 l6 22 l6 -14 l5 4 h36" fill="none" stroke="url(#amber)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,76 @@
+# Builds AndySDR.exe on a Windows machine in the cloud every time you push to GitHub.
+# Download the result from the Actions tab (artifact "AndySDR-windows").
+# Push a tag such as v1.0.0 to also publish a GitHub Release with the zip + installer.
+name: Build AndySDR for Windows
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          activate-environment: andysdr
+          python-version: "3.11"
+          channels: conda-forge
+
+      - name: Install SDR libraries
+        run: |
+          conda install -y numpy scipy soapysdr
+          for m in soapysdr-module-rtlsdr soapysdr-module-airspy soapysdr-module-airspyhf soapysdr-module-hackrf soapysdr-module-remote soapysdr-module-lms7 soapysdr-module-plutosdr; do
+            conda install -y "$m" || echo "skipped $m"
+          done
+          python -m pip install pywebview pyinstaller
+          python -c "import SoapySDR; print('SoapySDR', SoapySDR.getAPIVersion(), SoapySDR.listModules())"
+
+      - name: Build AndySDR.exe
+        run: |
+          pyinstaller --noconfirm AndySDR.spec
+          mkdir -p dist/AndySDR/decoders
+          cp decoders_README.txt dist/AndySDR/decoders/README.txt
+          cp README.md dist/AndySDR/
+          cp -r samples dist/AndySDR/
+
+      - name: Smoke test (start the server, fetch the GUI)
+        run: |
+          ./dist/AndySDR/AndySDR.exe --server --port 8099 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8099/ -o /dev/null && break; sleep 2; done
+          curl -sf http://127.0.0.1:8099/ | grep -q AndySDR && echo "GUI served OK"
+          taskkill //IM AndySDR.exe //F || true
+
+      - name: Zip
+        shell: pwsh
+        run: Compress-Archive -Path dist/AndySDR -DestinationPath AndySDR-windows.zip
+
+      - name: Installer (Inno Setup)
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AndySDR-windows
+          path: |
+            AndySDR-windows.zip
+            Output/AndySDR-Setup.exe
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            AndySDR-windows.zip
+            Output/AndySDR-Setup.exe

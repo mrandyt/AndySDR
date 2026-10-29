@@ -1,0 +1,6 @@
+numpy>=1.24
+scipy>=1.10
+pywebview>=5.0      # desktop window (uses Microsoft Edge WebView2 on Windows)
+# Optional: SoapySDR for RTL-SDR / Airspy / HackRF etc. - install with conda-forge:
+#   conda install -c conda-forge soapysdr soapysdr-module-rtlsdr
+# SDRplay receivers only need SDRplay's API installer from sdrplay.com.

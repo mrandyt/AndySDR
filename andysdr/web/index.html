@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AndySDR</title>
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-theme="pro2045">
+
+<!-- ====================== TOP BAR ====================== -->
+<header class="topbar">
+  <div class="brand">
+    <img src="logo.svg" alt="" class="brand-logo">
+    <span class="brand-name">Andy<b>SDR</b></span>
+  </div>
+  <div class="topbar-mid">
+    <span id="conn" class="pill pill-off" data-help="conn">OFFLINE</span>
+    <span id="devname" class="muted"></span>
+    <span id="listeners" class="muted"></span>
+  </div>
+  <div class="topbar-right">
+    <label class="theme-pick" data-help="theme">Style
+      <select id="themeSel">
+        <option value="pro2045">PRO-2045 style</option>
+        <option value="ubcd260">UBCD260DN style</option>
+        <option value="trx2">TRX-2 style</option>
+      </select>
+    </label>
+    <button id="helpBtn" class="help-btn" data-help="help">? HELP</button>
+  </div>
+</header>
+
+<!-- ====================== THE RADIO ====================== -->
+<main class="wrap">
+<section class="radio" id="radio">
+  <div class="radio-top">
+    <div class="model-badge"><img src="logo.svg" alt=""><span>AndySDR</span><em id="modelTag">1000 CHANNEL · TRUNK-READY</em></div>
+    <div class="model-sub" id="modelSub">PROGRAMMABLE SDR SCANNER</div>
+  </div>
+
+  <div class="radio-body">
+    <!-- left: speaker + knobs -->
+    <div class="radio-left">
+      <div class="grille" aria-hidden="true"></div>
+      <div class="knobs">
+        <div class="knob-wrap" data-help="volume">
+          <div class="knob" id="kVol"><div class="knob-cap"><i></i></div></div>
+          <label>VOLUME</label><output id="oVol"></output>
+        </div>
+        <div class="knob-wrap" data-help="squelch">
+          <div class="knob" id="kSq"><div class="knob-cap"><i></i></div></div>
+          <label>SQUELCH</label><output id="oSq"></output>
+        </div>
+        <div class="knob-wrap" data-help="gain">
+          <div class="knob" id="kGain"><div class="knob-cap"><i></i></div></div>
+          <label>RF GAIN</label><output id="oGain"></output>
+        </div>
+      </div>
+      <button class="key key-power" id="pwrBtn" data-help="power"><span class="led" id="pwrLed"></span>AUDIO ON/OFF</button>
+    </div>
+
+    <!-- centre: LCD -->
+    <div class="radio-center">
+      <div class="lcd" id="lcd" data-help="lcd">
+        <div class="lcd-row lcd-flags">
+          <span id="fScan">SCAN</span><span id="fSrch">SRCH</span><span id="fHold">HOLD</span>
+          <span id="fMan">MAN</span><span id="fPri">PRI</span><span id="fDly">DLY</span>
+          <span id="fLo">L/O</span><span id="fAgc">AGC</span><span id="fRec">REC</span><span id="fDec">DEC</span>
+        </div>
+        <div class="lcd-row lcd-banks" id="lcdBanks"></div>
+        <div class="lcd-main">
+          <div class="lcd-ch"><small>CH</small><div id="lcdCh" class="seg-small"></div></div>
+          <div class="lcd-freq" id="lcdFreq"></div><div class="lcd-freq-txt" id="lcdFreqTxt"></div>
+          <div class="lcd-unit">MHz</div>
+        </div>
+        <div class="lcd-row lcd-info">
+          <span class="lcd-mode" id="lcdMode">NFM</span>
+          <span class="lcd-tag" id="lcdTag">ANDYSDR READY</span>
+          <span class="lcd-step" id="lcdStep">12.5k</span>
+        </div>
+        <div class="lcd-row lcd-meter">
+          <span>S</span><div class="smeter" id="smeter"></div><span id="lcdDb">-120</span>
+        </div>
+        <div class="lcd-decode" id="lcdDecode"></div>
+      </div>
+    </div>
+
+    <!-- right: keypad -->
+    <div class="radio-right">
+      <div class="fkeys">
+        <button class="key key-hot" data-k="scan" data-help="k_scan">SCAN</button>
+        <button class="key" data-k="man" data-help="k_man">MAN</button>
+        <button class="key" data-k="srch" data-help="k_srch">SRCH</button>
+        <button class="key" data-k="pgm" data-help="k_pgm">PGM</button>
+        <button class="key" data-k="lo" data-help="k_lo">L/O</button>
+        <button class="key" data-k="pri" data-help="k_pri">PRI</button>
+        <button class="key" data-k="mode" data-help="k_mode">MODE</button>
+        <button class="key" data-k="step" data-help="k_step">STEP</button>
+        <button class="key" data-k="bank" data-help="k_bank">BANK</button>
+        <button class="key" data-k="dly" data-help="k_dly">DLY</button>
+        <button class="key" data-k="rec" data-help="k_rec">REC</button>
+        <button class="key" data-k="dec" data-help="k_dec">DEC</button>
+      </div>
+      <div class="numkeys">
+        <button class="key num" data-k="1">1</button><button class="key num" data-k="2">2</button><button class="key num" data-k="3">3</button>
+        <button class="key num" data-k="4">4</button><button class="key num" data-k="5">5</button><button class="key num" data-k="6">6</button>
+        <button class="key num" data-k="7">7</button><button class="key num" data-k="8">8</button><button class="key num" data-k="9">9</button>
+        <button class="key num" data-k="." data-help="k_dot">·</button><button class="key num" data-k="0">0</button><button class="key num key-enter" data-k="e" data-help="k_e">E</button>
+      </div>
+      <div class="arrows">
+        <button class="key" data-k="down" data-help="k_arrows">▼</button>
+        <button class="key" data-k="clr" data-help="k_clr">CLR</button>
+        <button class="key" data-k="up" data-help="k_arrows">▲</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ====================== SPECTRUM / WATERFALL ====================== -->
+<section class="panel scope" data-help="scope">
+  <div class="scope-bar">
+    <span class="scope-title">SPECTRUM · WATERFALL</span>
+    <span id="scopeInfo" class="muted"></span>
+    <span class="grow"></span>
+    <label class="mini"><input type="checkbox" id="scopeAuto" checked> Auto</label>
+    <label class="mini">Range <input type="range" id="scopeLo" min="-140" max="-40" value="-115"></label>
+    <label class="mini">Top <input type="range" id="scopeHi" min="-80" max="0" value="-25"></label>
+  </div>
+  <canvas id="spec"></canvas>
+  <canvas id="wf"></canvas>
+</section>
+
+<!-- ====================== TABS ====================== -->
+<section class="panel tabs">
+  <nav class="tabbar">
+    <button class="tab active" data-tab="mem">MEMORY</button>
+    <button class="tab" data-tab="act">LIVE ACTIVITY / SEARCH</button>
+    <button class="tab" data-tab="dec">DECODERS</button>
+    <button class="tab" data-tab="img">WEATHER IMAGES</button>
+    <button class="tab" data-tab="rx">RECEIVER</button>
+    <button class="tab" data-tab="net">REMOTE &amp; SETTINGS</button>
+  </nav>
+
+  <!-- MEMORY -->
+  <div class="tabpage active" id="tab-mem">
+    <div class="row wrapline">
+      <div class="bankbtns" id="bankBtns" data-help="banks"></div>
+      <span class="grow"></span>
+      <input id="bankName" class="inp" placeholder="Bank name" maxlength="16" style="width:9em">
+      <button class="btn" id="bankRename">Rename</button>
+      <button class="btn danger" id="bankClear">Clear bank</button>
+    </div>
+    <div class="row wrapline import-box" data-help="import">
+      <b>RadioReference UK import</b>
+      <input type="file" id="csvFile" accept=".csv,.txt,.tsv">
+      <label>into bank <select id="csvBank"></select></label>
+      <input id="csvName" class="inp" placeholder="Bank name (optional)" style="width:12em">
+      <label><input type="checkbox" id="csvReplace"> replace bank</label>
+      <button class="btn primary" id="csvImport">Import CSV</button>
+      <a class="btn" id="csvExport" href="#" download>Export all</a>
+      <span id="csvResult" class="muted"></span>
+    </div>
+    <div class="tablewrap">
+      <table class="grid" id="memTable">
+        <thead><tr><th>CH</th><th>Frequency</th><th>Mode</th><th>Name</th><th>Tag</th><th>Decoder</th><th>L/O</th><th>DLY</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ACTIVITY / SEARCH -->
+  <div class="tabpage" id="tab-act">
+    <div class="row wrapline" data-help="search">
+      <label>From <input class="inp" id="sStart" style="width:7em"> MHz</label>
+      <label>To <input class="inp" id="sStop" style="width:7em"> MHz</label>
+      <label>Step <select id="sStep">
+        <option value="5000">5 kHz</option><option value="6250">6.25 kHz</option><option value="8330">8.33 kHz</option>
+        <option value="10000">10 kHz</option><option value="12500" selected>12.5 kHz</option><option value="25000">25 kHz</option>
+        <option value="100000">100 kHz</option></select></label>
+      <label>Mode <select id="sMode"></select></label>
+      <label>Sensitivity <input type="range" id="sThr" min="4" max="25" value="10"> <output id="sThrO">10 dB</output></label>
+      <label><input type="radio" name="smode" value="stop" checked> Stop on signal</label>
+      <label><input type="radio" name="smode" value="log"> Sweep &amp; log only</label>
+      <button class="btn primary" id="sGo">▶ Search</button>
+      <button class="btn" id="sStopBtn">■ Stop</button>
+      <button class="btn" id="sClear">Clear list</button>
+    </div>
+    <div class="row wrapline presets" id="sPresets"></div>
+    <div class="tablewrap">
+      <table class="grid" id="actTable">
+        <thead><tr><th>Frequency</th><th>Known as</th><th>Hits</th><th>Peak dB</th><th>First</th><th>Last</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- DECODERS -->
+  <div class="tabpage" id="tab-dec">
+    <div class="row wrapline" data-help="decoders">
+      <div id="decBtns" class="decbtns"></div>
+      <label>Digital sub-mode <select id="dsdSub">
+        <option value="auto">Auto (P25/DMR/YSF)</option><option value="dmr">DMR</option>
+        <option value="p25p1">P25 Phase 1</option><option value="p25p2">P25 Phase 2</option>
+        <option value="nxdn48">NXDN 4800</option><option value="nxdn96">NXDN 9600</option>
+        <option value="dpmr">dPMR</option><option value="ysf">YSF / C4FM</option>
+        <option value="m17">M17</option><option value="provoice">ProVoice</option><option value="x2tdma">X2-TDMA</option>
+      </select></label>
+      <button class="btn" id="decOff">Decoder OFF</button>
+      <button class="btn" id="decClear">Clear log</button>
+    </div>
+    <div class="declist" id="decStatus"></div>
+    <pre class="console" id="decLog"></pre>
+  </div>
+
+  <!-- IMAGES -->
+  <div class="tabpage" id="tab-img">
+    <div class="row"><b>Weather fax &amp; satellite pictures</b><span class="grow"></span>
+      <button class="btn" id="imgRefresh">Refresh</button></div>
+    <div class="imggrid" id="imgGrid"></div>
+  </div>
+
+  <!-- RECEIVER -->
+  <div class="tabpage" id="tab-rx">
+    <div class="row wrapline" data-help="receiver">
+      <label>Receiver <select id="devSel" style="min-width:18em"></select></label>
+      <button class="btn primary" id="devOpen">Use this receiver</button>
+      <button class="btn" id="devRefresh">Find receivers</button>
+      <span class="grow"></span>
+      <input class="inp" id="tcpAddr" placeholder="rtl_tcp host:port" style="width:12em">
+      <button class="btn" id="tcpAdd">Add rtl_tcp</button>
+    </div>
+    <div class="row wrapline">
+      <label>Sample rate <select id="rateSel"></select></label>
+      <label>Antenna <select id="antSel"></select></label>
+      <label>PPM <input class="inp" id="ppmInp" type="number" style="width:5em" value="0"></label>
+      <button class="btn" id="ppmSet">Set</button>
+      <label><input type="checkbox" id="agcChk"> Hardware AGC</label>
+    </div>
+    <div class="devsettings" id="devSettings"></div>
+    <div class="muted small" id="soapyInfo"></div>
+  </div>
+
+  <!-- REMOTE & SETTINGS -->
+  <div class="tabpage" id="tab-net">
+    <div class="cols">
+      <div class="card" data-help="remote">
+        <h3>Remote control from another PC</h3>
+        <p>On any computer, tablet or phone on your network, open a web browser at:</p>
+        <div id="netAddrs" class="addr"></div>
+        <p>Password: <b id="netPass" class="mono">(shown on the main PC only)</b></p>
+        <div class="row wrapline local-only">
+          <input class="inp" id="newPass" placeholder="New password" style="width:12em">
+          <button class="btn" id="setPass">Change password</button>
+        </div>
+        <label class="local-only"><input type="checkbox" id="reqLocal"> Ask for the password on this PC too</label>
+        <label><input type="checkbox" id="myAudio" checked> Play audio on this computer</label>
+      </div>
+      <div class="card">
+        <h3>Scanner settings</h3>
+        <label>Resume delay after a transmission <input class="inp" type="number" step="0.5" id="setDelay" style="width:5em"> s</label>
+        <label>Time on each memory channel <input class="inp" type="number" step="0.05" id="setDwell" style="width:5em"> s</label>
+        <label>FM de-emphasis <select id="setDeemph"><option value="50">50 µs (UK/Europe)</option><option value="75">75 µs (USA)</option></select></label>
+        <button class="btn primary" id="saveSettings">Save settings</button>
+        <h3>Keyboard</h3>
+        <p class="small muted">Digits &amp; <b>.</b> type a frequency, <b>Enter</b> tunes, <b>↑ ↓</b> step, <b>S</b> scan, <b>M</b> manual, <b>H</b> help, <b>Esc</b> clear.</p>
+      </div>
+    </div>
+  </div>
+</section>
+<footer class="foot muted small">AndySDR · listen responsibly – see Help › Legal</footer>
+</main>
+
+<!-- ====================== HELP ====================== -->
+<div class="modal" id="helpModal" hidden>
+  <div class="modal-box">
+    <div class="modal-head">
+      <img src="logo.svg" alt="" style="height:30px">
+      <h2>AndySDR help</h2>
+      <span class="grow"></span>
+      <label class="small"><input type="checkbox" id="explainMode"> Explain mode (click any control)</label>
+      <button class="btn" id="helpClose">✕ Close</button>
+    </div>
+    <div class="modal-body" id="helpBody"></div>
+  </div>
+</div>
+<div class="explain-tip" id="explainTip" hidden></div>
+
+<!-- ====================== LOGIN ====================== -->
+<div class="modal" id="loginModal" hidden>
+  <div class="modal-box login">
+    <img src="logo.svg" alt="" style="height:64px">
+    <h2>AndySDR remote</h2>
+    <p>Enter the password shown on the receiving PC (Remote &amp; Settings tab).</p>
+    <input class="inp" id="loginPass" type="password" placeholder="Password" autocomplete="current-password">
+    <button class="btn primary" id="loginGo">Connect</button>
+    <p class="err" id="loginErr"></p>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+<script src="app.js"></script>
+</body>
+</html>
