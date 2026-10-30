@@ -211,7 +211,20 @@ button, select, input { font-family: inherit; font-size: 13px; }
 .scope-title { font-weight: 700; letter-spacing: 2px; font-size: 12px; color: var(--accent); }
 .mini { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
 .mini input { width: 90px; accent-color: var(--accent); }
-#spec { width: 100%; height: 170px; display: block; cursor: crosshair; border-radius: 6px 6px 0 0; background: #07090b; }
+#spec { width: 100%; height: calc(170px + var(--bp-strip, 30px)); display: block; cursor: crosshair; border-radius: 6px 6px 0 0; background: #07090b; }
+/* VFO bar + band map + band plan */
+.vfo-bar { display: flex; gap: 10px; align-items: center; padding: 3px 6px; min-height: 26px; flex-wrap: wrap; }
+.vfo-chip { background: #ff4040; color: #fff; border-radius: 5px; padding: 2px 8px; font-family: Consolas, monospace; font-size: 13px; white-space: nowrap; }
+.vfo-chip b { letter-spacing: 1px; margin-right: 2px; }
+.vfo-band { font-size: 13px; }
+.vfo-hint { display: flex; gap: 6px; align-items: center; }
+.bp-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+#bandmap { width: 100%; height: 30px; display: block; cursor: pointer; border-radius: 6px; background: #07090b; margin-bottom: 4px; }
+.bp-legend { display: flex; flex-wrap: wrap; gap: 6px; }
+.bp-leg { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 14px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
+.bp-leg.on, .bp-leg:hover { border-color: var(--accent); }
+#bpTable tr.bp-sub td:nth-child(4) { padding-left: 22px; color: var(--muted); }
+#bpTable td.f { cursor: pointer; }
 #wf { width: 100%; height: 230px; display: block; cursor: crosshair; border-radius: 0 0 6px 6px; background: #000; }
 
 .tabs { padding: 0; overflow: hidden; }
@@ -328,7 +341,9 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
   .fkeys { gap: 5px; }
   .fkeys .key { font-size: 11px; padding: 8px 0; }
   .numkeys .num { padding: 7px 0; font-size: 16px; }
-  #spec { height: 120px; } #wf { height: 160px; }
-  .scope-bar .mini:not(:first-of-type) { display: none; }
+  #spec { height: calc(120px + var(--bp-strip, 30px)); } #wf { height: 160px; }
+  .scope-bar { flex-wrap: wrap; gap: 8px; }
+  .scope-bar .mini:not(:first-of-type):not(.keep) { display: none; }
+  .vfo-hint { display: none; }
   #scopeInfo { display: none; }
 }

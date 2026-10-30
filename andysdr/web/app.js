@@ -148,7 +148,7 @@ function renderLCD() {
   else if (bankMode) tag = "PRESS 0-9 TO TOGGLE BANK";
   else if (S.channel) tag = S.channel.name || `BANK ${S.channel.bank} CH ${S.channel.ch}`;
   else if (S.scan === "search" || S.scan_prev === "search") tag = `SEARCH ${fmtMHz(S.search.start, 3)}-${fmtMHz(S.search.stop, 3)}`;
-  else tag = "MANUAL";
+  else { const b = S.freq ? bandsAt(S.freq).filter((x) => !x.point)[0] : null; tag = b ? b.name.toUpperCase() : "MANUAL"; }
   $("lcdTag").textContent = tag;
   const flag = (id, on) => $(id).classList.toggle("on", !!on);
   flag("fScan", S.scan === "scan" || (S.scan === "hold" && S.scan_prev === "scan"));
@@ -182,6 +182,7 @@ function renderLCD() {
 
 function renderState() {
   renderLCD();
+  renderVfo();
   $("devname").textContent = S.device ? `· ${S.device}` : "";
   $("listeners").textContent = S.listeners ? `· ${S.listeners} connected` : "";
   if (!knobs.sq.dragging) knobs.sq.set(S.squelch, false);
@@ -370,7 +371,8 @@ function makePalette() {
 makePalette();
 function sizeCanvases() {
   const dpr = window.devicePixelRatio || 1;
-  for (const c of [specC, wfC]) {
+  for (const c of [specC, wfC, $("bandmap")]) {
+    if (!c.clientWidth) continue;
     const w = Math.floor(c.clientWidth * dpr), h = Math.floor(c.clientHeight * dpr);
     if (c.width !== w || c.height !== h) {
       if (c === wfC && c.width) { const tmp = document.createElement("canvas"); tmp.width = c.width; tmp.height = c.height; tmp.getContext("2d").drawImage(c, 0, 0); c.width = w; c.height = h; wctx.drawImage(tmp, 0, 0, w, h); }
@@ -428,7 +430,9 @@ function onSpectrum(center, fs, freq, data) {
   sctx.beginPath();
   for (let x = 0; x < W; x++) x ? sctx.lineTo(x, y(col[x])) : sctx.moveTo(x, y(col[x]));
   sctx.strokeStyle = css.getPropertyValue("--scope-line"); sctx.lineWidth = 1.2 * dpr; sctx.stroke();
-  sctx.strokeStyle = "#ff4040"; sctx.lineWidth = 1.5 * dpr; sctx.beginPath(); sctx.moveTo(xf, 0); sctx.lineTo(xf, H); sctx.stroke();
+  const stripH = drawBandStrip(sctx, f0, span, W, dpr);
+  sctx.strokeStyle = "#ff4040"; sctx.lineWidth = 1.5 * dpr; sctx.beginPath(); sctx.moveTo(xf, stripH); sctx.lineTo(xf, H); sctx.stroke();
+  drawVfoFlag(sctx, xf, stripH, W, freq, dpr);
   // waterfall
   const WH = wfC.height;
   wctx.drawImage(wfC, 0, 0, W, WH - 1, 0, 1, W, WH - 1);
@@ -441,6 +445,7 @@ function onSpectrum(center, fs, freq, data) {
   wctx.putImageData(row, 0, 0);
   wctx.fillStyle = "rgba(255,64,64,0.8)"; wctx.fillRect(xf - dpr / 2, 0, dpr, 3);
   $("scopeInfo").textContent = `centre ${fmtMHz(center, 4)} MHz · span ${(fs / 1e6).toFixed(2)} MHz · tuned ${fmtMHz(freq, 5)}`;
+  drawBandMap();
 }
 function scopeFreq(e, c) {
   if (!spec) return null;
@@ -453,8 +458,216 @@ function scopeFreq(e, c) {
 for (const c of [specC, wfC]) {
   c.addEventListener("click", (e) => { if (explainOn) return; const f = scopeFreq(e, c); if (f) send({ cmd: "tune", freq: f }); });
   c.addEventListener("wheel", (e) => { e.preventDefault(); send({ cmd: "step", dir: e.deltaY < 0 ? 1 : -1 }); }, { passive: false });
-  c.addEventListener("mousemove", (e) => { const f = scopeFreq(e, c); if (f) c.title = fmtMHz(f, 4) + " MHz – click to tune"; });
+  c.addEventListener("mousemove", (e) => {
+    const f = scopeFreq(e, c); if (!f) return;
+    const b = bandsAt(f).filter((x) => !x.point)[0];
+    c.title = fmtMHz(f, 4) + " MHz" + (b ? " · " + b.name : "") + " – click to tune";
+  });
 }
+
+/* ======================================================= UK band plan + VFO */
+const BP_STRIP = [0, 12, 30, 44];          // band strip height on the spectrum (CSS px) for Off/Small/Medium/Large
+const BP_MAP = [0, 22, 30, 42];            // overview band map height
+const MAP_LO = 9e3, MAP_HI = 6.5e9;        // overview covers 9 kHz – 6.5 GHz on a log scale
+let bpSize = +(localStorage.getItem("andysdr_bpsize") ?? 2);
+const bandmapC = $("bandmap"), bmctx = bandmapC.getContext("2d");
+let lastVfoKey = "";
+
+function bpColor(b, a = 1) {
+  const hex = (BANDPLAN_CATS[b.cat] || BANDPLAN_CATS.science).color;
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
+}
+function fitText(ctx, t, w) {
+  if (ctx.measureText(t).width <= w) return t;
+  while (t.length > 3 && ctx.measureText(t + "…").width > w) t = t.slice(0, -1);
+  return t.length > 3 ? t + "…" : "";
+}
+function drawBandStrip(ctx, f0, span, W, dpr) {
+  if (!bpSize) return 0;
+  const H = BP_STRIP[bpSize] * dpr, rows = bpSize === 1 ? 1 : 2, rh = H / rows, f1 = f0 + span;
+  const X = (f) => (f - f0) / span * W;
+  ctx.fillStyle = "rgba(7,9,11,0.82)"; ctx.fillRect(0, 0, W, H);
+  ctx.font = `${(bpSize === 3 ? 11 : 10) * dpr}px Segoe UI, Arial, sans-serif`; ctx.textBaseline = "middle";
+  for (const b of BANDPLAN) {
+    if (b.point || b.stop < f0 || b.start > f1) continue;
+    const r = Math.min(b.level, rows - 1); if (b.level >= rows) { if (rows === 1) continue; }
+    const x0 = Math.max(0, X(b.start)), x1 = Math.min(W, X(b.stop)), y0 = r * rh;
+    ctx.fillStyle = bpColor(b, b.level ? 0.42 : 0.30); ctx.fillRect(x0, y0 + dpr, Math.max(dpr, x1 - x0), rh - 2 * dpr);
+    ctx.fillStyle = bpColor(b, 1);
+    if (X(b.start) >= 0) ctx.fillRect(X(b.start), y0 + dpr, dpr, rh - 2 * dpr);
+    if (X(b.stop) <= W) ctx.fillRect(X(b.stop) - dpr, y0 + dpr, dpr, rh - 2 * dpr);
+    const txt = fitText(ctx, b.name, x1 - x0 - 8 * dpr);
+    if (txt) { ctx.fillStyle = "#f2f5f8"; ctx.fillText(txt, x0 + 4 * dpr, y0 + rh / 2); }
+  }
+  if (bpSize >= 2) {   // key single frequencies as small markers
+    for (const b of BANDPLAN) {
+      if (!b.point || b.start < f0 || b.start > f1) continue;
+      const x = X(b.start);
+      ctx.fillStyle = bpColor(b, 1);
+      ctx.beginPath(); ctx.moveTo(x, H - 1); ctx.lineTo(x - 4 * dpr, H - 7 * dpr); ctx.lineTo(x + 4 * dpr, H - 7 * dpr); ctx.fill();
+      if (bpSize === 3) {
+        ctx.save(); ctx.font = `${9 * dpr}px Segoe UI, Arial, sans-serif`; ctx.fillStyle = "rgba(255,255,255,.75)";
+        ctx.textBaseline = "top"; ctx.fillText(b.name.split(" – ")[0].slice(0, 22), x + 5 * dpr, H + 2 * dpr); ctx.restore();
+      }
+    }
+  }
+  ctx.textBaseline = "alphabetic";
+  return H;
+}
+function drawVfoFlag(ctx, xf, top, W, freq, dpr) {
+  const t = "VFO " + fmtMHz(freq, 5);
+  ctx.font = `bold ${10.5 * dpr}px Consolas, monospace`;
+  const w = ctx.measureText(t).width + 10 * dpr, h = 16 * dpr;
+  const x = Math.min(W - w, Math.max(0, xf - w / 2)), y = top + 3 * dpr + (bpSize === 3 ? 12 * dpr : 0);
+  ctx.fillStyle = "#ff4040"; ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = "#fff"; ctx.textBaseline = "middle"; ctx.fillText(t, x + 5 * dpr, y + h / 2); ctx.textBaseline = "alphabetic";
+}
+const mapX = (f, W) => (Math.log10(Math.max(MAP_LO, f)) - Math.log10(MAP_LO)) / (Math.log10(MAP_HI) - Math.log10(MAP_LO)) * W;
+const mapF = (x, W) => Math.pow(10, Math.log10(MAP_LO) + x / W * (Math.log10(MAP_HI) - Math.log10(MAP_LO)));
+function drawBandMap() {
+  if (!bpSize) return;
+  const dpr = window.devicePixelRatio || 1, W = bandmapC.width, H = bandmapC.height;
+  if (!W || !H) return;
+  const ctx = bmctx, barTop = 2 * dpr, barH = H - 14 * dpr;
+  ctx.fillStyle = "#07090b"; ctx.fillRect(0, 0, W, H);
+  for (const b of BANDPLAN) {
+    if (b.point || b.level) continue;
+    const x0 = mapX(b.start, W), x1 = mapX(b.stop, W);
+    ctx.fillStyle = bpColor(b, 0.85); ctx.fillRect(x0, barTop, Math.max(1, x1 - x0), barH);
+  }
+  for (const b of BANDPLAN) {   // sub-bands as a thin top line
+    if (b.point || !b.level) continue;
+    ctx.fillStyle = bpColor(b, 1); ctx.fillRect(mapX(b.start, W), barTop, Math.max(1, mapX(b.stop, W) - mapX(b.start, W)), 3 * dpr);
+  }
+  ctx.font = `${9.5 * dpr}px Consolas, monospace`; ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.strokeStyle = "rgba(255,255,255,.25)";
+  for (const [f, l] of [[1e4, "10k"], [1e5, "100k"], [1e6, "1M"], [3e6, "3M"], [1e7, "10M"], [3e7, "30M"], [1e8, "100M"], [3e8, "300M"], [1e9, "1G"], [3e9, "3G"]]) {
+    const x = mapX(f, W);
+    ctx.beginPath(); ctx.moveTo(x, barTop + barH); ctx.lineTo(x, barTop + barH + 3 * dpr); ctx.stroke();
+    ctx.fillText(l, x + 2 * dpr, H - 2 * dpr);
+  }
+  if (spec) {   // what the spectrum is showing
+    const a = mapX(spec.center - spec.fs / 2, W), b = mapX(spec.center + spec.fs / 2, W);
+    ctx.fillStyle = "rgba(255,255,255,.22)"; ctx.fillRect(a, 0, Math.max(3 * dpr, b - a), barTop + barH);
+    ctx.strokeStyle = "rgba(255,255,255,.85)"; ctx.lineWidth = dpr; ctx.strokeRect(a, 0.5, Math.max(3 * dpr, b - a), barTop + barH);
+  }
+  const f = S.freq || 0;
+  if (f) {   // the VFO needle
+    const x = mapX(f, W);
+    ctx.fillStyle = "#ff4040"; ctx.fillRect(x - dpr, 0, 2 * dpr, barTop + barH);
+    ctx.beginPath(); ctx.moveTo(x, barTop + barH - 2 * dpr); ctx.lineTo(x - 5 * dpr, H - 2 * dpr); ctx.lineTo(x + 5 * dpr, H - 2 * dpr); ctx.fill();
+    const t = fmtMHz(f, 4) + " MHz";
+    ctx.font = `bold ${10 * dpr}px Consolas, monospace`;
+    const tw = ctx.measureText(t).width + 8 * dpr, tx = Math.min(W - tw, Math.max(0, x + 8 * dpr));
+    ctx.fillStyle = "rgba(255,64,64,.92)"; ctx.fillRect(tx, H - 13 * dpr, tw, 12 * dpr);
+    ctx.fillStyle = "#fff"; ctx.textBaseline = "middle"; ctx.fillText(t, tx + 4 * dpr, H - 7 * dpr); ctx.textBaseline = "alphabetic";
+  }
+}
+function mapBandAt(e) {
+  const r = bandmapC.getBoundingClientRect();
+  const f = mapF((e.clientX - r.left) / r.width * bandmapC.width, bandmapC.width);
+  return { f, b: bandsAt(f).filter((x) => !x.point)[0] };
+}
+bandmapC.addEventListener("mousemove", (e) => {
+  const { f, b } = mapBandAt(e);
+  bandmapC.title = (f >= 1e6 ? fmtMHz(f, 3) + " MHz" : (f / 1e3).toFixed(1) + " kHz") + (b ? ` · ${b.name} (${fmtMHz(b.start, 3)}–${fmtMHz(b.stop, 3)} MHz) – click to go there` : "");
+});
+bandmapC.addEventListener("click", (e) => {
+  if (explainOn) return;
+  const { f, b } = mapBandAt(e);
+  if (b) tuneBand(b, Math.min(b.stop, Math.max(b.start, f)));
+  else send({ cmd: "tune", freq: Math.round(f / 1000) * 1000 });
+});
+function tuneBand(b, f) {
+  const st = b.step || 12500;
+  f = f ?? (b.point ? b.start : b.start + (b.stop - b.start) / 2);
+  f = b.point ? b.start : Math.min(b.stop, Math.max(b.start, Math.round(f / st) * st));
+  send({ cmd: "tune", freq: f, mode: b.mode });
+  if (STEPS.includes(b.step) && b.step !== S.step) send({ cmd: "stepsize", hz: b.step });
+}
+function searchBand(b) {
+  $("sStart").value = (b.start / 1e6).toFixed(5).replace(/0+$/, "").replace(/\.$/, "");
+  $("sStop").value = (b.stop / 1e6).toFixed(5).replace(/0+$/, "").replace(/\.$/, "");
+  const st = String(b.step);
+  if (![...$("sStep").options].some((o) => o.value === st)) $("sStep").insertAdjacentHTML("beforeend", `<option value="${st}">${b.step >= 1000 ? b.step / 1000 + " kHz" : b.step + " Hz"}</option>`);
+  $("sStep").value = st; $("sMode").value = b.mode;
+  showTab("act"); toast(`${b.name} loaded into Search – press ▶ Search`);
+}
+function setBpSize(n, save = true) {
+  bpSize = Math.max(0, Math.min(3, n | 0));
+  $("bpSize").value = String(bpSize);
+  bandmapC.style.display = bpSize ? "" : "none";
+  bandmapC.style.height = BP_MAP[bpSize] + "px";
+  document.documentElement.style.setProperty("--bp-strip", BP_STRIP[bpSize] + "px");
+  if (save) localStorage.setItem("andysdr_bpsize", bpSize);
+  sizeCanvases(); drawBandMap();
+}
+$("bpSize").onchange = () => setBpSize(+$("bpSize").value);
+
+function renderVfo() {
+  const f = S.freq || 0;
+  $("vfoFreq").textContent = fmtMHz(f, 5) + " MHz";
+  const here = f ? bandsAt(f) : [];
+  const key = f + "|" + S.mode + "|" + S.step;
+  if (key === lastVfoKey) return;
+  lastVfoKey = key;
+  const main = here.filter((b) => !b.point).reverse();   // allocation › sub-band
+  const pt = here.find((b) => b.point);
+  $("vfoBand").innerHTML = main.length || pt
+    ? main.map((b) => `<span class="bp-dot" style="background:${bpColor(b)}"></span>${esc(b.name)}`).join(' <span class="muted">›</span> ') +
+      (pt ? ` <span class="muted">›</span> <b>${esc(pt.name)}</b>` : "")
+    : '<span class="muted">Outside the UK band plan</span>';
+  const best = pt || here.find((b) => !b.point);
+  const hint = $("vfoHint");
+  if (best && (best.mode !== S.mode || (STEPS.includes(best.step) && best.step !== S.step))) {
+    hint.innerHTML = `usually ${best.mode} · ${best.step >= 1000 ? best.step / 1000 + " kHz" : best.step + " Hz"} <button class="btn sm" id="vfoUse">Use</button>`;
+    $("vfoUse").onclick = () => { send({ cmd: "mode", mode: best.mode }); if (STEPS.includes(best.step)) send({ cmd: "stepsize", hz: best.step }); };
+  } else hint.textContent = best && best.note ? best.note : "";
+  drawBandMap();
+  if ($("tab-bp").classList.contains("active")) markBpRows();
+}
+
+/* ----- band plan tab ----- */
+$("bpCat").insertAdjacentHTML("beforeend", Object.entries(BANDPLAN_CATS).map(([k, c]) => `<option value="${k}">${esc(c.label)}</option>`).join(""));
+$("bpLegend").innerHTML = Object.entries(BANDPLAN_CATS).map(([k, c]) =>
+  `<button class="bp-leg" data-cat="${k}"><span class="bp-dot" style="background:${c.color}"></span>${esc(c.label)}</button>`).join("");
+$("bpLegend").querySelectorAll("[data-cat]").forEach((b) => b.onclick = () => { $("bpCat").value = $("bpCat").value === b.dataset.cat ? "" : b.dataset.cat; renderBandPlan(); });
+function renderBandPlan() {
+  const q = $("bpFind").value.trim().toLowerCase(), cat = $("bpCat").value, sub = $("bpSub").checked;
+  const qf = parseFloat(q.replace(/\s*mhz$/, ""));
+  const list = BANDPLAN.filter((b) => {
+    if (cat && b.cat !== cat) return false;
+    if (!sub && (b.level || b.point)) return false;
+    if (!q) return true;
+    if (/^[\d.]+(\s*mhz)?$/.test(q) && qf > 0) { const f = qf * 1e6; return b.point ? Math.abs(b.start - f) < 5000 : f >= b.start && f <= b.stop; }
+    return (b.name + " " + b.note + " " + BANDPLAN_CATS[b.cat].label).toLowerCase().includes(q);
+  });
+  $("bpCount").textContent = `${list.length} of ${BANDPLAN.length} entries`;
+  $("bpLegend").querySelectorAll("[data-cat]").forEach((b) => b.classList.toggle("on", b.dataset.cat === cat));
+  $("bpTable").querySelector("tbody").innerHTML = list.map((b) => {
+    const i = BANDPLAN.indexOf(b);
+    return `<tr data-i="${i}" class="${b.level || b.point ? "bp-sub" : ""}"><td><span class="bp-dot" style="background:${bpColor(b)}"></span></td>
+      <td class="f" data-act="tune">${fmtMHz(b.start, b.start < 3e7 ? 4 : 3)}</td><td class="muted">${b.point ? "" : fmtMHz(b.stop, b.stop < 3e7 ? 4 : 3)}</td>
+      <td>${esc(b.name)}</td><td>${b.mode}</td><td class="muted">${b.step >= 1e6 ? b.step / 1e6 + " MHz" : b.step >= 1000 ? b.step / 1000 + " kHz" : b.step + " Hz"}</td>
+      <td class="muted small">${esc(b.note)}</td>
+      <td><button class="btn sm" data-act="tune">Tune</button>${b.point ? "" : ' <button class="btn sm" data-act="search">Search</button>'}</td></tr>`;
+  }).join("") || '<tr><td colspan="8" class="muted">Nothing matches.</td></tr>';
+  $("bpTable").querySelectorAll("tr[data-i]").forEach((tr) => {
+    const b = BANDPLAN[+tr.dataset.i];
+    tr.querySelectorAll("[data-act=tune]").forEach((el) => el.onclick = () => tuneBand(b));
+    tr.querySelectorAll("[data-act=search]").forEach((el) => el.onclick = () => searchBand(b));
+  });
+  markBpRows();
+}
+function markBpRows() {
+  const f = S.freq || 0;
+  $("bpTable").querySelectorAll("tr[data-i]").forEach((tr) => {
+    const b = BANDPLAN[+tr.dataset.i];
+    tr.classList.toggle("playing", b.point ? Math.abs(f - b.start) <= 2500 : f >= b.start && f <= b.stop);
+  });
+}
+$("bpFind").oninput = renderBandPlan; $("bpCat").onchange = renderBandPlan; $("bpSub").onchange = renderBandPlan;
+$("bpHere").onclick = () => { $("bpFind").value = fmtMHz(S.freq || 0, 4); $("bpCat").value = ""; $("bpSub").checked = true; renderBandPlan(); };
 
 /* ======================================================= tabs */
 function showTab(name) {
@@ -462,6 +675,7 @@ function showTab(name) {
   document.querySelectorAll(".tabpage").forEach((p) => p.classList.toggle("active", p.id === "tab-" + name));
   if (name === "img") send({ cmd: "images" });
   if (name === "dec") send({ cmd: "decoders" });
+  if (name === "bp") renderBandPlan();
   sizeCanvases();
 }
 document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => showTab(t.dataset.tab)));
@@ -689,6 +903,10 @@ const HELP = {
   search: ["Search", "Set From/To in MHz, the channel step, mode and sensitivity (lower dB = finds weaker signals but more false hits), then Search. UK quick ranges fill the boxes for you. Results list each active frequency with hit count and strength – click a frequency to listen, Store to save it to the selected bank."],
   decoders: ["Decoders", "Pick what to decode on the current frequency. Digital voice uses DSD-FME (choose DMR, P25, NXDN, dPMR, YSF, M17 or Auto); pagers use multimon-ng (POCSAG & FLEX); WEFAX is built in; Meteor-M LRPT records the satellite pass and hands it to SatDump. Decoded text appears in the log and on the LCD bottom line. Memory channels can start their decoder automatically."],
   receiver: ["Receiver", "Choose which SDR to use: every SoapySDR device (RTL-SDR/Nooelec, SDRplay RSP1A/RSP2/RSP2pro/RSPdx/RSPduo, Airspy, HackRF, LimeSDR, Pluto…), rtl_tcp servers on other machines, or the Simulator for practice. Sample rate sets how wide the waterfall is. Antenna picks the input (RSP2: Antenna A, B or Hi-Z). Device switches (bias-T, notch filters, direct sampling) appear underneath automatically."],
+  bandplan: ["Band plan size", "Shows the UK band plan as coloured strips across the top of the spectrum and in the band map above it. Off hides it; Small shows main allocations only; Medium adds sub-bands (e.g. 2 m FM simplex) and markers for key frequencies (Ch 16, 121.5, APRS…); Large makes the strips bigger and names the key frequencies. Each computer remembers its own choice."],
+  vfo: ["VFO bar", "The VFO is the frequency you are tuned to. This bar shows it, which UK band and sub-band it is in, and – if the band normally uses a different mode or step – a 'Use' button that sets them for you. The red line and red VFO flag on the spectrum mark the same frequency."],
+  bandmap: ["Band map", "The whole radio spectrum from 9 kHz to 6.5 GHz on one strip, coloured by who uses it (see the legend in the UK BAND PLAN tab). The red needle is your VFO and the white box is the part the spectrum display is showing. Hover to see a band's name; click a band to jump there in the right mode and step."],
+  bptab: ["UK band plan list", "Every UK allocation, amateur sub-band and key frequency from 9 kHz to 6.5 GHz. Type a name or a frequency (e.g. 156.8) to find it, pick a category or click the coloured legend, untick sub-bands for the big picture. Tune goes straight there in the right mode; Search loads the band into the Live Activity search so you can find everything active in it. 'Where am I?' lists the bands your VFO is in."],
   remote: ["Remote control", "AndySDR is also a server: any PC, laptop, tablet or phone on your home network can open the address shown and control the radio with full audio and waterfall. Enter the password shown here. Windows may ask to allow AndySDR through the firewall – choose 'Private networks'. Do not forward the port to the internet."],
 };
 
@@ -707,7 +925,7 @@ function openHelp() {
   <h3>KNOBS &amp; DISPLAY</h3>${ctl(["volume", "squelch", "gain", "power", "lcd"])}
   <h3>KEYPAD &amp; FUNCTION KEYS</h3>${ctl(["k_scan", "k_man", "k_srch", "k_pgm", "k_lo", "k_pri", "k_mode", "k_step", "k_bank", "k_dly", "k_rec", "k_dec", "k_dot", "k_e", "k_arrows", "k_clr"])}
   <p class="small">Keyboard: digits and <code>.</code> type, <code>Enter</code> tunes, <code>↑ ↓</code> step, <code>S</code> scan, <code>M</code> manual, <code>P</code> program, <code>L</code> lockout, <code>H</code> help, <code>Esc</code> clear.</p>
-  <h3>SCREENS</h3>${ctl(["scope", "banks", "import", "search", "decoders", "receiver", "remote", "theme", "conn"])}
+  <h3>SCREENS</h3>${ctl(["scope", "vfo", "bandmap", "bandplan", "bptab", "banks", "import", "search", "decoders", "receiver", "remote", "theme", "conn"])}
   <h3>DECODER PROGRAMS</h3>
   <p>AndySDR has WEFAX built in. For the others, download the free Windows builds and unzip each into the <code>decoders</code> folder next to <code>AndySDR.exe</code> (any sub-folder is fine – AndySDR finds the .exe):</p>
   <dl><dt>DSD-FME</dt><dd>github.com/lwvmobile/dsd-fme – DMR, P25 1/2, NXDN, dPMR, YSF, M17. AndySDR feeds it like SDR++'s network sink (TCP 127.0.0.1:7355, 48 kHz); DSD-FME plays decoded voice on your speakers itself.</dd>
@@ -749,5 +967,6 @@ document.addEventListener("click", (e) => {
 }, true);
 document.querySelectorAll("[data-help]").forEach((el) => { const h = HELP[el.dataset.help]; if (h && !el.title) el.title = h[0] + " – " + h[1].split(". ")[0] + "."; });
 
+setBpSize(bpSize, false);
 renderLCD();
 connect();

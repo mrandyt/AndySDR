@@ -127,7 +127,17 @@
     <label class="mini"><input type="checkbox" id="scopeAuto" checked> Auto</label>
     <label class="mini">Range <input type="range" id="scopeLo" min="-140" max="-40" value="-115"></label>
     <label class="mini">Top <input type="range" id="scopeHi" min="-80" max="0" value="-25"></label>
+    <label class="mini keep" data-help="bandplan">Band plan <select id="bpSize">
+      <option value="0">Off</option><option value="1">Small</option><option value="2" selected>Medium</option><option value="3">Large</option>
+    </select></label>
   </div>
+  <div class="vfo-bar" data-help="vfo">
+    <span class="vfo-chip"><b>VFO</b> <span id="vfoFreq">---.----- MHz</span></span>
+    <span class="vfo-band" id="vfoBand">–</span>
+    <span class="grow"></span>
+    <span class="vfo-hint muted small" id="vfoHint"></span>
+  </div>
+  <canvas id="bandmap" data-help="bandmap"></canvas>
   <canvas id="spec"></canvas>
   <canvas id="wf"></canvas>
 </section>
@@ -139,6 +149,7 @@
     <button class="tab" data-tab="act">LIVE ACTIVITY / SEARCH</button>
     <button class="tab" data-tab="dec">DECODERS</button>
     <button class="tab" data-tab="img">WEATHER IMAGES</button>
+    <button class="tab" data-tab="bp">UK BAND PLAN</button>
     <button class="tab" data-tab="rx">RECEIVER</button>
     <button class="tab" data-tab="net">REMOTE &amp; SETTINGS</button>
   </nav>
@@ -221,6 +232,27 @@
     <div class="imggrid" id="imgGrid"></div>
   </div>
 
+  <!-- UK BAND PLAN -->
+  <div class="tabpage" id="tab-bp">
+    <div class="row wrapline" data-help="bptab">
+      <b>UK band plan</b>
+      <input class="inp" id="bpFind" placeholder="Find (e.g. airband, 2 m, PMR446, 156.8)" style="width:18em">
+      <label>Show <select id="bpCat"><option value="">All categories</option></select></label>
+      <label><input type="checkbox" id="bpSub" checked> include sub-bands &amp; key frequencies</label>
+      <button class="btn" id="bpHere">Where am I?</button>
+      <span class="grow"></span>
+      <span class="muted small" id="bpCount"></span>
+    </div>
+    <div class="bp-legend" id="bpLegend"></div>
+    <div class="tablewrap">
+      <table class="grid" id="bpTable">
+        <thead><tr><th></th><th>From MHz</th><th>To MHz</th><th>Band</th><th>Mode</th><th>Step</th><th>Notes</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="muted small">Based on the Ofcom UK Frequency Allocation Table and RSGB band plans, simplified as a listening guide. Being in a band does not mean you may listen to it – see Help › Legal.</p>
+  </div>
+
   <!-- RECEIVER -->
   <div class="tabpage" id="tab-rx">
     <div class="row wrapline" data-help="receiver">
@@ -300,6 +332,7 @@
 </div>
 
 <div class="toasts" id="toasts"></div>
+<script src="bandplan.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
