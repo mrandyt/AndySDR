@@ -1,5 +1,5 @@
 ; Inno Setup script – makes AndySDR-Setup.exe (Start menu + desktop shortcuts + uninstaller)
-#define AppVer "1.0.0"
+#define AppVer "1.1.0"
 
 [Setup]
 AppId={{6C1E2A47-1D3B-4E7A-9C11-A4D5D0B2045A}
