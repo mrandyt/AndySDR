@@ -66,6 +66,8 @@ DEFAULTS = {
     "window_open_browser": False,
     "theme": "pro2045",           # pro2045 | ubcd260 | trx2
     "auto_decoder": True,         # start a memory channel's decoder automatically
+    "auto_identify": True,        # identify signals and start the right decoder by itself
+    "schedule": [],               # timed captures (WEFAX, SSTV, LRPT, recordings)
     "rtl_tcp_servers": [],        # e.g. ["192.168.1.20:1234"]
     "tetra_udp_port": 42000,
     "dsd_extra_args": "",

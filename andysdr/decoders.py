@@ -1,6 +1,6 @@
 """Decoder manager.
 
-Built in:   WEFAX weather fax images.
+Built in:   WEFAX weather fax images, SSTV pictures (Martin, Scottie, Robot, PD modes).
 External (free programs, put them in the 'decoders' folder next to AndySDR.exe):
   * DSD-FME     – DMR, P25 Phase 1/2, NXDN, dPMR, YSF, M17, ProVoice, EDACS, X2-TDMA (voice + data)
   * multimon-ng – POCSAG 512/1200/2400, FLEX, APRS/AFSK1200, DTMF, ZVEI, EAS, Morse, Hapn ...
@@ -28,6 +28,7 @@ import numpy as np
 from scipy import signal
 
 from .config import app_dir, data_dir
+from .sstv import SstvDecoder
 from .wefax import WefaxDecoder
 
 log = logging.getLogger("andysdr.decoders")
@@ -48,6 +49,8 @@ DECODERS = {
                "help": "Packet radio (AFSK1200), touch-tones, selcall, EAS alerts."},
     "wefax":  {"name": "WEFAX weather fax (built in)", "exe": None,
                "help": "HF fax charts e.g. Northwood 2618.5/4610/8040/11086.5 kHz USB."},
+    "sstv":   {"name": "SSTV pictures (built in)", "exe": None,
+               "help": "Slow-scan TV: ISS 145.800 NFM, 2 m 144.500 NFM, 20 m 14.230 USB. Mode found from the VIS header."},
     "lrpt":   {"name": "Meteor-M LRPT satellite (SatDump)", "exe": "satdump",
                "help": "Records the pass, then SatDump makes the images. 137.9 MHz, DIG25 mode."},
     "tetra":  {"name": "TETRA baseband out (UDP)", "exe": None,
@@ -139,6 +142,7 @@ class DecoderManager:
         self.proc = None
         self.feed_q = None
         self.wefax = None
+        self.sstv = None
         self.tcp = None
         self.udp = None
         self.rec = None
@@ -161,6 +165,21 @@ class DecoderManager:
         self.emit(kind, {"t": time.strftime("%H:%M:%S"), "text": text, "decoder": self.active})
 
     # ------------------------------------------------------------------
+    def _img_event(self, k, v):
+        if k == "image":
+            self.emit("image", {"file": v})
+        else:
+            self.log(v)
+
+    def adopt_sstv(self, dec):
+        """Take over an SSTV decoder that already found a VIS header (auto-detect)."""
+        self.stop()
+        self.active, self.sub = "sstv", "auto"
+        dec.on_event = self._img_event
+        dec.promote()
+        self.sstv = dec
+        self.status = "on"
+
     def start(self, dec_id, sub="auto"):
         self.stop()
         if not dec_id:
@@ -172,6 +191,9 @@ class DecoderManager:
                 self.wefax = WefaxDecoder(self.images_dir, on_event=lambda k, v: (
                     self.emit("image", {"file": v}) if k == "image" else self.log(v)))
                 self.log("WEFAX decoder running – waiting for start tone (free-running meanwhile)")
+            elif dec_id == "sstv":
+                self.sstv = SstvDecoder(self.images_dir, on_event=self._img_event)
+                self.log("SSTV decoder running – waiting for a picture (VIS header)")
             elif dec_id == "dsd":
                 exe = find_exe("dsd-fme", ov)
                 if not exe:
@@ -280,6 +302,10 @@ class DecoderManager:
         if self.wefax:
             self.wefax.save()
             self.wefax = None
+        if self.sstv:
+            if self.sstv.state == "image":
+                self.sstv.save()
+            self.sstv = None
         if self.udp:
             self.udp.close()
             self.udp = None
@@ -317,6 +343,8 @@ class DecoderManager:
         try:
             if a == "wefax" and self.wefax:
                 self.wefax.process(out["audio_ungated"].astype(np.float64))
+            elif a == "sstv" and self.sstv:
+                self.sstv.process(out["audio_ungated"])
             elif a == "dsd" and self.tcp:
                 d = out["disc"]
                 pcm = np.clip(d * 6000, -32767, 32767).astype("<i2").tobytes()

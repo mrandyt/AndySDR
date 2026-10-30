@@ -134,7 +134,9 @@
   <div class="vfo-bar" data-help="vfo">
     <span class="vfo-chip"><b>VFO</b> <span id="vfoFreq">---.----- MHz</span></span>
     <span class="vfo-band" id="vfoBand">–</span>
+    <span class="sig-chip" id="sigChip" data-help="autoid" hidden></span>
     <span class="grow"></span>
+    <label class="mini keep auto-id" data-help="autoid"><input type="checkbox" id="autoId" checked> Auto ID</label>
     <span class="vfo-hint muted small" id="vfoHint"></span>
   </div>
   <canvas id="bandmap" data-help="bandmap"></canvas>
@@ -150,6 +152,7 @@
     <button class="tab" data-tab="dec">DECODERS</button>
     <button class="tab" data-tab="img">WEATHER IMAGES</button>
     <button class="tab" data-tab="bp">UK BAND PLAN</button>
+    <button class="tab" data-tab="sch">SCHEDULER</button>
     <button class="tab" data-tab="rx">RECEIVER</button>
     <button class="tab" data-tab="net">REMOTE &amp; SETTINGS</button>
   </nav>
@@ -221,6 +224,11 @@
       <button class="btn" id="decOff">Decoder OFF</button>
       <button class="btn" id="decClear">Clear log</button>
     </div>
+    <div class="row wrapline auto-box" data-help="autoid">
+      <label><input type="checkbox" id="autoId2" checked> <b>Auto-identify signals</b></label>
+      <span class="muted small">AndySDR listens to whatever you are tuned to and works out what it is – DMR, P25, NXDN, dPMR, pagers, APRS, DTMF, SSTV, WEFAX, TETRA or plain voice – then switches mode and starts the right decoder by itself. Choosing a decoder yourself always takes priority.</span>
+      <span class="grow"></span><span id="sigNow" class="sig-chip" hidden></span>
+    </div>
     <div class="declist" id="decStatus"></div>
     <pre class="console" id="decLog"></pre>
   </div>
@@ -243,6 +251,19 @@
       <span class="grow"></span>
       <span class="muted small" id="bpCount"></span>
     </div>
+    <div class="bp-pick" data-help="bppick">
+      <label>Plan <select id="pkPlan"></select></label>
+      <span class="muted">›</span>
+      <label>Band <select id="pkBand"></select></label>
+      <span class="muted">›</span>
+      <label>Section <select id="pkSec"></select></label>
+      <button class="btn primary" id="pkTune">Tune</button>
+      <button class="btn" id="pkSearch">Search section</button>
+      <button class="btn" id="pkMem" title="Store every key frequency in this band into a memory bank">Add key frequencies to bank</button>
+      <select id="pkBank" title="Memory bank"></select>
+      <div class="pk-info muted small" id="pkInfo"></div>
+    </div>
+    <div class="row wrapline small"><span class="muted">Show on spectrum (tap to hide or show a plan):</span></div>
     <div class="bp-legend" id="bpLegend"></div>
     <div class="tablewrap">
       <table class="grid" id="bpTable">
@@ -251,6 +272,37 @@
       </table>
     </div>
     <p class="muted small">Based on the Ofcom UK Frequency Allocation Table and RSGB band plans, simplified as a listening guide. Being in a band does not mean you may listen to it – see Help › Legal.</p>
+  </div>
+
+  <!-- SCHEDULER -->
+  <div class="tabpage" id="tab-sch">
+    <div class="row wrapline" data-help="sched">
+      <b>Scheduled captures</b>
+      <span class="muted small">Times are this PC's clock (<span id="schNow">--:--</span>). AndySDR tunes, runs the decoder, then puts the radio back how it was.</span>
+      <span class="grow"></span>
+      <span id="schRunning" class="sig-chip" hidden></span>
+      <button class="btn danger" id="schStop" hidden>■ Stop capture</button>
+    </div>
+    <div class="sch-form" data-help="sched">
+      <label>Quick pick <select id="schPreset"><option value="">– choose a station –</option></select></label>
+      <label>Name <input class="inp" id="schName" style="width:15em" placeholder="e.g. Northwood surface chart"></label>
+      <label>Frequency <input class="inp" id="schFreq" style="width:7em" placeholder="MHz"> MHz</label>
+      <label>Mode <select id="schMode"></select></label>
+      <label>Do <select id="schAction"></select></label>
+      <label>Start <input class="inp" id="schStart" type="time" value="12:00"></label>
+      <label>for <input class="inp" id="schDur" type="number" min="1" max="1440" value="20" style="width:5em"> min</label>
+      <div class="sch-days" id="schDays"></div>
+      <label>or once on <input class="inp" id="schDate" type="date"></label>
+      <button class="btn primary" id="schAdd">Add capture</button>
+      <button class="btn" id="schClear">New</button>
+    </div>
+    <div class="tablewrap">
+      <table class="grid" id="schTable">
+        <thead><tr><th>On</th><th>When</th><th>Name</th><th>Frequency</th><th>Mode</th><th>Do</th><th>Length</th><th>Next</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="muted small">Tips: Met Office Northwood fax charts are sent throughout the day – look up the current broadcast schedule and add a capture for the charts you want. ISS SSTV events are announced by ARISS a week or two ahead. Meteor-M passes over the UK happen several times a day; a satellite-pass app gives the times. Pictures appear in WEATHER IMAGES.</p>
   </div>
 
   <!-- RECEIVER -->

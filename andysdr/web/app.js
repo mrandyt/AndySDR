@@ -29,6 +29,7 @@ let entry = "";       // keypad entry
 let bankMode = false;
 let decoders = [];
 let spec = null;      // last spectrum frame
+let SCH = null;       // scheduler status
 
 /* ======================================================= connection */
 function connect() {
@@ -72,6 +73,8 @@ function onJSON(m) {
     case "decoder": decLine(d.text, d.t); break;
     case "decoders": decoders = d; renderDecoders(); break;
     case "image": addImage(d.file); break;
+    case "signal": S.signal = d; renderSignal(); break;
+    case "schedule": SCH = d; renderSchedule(); break;
     case "images": renderImages(d); break;
     case "event": toast(d.text, d.level); if (d.level === "error") decLine("! " + d.text); break;
     case "import_result":
@@ -90,6 +93,7 @@ function onHello(h) {
   S = h.state; MEM = h.memory; DEV = h.device; decoders = h.decoders;
   renderDevices(h.devices); renderDevice(); renderMemory(); renderActivity(h.activity);
   renderDecoders(); renderImages(h.images); renderState();
+  if (h.schedule) { SCH = h.schedule; renderSchedule(); }
   const st = h.settings || {};
   $("setDelay").value = st.scan_delay; $("setDwell").value = st.scan_dwell;
   $("setDeemph").value = String(st.deemphasis_us || 50);
@@ -145,6 +149,7 @@ function renderLCD() {
   $("lcdStep").textContent = st >= 1000 ? (st / 1000).toString().replace(/\.0+$/, "") + "k" : st + "Hz";
   let tag = "";
   if (entry) tag = bankMode ? "BANK ? (0-9)" : "ENTER FREQ (E) OR CH (MAN)";
+  else if (S.job) tag = "SCHEDULED: " + S.job.name.toUpperCase();
   else if (bankMode) tag = "PRESS 0-9 TO TOGGLE BANK";
   else if (S.channel) tag = S.channel.name || `BANK ${S.channel.bank} CH ${S.channel.ch}`;
   else if (S.scan === "search" || S.scan_prev === "search") tag = `SEARCH ${fmtMHz(S.search.start, 3)}-${fmtMHz(S.search.stop, 3)}`;
@@ -183,6 +188,8 @@ function renderLCD() {
 function renderState() {
   renderLCD();
   renderVfo();
+  renderSignal();
+  $("autoId").checked = $("autoId2").checked = S.auto_identify !== false;
   $("devname").textContent = S.device ? `· ${S.device}` : "";
   $("listeners").textContent = S.listeners ? `· ${S.listeners} connected` : "";
   if (!knobs.sq.dragging) knobs.sq.set(S.squelch, false);
@@ -456,7 +463,18 @@ function scopeFreq(e, c) {
 }
 ["scopeLo", "scopeHi"].forEach((id) => $(id).addEventListener("input", () => ($("scopeAuto").checked = false)));
 for (const c of [specC, wfC]) {
-  c.addEventListener("click", (e) => { if (explainOn) return; const f = scopeFreq(e, c); if (f) send({ cmd: "tune", freq: f }); });
+  c.addEventListener("click", (e) => {
+    if (explainOn) return;
+    const f = scopeFreq(e, c); if (!f) return;
+    if (c === specC && bpSize) {     // a click on the band-plan strip also selects that section
+      const r = c.getBoundingClientRect();
+      if (e.clientY - r.top < BP_STRIP[bpSize]) {
+        const b = bandsAt(f).filter((x) => !x.point && !bpHidden.has(x.cat))[0];
+        if (b) { setPick(b); toast(`${b.name} · ${fmtRange(b)} – see UK BAND PLAN tab`); }
+      }
+    }
+    send({ cmd: "tune", freq: f });
+  });
   c.addEventListener("wheel", (e) => { e.preventDefault(); send({ cmd: "step", dir: e.deltaY < 0 ? 1 : -1 }); }, { passive: false });
   c.addEventListener("mousemove", (e) => {
     const f = scopeFreq(e, c); if (!f) return;
@@ -470,6 +488,8 @@ const BP_STRIP = [0, 12, 30, 44];          // band strip height on the spectrum 
 const BP_MAP = [0, 22, 30, 42];            // overview band map height
 const MAP_LO = 9e3, MAP_HI = 6.5e9;        // overview covers 9 kHz – 6.5 GHz on a log scale
 let bpSize = +(localStorage.getItem("andysdr_bpsize") ?? 2);
+let bpHidden = new Set();
+try { bpHidden = new Set(JSON.parse(localStorage.getItem("andysdr_bphide") || "[]")); } catch (e) { /* first run */ }
 const bandmapC = $("bandmap"), bmctx = bandmapC.getContext("2d");
 let lastVfoKey = "";
 
@@ -490,7 +510,7 @@ function drawBandStrip(ctx, f0, span, W, dpr) {
   ctx.fillStyle = "rgba(7,9,11,0.82)"; ctx.fillRect(0, 0, W, H);
   ctx.font = `${(bpSize === 3 ? 11 : 10) * dpr}px Segoe UI, Arial, sans-serif`; ctx.textBaseline = "middle";
   for (const b of BANDPLAN) {
-    if (b.point || b.stop < f0 || b.start > f1) continue;
+    if (b.point || b.stop < f0 || b.start > f1 || bpHidden.has(b.cat)) continue;
     const r = Math.min(b.level, rows - 1); if (b.level >= rows) { if (rows === 1) continue; }
     const x0 = Math.max(0, X(b.start)), x1 = Math.min(W, X(b.stop)), y0 = r * rh;
     ctx.fillStyle = bpColor(b, b.level ? 0.42 : 0.30); ctx.fillRect(x0, y0 + dpr, Math.max(dpr, x1 - x0), rh - 2 * dpr);
@@ -502,7 +522,7 @@ function drawBandStrip(ctx, f0, span, W, dpr) {
   }
   if (bpSize >= 2) {   // key single frequencies as small markers
     for (const b of BANDPLAN) {
-      if (!b.point || b.start < f0 || b.start > f1) continue;
+      if (!b.point || b.start < f0 || b.start > f1 || bpHidden.has(b.cat)) continue;
       const x = X(b.start);
       ctx.fillStyle = bpColor(b, 1);
       ctx.beginPath(); ctx.moveTo(x, H - 1); ctx.lineTo(x - 4 * dpr, H - 7 * dpr); ctx.lineTo(x + 4 * dpr, H - 7 * dpr); ctx.fill();
@@ -532,12 +552,12 @@ function drawBandMap() {
   const ctx = bmctx, barTop = 2 * dpr, barH = H - 14 * dpr;
   ctx.fillStyle = "#07090b"; ctx.fillRect(0, 0, W, H);
   for (const b of BANDPLAN) {
-    if (b.point || b.level) continue;
+    if (b.point || b.level || bpHidden.has(b.cat)) continue;
     const x0 = mapX(b.start, W), x1 = mapX(b.stop, W);
     ctx.fillStyle = bpColor(b, 0.85); ctx.fillRect(x0, barTop, Math.max(1, x1 - x0), barH);
   }
   for (const b of BANDPLAN) {   // sub-bands as a thin top line
-    if (b.point || !b.level) continue;
+    if (b.point || !b.level || bpHidden.has(b.cat)) continue;
     ctx.fillStyle = bpColor(b, 1); ctx.fillRect(mapX(b.start, W), barTop, Math.max(1, mapX(b.stop, W) - mapX(b.start, W)), 3 * dpr);
   }
   ctx.font = `${9.5 * dpr}px Consolas, monospace`; ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.strokeStyle = "rgba(255,255,255,.25)";
@@ -570,6 +590,7 @@ function mapBandAt(e) {
 }
 bandmapC.addEventListener("mousemove", (e) => {
   const { f, b } = mapBandAt(e);
+  if (b && bpHidden.has(b.cat)) { bandmapC.title = ""; return; }
   bandmapC.title = (f >= 1e6 ? fmtMHz(f, 3) + " MHz" : (f / 1e3).toFixed(1) + " kHz") + (b ? ` · ${b.name} (${fmtMHz(b.start, 3)}–${fmtMHz(b.stop, 3)} MHz) – click to go there` : "");
 });
 bandmapC.addEventListener("click", (e) => {
@@ -631,7 +652,19 @@ function renderVfo() {
 $("bpCat").insertAdjacentHTML("beforeend", Object.entries(BANDPLAN_CATS).map(([k, c]) => `<option value="${k}">${esc(c.label)}</option>`).join(""));
 $("bpLegend").innerHTML = Object.entries(BANDPLAN_CATS).map(([k, c]) =>
   `<button class="bp-leg" data-cat="${k}"><span class="bp-dot" style="background:${c.color}"></span>${esc(c.label)}</button>`).join("");
-$("bpLegend").querySelectorAll("[data-cat]").forEach((b) => b.onclick = () => { $("bpCat").value = $("bpCat").value === b.dataset.cat ? "" : b.dataset.cat; renderBandPlan(); });
+$("bpLegend").querySelectorAll("[data-cat]").forEach((b) => b.onclick = () => {
+  const c = b.dataset.cat;
+  if (bpHidden.has(c)) bpHidden.delete(c); else bpHidden.add(c);
+  try { localStorage.setItem("andysdr_bphide", JSON.stringify([...bpHidden])); } catch (e) { /* private window */ }
+  renderLegend(); drawBandMap();
+});
+function renderLegend() {
+  $("bpLegend").querySelectorAll("[data-cat]").forEach((b) => {
+    b.classList.toggle("off", bpHidden.has(b.dataset.cat));
+    b.title = bpHidden.has(b.dataset.cat) ? "Hidden – tap to show on the spectrum" : "Shown – tap to hide from the spectrum";
+  });
+}
+renderLegend();
 function renderBandPlan() {
   const q = $("bpFind").value.trim().toLowerCase(), cat = $("bpCat").value, sub = $("bpSub").checked;
   const qf = parseFloat(q.replace(/\s*mhz$/, ""));
@@ -643,7 +676,6 @@ function renderBandPlan() {
     return (b.name + " " + b.note + " " + BANDPLAN_CATS[b.cat].label).toLowerCase().includes(q);
   });
   $("bpCount").textContent = `${list.length} of ${BANDPLAN.length} entries`;
-  $("bpLegend").querySelectorAll("[data-cat]").forEach((b) => b.classList.toggle("on", b.dataset.cat === cat));
   $("bpTable").querySelector("tbody").innerHTML = list.map((b) => {
     const i = BANDPLAN.indexOf(b);
     return `<tr data-i="${i}" class="${b.level || b.point ? "bp-sub" : ""}"><td><span class="bp-dot" style="background:${bpColor(b)}"></span></td>
@@ -656,6 +688,8 @@ function renderBandPlan() {
     const b = BANDPLAN[+tr.dataset.i];
     tr.querySelectorAll("[data-act=tune]").forEach((el) => el.onclick = () => tuneBand(b));
     tr.querySelectorAll("[data-act=search]").forEach((el) => el.onclick = () => searchBand(b));
+    tr.children[3].onclick = () => setPick(b);
+    tr.children[3].style.cursor = "pointer";
   });
   markBpRows();
 }
@@ -667,7 +701,65 @@ function markBpRows() {
   });
 }
 $("bpFind").oninput = renderBandPlan; $("bpCat").onchange = renderBandPlan; $("bpSub").onchange = renderBandPlan;
-$("bpHere").onclick = () => { $("bpFind").value = fmtMHz(S.freq || 0, 4); $("bpCat").value = ""; $("bpSub").checked = true; renderBandPlan(); };
+$("bpHere").onclick = () => {
+  $("bpFind").value = fmtMHz(S.freq || 0, 4); $("bpCat").value = ""; $("bpSub").checked = true; renderBandPlan();
+  const here = S.freq ? bandsAt(S.freq) : [];
+  if (here.length) setPick(here[0]);
+};
+
+/* ----- plan › band › section picker ----- */
+let pick = null;     // the band or section currently selected
+const mainBands = (cat) => BANDPLAN.filter((b) => b.cat === cat && !b.level && !b.point);
+const sectionsIn = (band) => BANDPLAN.filter((x) => x !== band && (x.level || x.point) && x.start >= band.start && (x.point ? x.start : x.stop) <= band.stop);
+const parentOf = (b) => (b.level || b.point) ? BANDPLAN.filter((x) => !x.level && !x.point && x.start <= b.start && x.stop >= (b.point ? b.start : b.stop))
+  .sort((p, q) => (p.cat === b.cat ? -1 : 0) - (q.cat === b.cat ? -1 : 0) || (p.stop - p.start) - (q.stop - q.start))[0] : b;
+const fmtRange = (b) => b.point ? fmtMHz(b.start, b.start < 3e7 ? 4 : 4) + " MHz" : `${fmtMHz(b.start, b.start < 3e7 ? 4 : 3)}–${fmtMHz(b.stop, b.stop < 3e7 ? 4 : 3)} MHz`;
+$("pkPlan").innerHTML = Object.entries(BANDPLAN_CATS).map(([k, c]) => `<option value="${k}">${esc(c.label)} (${mainBands(k).length})</option>`).join("");
+function fillBands(cat, selBand) {
+  const list = mainBands(cat);
+  $("pkBand").innerHTML = list.map((b) => `<option value="${BANDPLAN.indexOf(b)}">${esc(b.name)} · ${fmtRange(b)}</option>`).join("");
+  if (selBand) $("pkBand").value = String(BANDPLAN.indexOf(selBand));
+  fillSections();
+}
+function fillSections(selSec) {
+  const band = BANDPLAN[+$("pkBand").value];
+  if (!band) { $("pkSec").innerHTML = ""; return; }
+  const secs = sectionsIn(band);
+  $("pkSec").innerHTML = `<option value="${BANDPLAN.indexOf(band)}">Whole band</option>` +
+    secs.map((x) => `<option value="${BANDPLAN.indexOf(x)}">${x.point ? "• " : ""}${esc(x.name)} · ${fmtRange(x)}</option>`).join("");
+  $("pkSec").value = String(BANDPLAN.indexOf(selSec || band));
+  pickChanged();
+}
+function pickChanged() {
+  pick = BANDPLAN[+$("pkSec").value] || BANDPLAN[+$("pkBand").value];
+  if (!pick) return;
+  const band = BANDPLAN[+$("pkBand").value];
+  const keys = sectionsIn(band).filter((x) => x.point);
+  $("pkSearch").disabled = !!pick.point;
+  $("pkMem").disabled = !keys.length;
+  $("pkMem").textContent = keys.length ? `Add ${keys.length} key frequenc${keys.length > 1 ? "ies" : "y"} to bank` : "No key frequencies here";
+  $("pkInfo").innerHTML = `<span class="bp-dot" style="background:${bpColor(pick)}"></span><b>${esc(pick.name)}</b> · ${fmtRange(pick)} · ${pick.mode} · step ${pick.step >= 1000 ? pick.step / 1000 + " kHz" : pick.step + " Hz"}${pick.note ? " · " + esc(pick.note) : ""}`;
+}
+function setPick(b) {
+  const band = parentOf(b) || b;
+  $("pkPlan").value = band.cat;
+  fillBands(band.cat, band);
+  fillSections(b);
+}
+$("pkPlan").onchange = () => fillBands($("pkPlan").value);
+$("pkBand").onchange = () => fillSections();
+$("pkSec").onchange = pickChanged;
+$("pkTune").onclick = () => pick && tuneBand(pick);
+$("pkSearch").onclick = () => pick && !pick.point && searchBand(pick);
+$("pkMem").onclick = () => {
+  const band = BANDPLAN[+$("pkBand").value];
+  const keys = sectionsIn(band).filter((x) => x.point);
+  if (!keys.length) return;
+  send({ cmd: "mem_add_many", bank: +$("pkBank").value, bank_name: band.name.slice(0, 16),
+    channels: keys.map((x) => ({ freq: x.start, mode: x.mode, name: x.name.slice(0, 32), tag: BANDPLAN_CATS[x.cat].label,
+      decoder: /SSTV/.test(x.name) ? "sstv" : /WEFAX/.test(x.name) ? "wefax" : /APRS/.test(x.name) ? "data" : /LRPT/.test(x.name) ? "lrpt" : "" })) });
+};
+fillBands("amateur");
 
 /* ======================================================= tabs */
 function showTab(name) {
@@ -676,6 +768,7 @@ function showTab(name) {
   if (name === "img") send({ cmd: "images" });
   if (name === "dec") send({ cmd: "decoders" });
   if (name === "bp") renderBandPlan();
+  if (name === "sch") send({ cmd: "schedule" });
   sizeCanvases();
 }
 document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => showTab(t.dataset.tab)));
@@ -693,6 +786,9 @@ function renderMemory() {
     b.oncontextmenu = (e) => { e.preventDefault(); toggleBank(+b.dataset.b); };
   });
   $("bankName").value = MEM.banks[curBank].name;
+  const pb = $("pkBank").value;
+  $("pkBank").innerHTML = Array.from({ length: 10 }, (_, b) => `<option value="${b}">Bank ${b} – ${esc(MEM.banks[b].name)} (${Object.keys(MEM.banks[b].channels).length})</option>`).join("");
+  $("pkBank").value = pb || "9";
   $("csvBank").innerHTML = Array.from({ length: 10 }, (_, b) => `<option value="${b}" ${b === Math.max(1, curBank) ? "selected" : ""}>${b} – ${esc(MEM.banks[b].name)}</option>`).join("");
   const chs = MEM.banks[curBank].channels;
   const keys = Object.keys(chs).sort((a, b) => a - b);
@@ -871,6 +967,80 @@ function toast(text, level = "info") {
   $("toasts").appendChild(t); setTimeout(() => t.remove(), level === "error" ? 9000 : 4500);
 }
 
+/* ======================================================= auto-identify */
+const SIG_DIGITAL = /DMR|P25|NXDN|dPMR|Digital|Pager|APRS|DTMF|TETRA/;
+function renderSignal() {
+  const r = S.signal;
+  for (const id of ["sigChip", "sigNow"]) {
+    const el = $(id);
+    if (!r) { el.hidden = true; continue; }
+    el.hidden = false;
+    const dec = r.decoder && S.decoder === r.decoder ? " → decoding" : (r.decoder && S.decoder && S.decoder !== r.decoder ? " (your decoder kept)" : "");
+    el.textContent = (r.stable === false ? "? " : "◉ ") + r.label + dec;
+    el.className = "sig-chip " + (r.kind === "SSTV" || r.kind === "WEFAX" ? "pic" : SIG_DIGITAL.test(r.kind) ? "dig" : "ana");
+    el.title = `Identified automatically · SNR ${r.snr ?? "?"} dB · bandwidth ${r.bw ?? "?"} kHz` + (r.baud ? ` · ${r.baud} Bd` : "");
+  }
+  if (r && r.stable !== false && !S.decoder) $("lcdDecode").textContent = "ID: " + r.label;
+}
+for (const id of ["autoId", "autoId2"]) $(id).onchange = (e) => { send({ cmd: "auto_identify", on: e.target.checked }); $("autoId").checked = $("autoId2").checked = e.target.checked; };
+
+/* ======================================================= scheduler */
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+let schEdit = null;
+$("schMode").innerHTML = MODES.map((m) => `<option>${m}</option>`).join("");
+$("schDays").innerHTML = DAYS.map((d, i) => `<label class="day"><input type="checkbox" value="${i}">${d}</label>`).join("") +
+  '<span class="muted small">(none ticked = every day)</span>';
+function renderSchedule() {
+  if (!SCH) return;
+  $("schNow").textContent = SCH.now;
+  if (!$("schAction").options.length) {
+    $("schAction").innerHTML = Object.entries(SCH.actions).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
+    $("schPreset").insertAdjacentHTML("beforeend", SCH.presets.map((p, i) => `<option value="${i}">${esc(p.name)}</option>`).join(""));
+  }
+  const run = SCH.running;
+  $("schRunning").hidden = $("schStop").hidden = !run;
+  if (run) { $("schRunning").textContent = `● Capturing: ${run.name} until ${run.until}`; $("schRunning").className = "sig-chip pic"; }
+  const next = Object.fromEntries((SCH.next || []).map((n) => [n.id, n.at]));
+  $("schTable").querySelector("tbody").innerHTML = SCH.jobs.map((j) => `<tr data-id="${esc(j.id)}" class="${run && run.id === j.id ? "playing" : ""}">
+    <td><input type="checkbox" data-act="en" ${j.enabled ? "checked" : ""}></td>
+    <td>${esc(j.start)} ${j.date ? "on " + esc(j.date) : j.days.length ? j.days.map((d) => DAYS[d]).join(" ") : "daily"}</td>
+    <td>${esc(j.name)}</td><td class="f" data-act="tune">${fmtMHz(j.freq, j.freq < 3e7 ? 4 : 4)}</td><td>${j.mode}</td>
+    <td>${esc(SCH.actions[j.action] || j.action)}</td><td>${j.duration} min</td><td class="muted">${j.enabled ? esc(next[j.id] || "–") : "off"}</td>
+    <td><button class="btn sm" data-act="run">▶ Now</button> <button class="btn sm" data-act="edit">Edit</button> <button class="btn sm danger" data-act="del">✕</button></td></tr>`).join("") ||
+    '<tr><td colspan="9" class="muted">No captures yet. Pick a station from Quick pick, set the start time and length, then Add capture.</td></tr>';
+  $("schTable").querySelectorAll("tr[data-id]").forEach((tr) => {
+    const j = SCH.jobs.find((x) => x.id === tr.dataset.id);
+    tr.querySelector("[data-act=en]").onchange = (e) => send({ cmd: "schedule_save", job: { ...j, enabled: e.target.checked } });
+    tr.querySelector("[data-act=run]").onclick = () => send({ cmd: "schedule_run", id: j.id });
+    tr.querySelector("[data-act=del]").onclick = () => { if (confirm(`Delete "${j.name}"?`)) send({ cmd: "schedule_delete", id: j.id }); };
+    tr.querySelector("[data-act=tune]").onclick = () => send({ cmd: "tune", freq: j.freq, mode: j.mode });
+    tr.querySelector("[data-act=edit]").onclick = () => fillSchForm(j);
+  });
+}
+function fillSchForm(j) {
+  schEdit = j ? j.id : null;
+  $("schName").value = j ? j.name : ""; $("schFreq").value = j ? (j.freq / 1e6).toString() : "";
+  $("schMode").value = j ? j.mode : "USB"; $("schAction").value = j ? j.action : "wefax";
+  $("schStart").value = j ? j.start : "12:00"; $("schDur").value = j ? j.duration : 20; $("schDate").value = j ? j.date : "";
+  $("schDays").querySelectorAll("input").forEach((c) => (c.checked = !!(j && j.days.includes(+c.value))));
+  $("schAdd").textContent = j ? "Save changes" : "Add capture";
+}
+$("schPreset").onchange = () => {
+  const p = SCH && SCH.presets[+$("schPreset").value]; if (!p) return;
+  $("schName").value = p.name; $("schFreq").value = (p.freq / 1e6).toString(); $("schMode").value = p.mode; $("schAction").value = p.action;
+};
+$("schAdd").onclick = () => {
+  const f = parseFloat($("schFreq").value);
+  if (!(f > 0)) { toast("Enter the frequency in MHz", "warn"); return; }
+  const job = { id: schEdit || undefined, name: $("schName").value || `${f} MHz`, freq: Math.round(f * 1e6), mode: $("schMode").value,
+    action: $("schAction").value, start: $("schStart").value || "12:00", duration: +$("schDur").value || 10, date: $("schDate").value,
+    days: [...$("schDays").querySelectorAll("input:checked")].map((c) => +c.value), enabled: true };
+  send({ cmd: "schedule_save", job }); fillSchForm(null); $("schPreset").value = "";
+  toast(`Capture saved: ${job.name} at ${job.start}`);
+};
+$("schClear").onclick = () => fillSchForm(null);
+$("schStop").onclick = () => send({ cmd: "schedule_stop" });
+
 /* ======================================================= help */
 const HELP = {
   conn: ["Connection light", "Green CONNECTED means this screen is talking to the AndySDR receiver (on this PC or across the network). If it shows OFFLINE, AndySDR is not running or the network is down – it reconnects by itself."],
@@ -901,8 +1071,11 @@ const HELP = {
   banks: ["Memory banks", "10 banks × 100 channels = 1000 memories. Click a bank to view it, right-click to include/exclude it from scanning. In the table: click a frequency or ▶ to listen, click the name to rename, change mode/decoder in the drop-downs, tick L/O to lock out, PRI to make it the priority channel, ✕ to delete."],
   import: ["RadioReference UK import", "On radioreference.com open a UK county/agency database page and use its CSV download (premium) – or select the frequency table on the page, copy it and save it as a .txt file. Choose the file, pick the bank, and Import. AndySDR recognises Frequency, Alpha Tag, Description, Mode, Tag and Tone columns, converts FMN/AM/DMR/P25/NXDN/TETRA modes, and attaches the right decoder. Talkgroup lists (Decimal/Alpha Tag) are stored as talkgroups. Banks overflow into the next free bank."],
   search: ["Search", "Set From/To in MHz, the channel step, mode and sensitivity (lower dB = finds weaker signals but more false hits), then Search. UK quick ranges fill the boxes for you. Results list each active frequency with hit count and strength – click a frequency to listen, Store to save it to the selected bank."],
-  decoders: ["Decoders", "Pick what to decode on the current frequency. Digital voice uses DSD-FME (choose DMR, P25, NXDN, dPMR, YSF, M17 or Auto); pagers use multimon-ng (POCSAG & FLEX); WEFAX is built in; Meteor-M LRPT records the satellite pass and hands it to SatDump. Decoded text appears in the log and on the LCD bottom line. Memory channels can start their decoder automatically."],
+  decoders: ["Decoders", "Pick what to decode on the current frequency. Digital voice uses DSD-FME (choose DMR, P25, NXDN, dPMR, YSF, M17 or Auto); pagers use multimon-ng (POCSAG & FLEX); WEFAX and SSTV are built in; Meteor-M LRPT records the satellite pass and hands it to SatDump. Decoded text appears in the log and on the LCD bottom line. Memory channels can start their decoder automatically."],
   receiver: ["Receiver", "Choose which SDR to use: every SoapySDR device (RTL-SDR/Nooelec, SDRplay RSP1A/RSP2/RSP2pro/RSPdx/RSPduo, Airspy, HackRF, LimeSDR, Pluto…), rtl_tcp servers on other machines, or the Simulator for practice. Sample rate sets how wide the waterfall is. Antenna picks the input (RSP2: Antenna A, B or Hi-Z). Device switches (bias-T, notch filters, direct sampling) appear underneath automatically."],
+  autoid: ["Auto ID (automatic signal identification)", "When ticked, AndySDR analyses whatever you are listening to and shows what it is next to the VFO: DMR (it spots the 30 ms TDMA bursts), P25, NXDN, dPMR, pagers (POCSAG/FLEX), APRS, DTMF, SSTV, WEFAX, TETRA or analogue voice (with any CTCSS tone). It then switches to the right mode and starts the matching decoder by itself, and stops it again when the channel goes back to voice. SSTV pictures are caught from their very first line. A decoder you pick yourself, or one stored on a memory channel, is never overridden. Untick to turn it off."],
+  sched: ["Scheduler", "Captures that run by themselves at set times – ideal for weather fax charts, ISS SSTV events and Meteor-M satellite passes. Pick a station from Quick pick (or type a frequency), choose what to do (WEFAX, SSTV, LRPT, record…), the start time on this PC's clock and how long, and either tick days of the week or pick a single date. At the start time AndySDR stops scanning, tunes, runs the decoder; at the end it saves the pictures and puts the radio back exactly as it was. ▶ Now runs one straight away. AndySDR must be running (it can run as a server in the background)."],
+  bppick: ["Plan › Band › Section", "Drill down through the UK band plan: pick a Plan (amateur, aviation, marine, PMR…), then a Band in it, then a Section (sub-band or key frequency). Tune goes there in the right mode and step; Search section loads it into the Live Activity search; 'Add key frequencies to bank' stores every key frequency in that band (e.g. marine Ch 16/70/AIS, airband 121.5/123.1) into the memory bank you choose. Clicking a coloured strip on the spectrum or a band name in the list also selects it here. Tap the coloured plan buttons underneath to show or hide each plan on the spectrum."],
   bandplan: ["Band plan size", "Shows the UK band plan as coloured strips across the top of the spectrum and in the band map above it. Off hides it; Small shows main allocations only; Medium adds sub-bands (e.g. 2 m FM simplex) and markers for key frequencies (Ch 16, 121.5, APRS…); Large makes the strips bigger and names the key frequencies. Each computer remembers its own choice."],
   vfo: ["VFO bar", "The VFO is the frequency you are tuned to. This bar shows it, which UK band and sub-band it is in, and – if the band normally uses a different mode or step – a 'Use' button that sets them for you. The red line and red VFO flag on the spectrum mark the same frequency."],
   bandmap: ["Band map", "The whole radio spectrum from 9 kHz to 6.5 GHz on one strip, coloured by who uses it (see the legend in the UK BAND PLAN tab). The red needle is your VFO and the white box is the part the spectrum display is showing. Hover to see a band's name; click a band to jump there in the right mode and step."],
@@ -925,9 +1098,9 @@ function openHelp() {
   <h3>KNOBS &amp; DISPLAY</h3>${ctl(["volume", "squelch", "gain", "power", "lcd"])}
   <h3>KEYPAD &amp; FUNCTION KEYS</h3>${ctl(["k_scan", "k_man", "k_srch", "k_pgm", "k_lo", "k_pri", "k_mode", "k_step", "k_bank", "k_dly", "k_rec", "k_dec", "k_dot", "k_e", "k_arrows", "k_clr"])}
   <p class="small">Keyboard: digits and <code>.</code> type, <code>Enter</code> tunes, <code>↑ ↓</code> step, <code>S</code> scan, <code>M</code> manual, <code>P</code> program, <code>L</code> lockout, <code>H</code> help, <code>Esc</code> clear.</p>
-  <h3>SCREENS</h3>${ctl(["scope", "vfo", "bandmap", "bandplan", "bptab", "banks", "import", "search", "decoders", "receiver", "remote", "theme", "conn"])}
+  <h3>SCREENS</h3>${ctl(["scope", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "banks", "import", "search", "decoders", "receiver", "remote", "theme", "conn"])}
   <h3>DECODER PROGRAMS</h3>
-  <p>AndySDR has WEFAX built in. For the others, download the free Windows builds and unzip each into the <code>decoders</code> folder next to <code>AndySDR.exe</code> (any sub-folder is fine – AndySDR finds the .exe):</p>
+  <p>AndySDR has WEFAX and SSTV built in (SSTV: Martin, Scottie, Robot and PD modes – ISS 145.800 NFM, 2 m 144.500 NFM, 20 m 14.230 USB). For the others, download the free Windows builds and unzip each into the <code>decoders</code> folder next to <code>AndySDR.exe</code> (any sub-folder is fine – AndySDR finds the .exe):</p>
   <dl><dt>DSD-FME</dt><dd>github.com/lwvmobile/dsd-fme – DMR, P25 1/2, NXDN, dPMR, YSF, M17. AndySDR feeds it like SDR++'s network sink (TCP 127.0.0.1:7355, 48 kHz); DSD-FME plays decoded voice on your speakers itself.</dd>
   <dt>multimon-ng</dt><dd>github.com/EliasOenal/multimon-ng – POCSAG 512/1200/2400, FLEX, APRS, DTMF, ZVEI, EAS.</dd>
   <dt>SatDump</dt><dd>satdump.org – Meteor-M N2-3 / N2-4 LRPT (137.9 or 137.1 MHz, 72k). Use DIG25 mode, start the LRPT decoder as the satellite rises, stop it when it sets – pictures appear in WEATHER IMAGES.</dd>

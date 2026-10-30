@@ -253,6 +253,7 @@ class Server:
             "device": r.device_info(), "decoders": r.decoders.available(),
             "activity": sorted(r.activity.values(), key=lambda x: -x["count"])[:300],
             "images": self._images(),
+            "schedule": r.scheduler.status(),
             "settings": {k: self.s[k] for k in ("scan_delay", "scan_dwell", "search_threshold_db",
                                                  "server_port", "require_password_local",
                                                  "deemphasis_us", "theme")},
@@ -369,6 +370,26 @@ class Server:
                 self._reply(c, "images", self._images())
             elif cmd == "decoders":
                 self._reply(c, "decoders", r.decoders.available())
+            elif cmd == "auto_identify":
+                r.set_auto_identify(bool(m.get("on", True)))
+            elif cmd == "schedule":
+                self._reply(c, "schedule", r.scheduler.status())
+            elif cmd == "schedule_save":
+                r.scheduler.save_job(m["job"])
+            elif cmd == "schedule_delete":
+                r.scheduler.delete_job(str(m["id"]))
+            elif cmd == "schedule_run":
+                r.scheduler.run_now(str(m["id"]))
+            elif cmd == "schedule_stop":
+                r.scheduler.stop_job()
+            elif cmd == "mem_add_many":
+                chans = [{"freq": int(x["freq"]), "mode": str(x.get("mode", "NFM")), "name": str(x.get("name", ""))[:32],
+                          "tag": str(x.get("tag", ""))[:32], "decoder": str(x.get("decoder", ""))}
+                         for x in m.get("channels", [])[:1000]]
+                added, overflow = r.memory.import_channels(int(m.get("bank", 1)), chans, False, m.get("bank_name"))
+                self._broadcast("memory", r.memory.all())
+                self._reply(c, "event", {"level": "info", "text": f"Added {added} channels to bank {int(m.get('bank', 1))}"
+                                         + (f" ({overflow} did not fit)" if overflow else "")})
         except Exception as e:
             log.exception("command %s", cmd)
             self._reply(c, "event", {"level": "error", "text": f"{cmd}: {e}"})

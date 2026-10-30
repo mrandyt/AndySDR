@@ -9,11 +9,14 @@ import wave
 import numpy as np
 
 from . import devices
+from .autodetect import SignalClassifier
 from .config import data_dir
 from .decoders import DecoderManager
 from .dsp import (AUDIO_RATE, BLOCK_SECONDS, MODES, Receiver, Spectrum, find_peaks_db,
                   pick_sample_rate)
 from .memory import MemoryBank
+from .scheduler import Scheduler
+from .sstv import SstvDecoder
 
 log = logging.getLogger("andysdr.engine")
 
@@ -47,6 +50,19 @@ class Radio:
         self.level_db = -120.0
         self.sq_open = False
         self.channel = None               # (bank, ch, entry) when on a memory channel
+        self.classifier = SignalClassifier()
+        self.signal = None                # last automatic identification
+        self.auto_owned = False           # the running decoder was started by auto-identify
+        self.auto_failed = set()          # decoders that could not start (program missing)
+        self.sstv_watch = None            # listens for SSTV headers while auto-identify is on
+        self.auto_gen = 0                 # bumps on every retune so late results are ignored
+        self.auto_busy = False
+        self.auto_mode_prev = None        # mode before auto-identify switched it
+        self.auto_q = queue.Queue(maxsize=1)
+        threading.Thread(target=self._auto_worker, name="autoid", daemon=True).start()
+        self.job = None                   # scheduled capture in progress
+        self.job_prev = None
+        self.scheduler = Scheduler(self, settings)
 
     # ------------------------------------------------------------------ plumbing
     def add_listener(self, fn):
@@ -67,8 +83,10 @@ class Radio:
         self.running = True
         self.thread = threading.Thread(target=self._run, name="radio", daemon=True)
         self.thread.start()
+        self.scheduler.start()
 
     def stop(self):
+        self.scheduler.stop()
         self.running = False
         if self.thread:
             self.thread.join(timeout=3)
@@ -150,6 +168,8 @@ class Radio:
 
     def _tune(self, f, mode=None, force=False):
         f = int(f)
+        if abs(f - self.freq) > 1000:
+            self._auto_reset()
         fs = self.dev.sample_rate if self.dev else 2400000
         if mode and mode in MODES and mode != self.mode:
             self.mode = mode
@@ -164,6 +184,168 @@ class Radio:
                 self.spec_fresh = False
                 return True
         return False
+
+    # ------------------------------------------------------------------ auto-identify
+    def _auto_reset(self):
+        self.classifier.reset()
+        self.classifier.history.clear()
+        self.auto_gen += 1
+        self.sstv_watch = None
+        if self.auto_mode_prev:              # put back the mode auto-identify changed
+            if self.rx and self.auto_mode_prev != self.mode:
+                self.mode = self.auto_mode_prev
+                self.rx.set_mode(self.mode)
+            self.auto_mode_prev = None
+        if self.signal is not None:
+            self.signal = None
+            self._emit("signal", None)
+        if self.auto_owned and self.decoders.active:
+            self.decoders.stop()
+        self.auto_owned = False
+
+    def set_auto_identify(self, on):
+        def do():
+            self.s["auto_identify"] = bool(on)
+            self.s.save()
+            if not on:
+                self._auto_reset()
+            self._push_state(True)
+        self.call(do)
+
+    def _auto_feed(self, out):
+        if not self.s.get("auto_identify", True) or self.job or self.scan["state"] not in ("manual", "hold"):
+            return
+        if not self.sq_open:
+            self.classifier.reset()
+            return
+        # SSTV pictures start with a VIS header – watch for it continuously so none are missed
+        if self.decoders.active in (None, "") or (self.auto_owned and self.decoders.active != "sstv"):
+            if self.mode != "WFM":
+                if self.sstv_watch is None:
+                    self.sstv_watch = SstvDecoder(self.decoders.images_dir, watch_only=True)
+                self.sstv_watch.process(out["audio_ungated"])
+                if self.sstv_watch.state == "found":
+                    mode = self.sstv_watch.vis_found
+                    self.decoders.adopt_sstv(self.sstv_watch)
+                    self.sstv_watch = None
+                    self.auto_owned = True
+                    self._set_signal({"kind": "SSTV", "label": f"SSTV picture – {mode}", "decoder": "sstv",
+                                      "stable": True, "conf": 1.0})
+                    self._emit("event", {"level": "info", "text": f"Auto: SSTV {mode} picture – decoding"})
+                    self._push_state(True)
+                    return
+        got = self.classifier.collect(out)
+        if got and not self.auto_busy:
+            try:
+                self.auto_q.put_nowait((got, self.mode, self.freq, self.auto_gen))
+                self.auto_busy = True
+            except queue.Full:
+                pass
+
+    def _auto_worker(self):
+        """Runs the (fairly heavy) analysis off the radio thread so samples are never dropped."""
+        while True:
+            (iq, audio), mode, freq, gen = self.auto_q.get()
+            try:
+                res = self.classifier.classify(iq, audio, mode, freq)
+            except Exception:
+                log.exception("classify")
+                res = None
+            self.call(self._auto_result, res, gen)
+
+    def _auto_result(self, res, gen):
+        self.auto_busy = False
+        if gen != self.auto_gen or not self.s.get("auto_identify", True) or self.job:
+            return
+        r = self.classifier.decide(res)
+        if r:
+            self._auto_apply(r)
+
+    def _set_signal(self, r):
+        self.signal = r
+        self._emit("signal", r)
+
+    def _auto_apply(self, r):
+        self._set_signal(r)
+        if not r.get("stable"):
+            return
+        dec, sub = r.get("decoder") or "", r.get("sub") or "auto"
+        active = self.decoders.active
+        if active and not self.auto_owned:
+            return                               # the user (or the memory channel) chose a decoder
+        if dec and dec in self.auto_failed:
+            return
+        if dec:
+            if dec == "sstv" and active == "sstv":
+                return
+            if active == dec and (dec != "dsd" or self.decoders.sub == sub):
+                return
+            mode_before = self.mode
+            if r.get("mode") and r["mode"] != self.mode and r["mode"] in MODES:
+                self.mode = r["mode"]
+                self.rx.set_mode(self.mode)
+            ok = self.decoders.start(dec, sub)
+            if not ok:
+                self.auto_failed.add(dec)
+                if self.mode != mode_before:          # nothing to decode with – keep the user's mode
+                    self.mode = mode_before
+                    self.rx.set_mode(self.mode)
+                self._emit("event", {"level": "warn", "text": f"Auto: {r['label']} found, but its decoder "
+                                                              "program is missing – see Help › Decoders"})
+                return
+            self.auto_owned = True
+            if self.mode != mode_before and not self.auto_mode_prev:
+                self.auto_mode_prev = mode_before
+            self._emit("event", {"level": "info", "text": f"Auto: {r['label']} – decoder started"})
+            self._push_state(True)
+        elif active and self.auto_owned and r["kind"] in ("FM voice", "AM voice", "SSB voice"):
+            # back to plain voice: stop what auto-identify started (an SSTV picture in progress is kept)
+            if not (active == "sstv" and self.decoders.sstv and self.decoders.sstv.state == "image"):
+                self.decoders.stop()
+                self.auto_owned = False
+                if self.auto_mode_prev and self.auto_mode_prev != self.mode:
+                    self.mode = self.auto_mode_prev
+                    self.rx.set_mode(self.mode)
+                self.auto_mode_prev = None
+                self._push_state(True)
+
+    # ------------------------------------------------------------------ scheduled captures
+    def begin_job(self, job):
+        def do():
+            if self.job is None:
+                self.job_prev = {"freq": self.freq, "mode": self.mode, "decoder": self.decoders.active,
+                                 "sub": self.decoders.sub, "scan": self.scan["state"],
+                                 "recording": self.rec is not None}
+            self._stop_scan()
+            self._auto_reset()
+            self.channel = None
+            self.job = job
+            self._tune(job["freq"], job.get("mode"), force=True)
+            act = job.get("action")
+            if act in ("wefax", "sstv", "lrpt", "pager", "data", "dsd"):
+                self.decoders.start(act, "auto")
+            elif act == "record" and not self.rec:
+                self.record(True)
+            self._push_state(True)
+        self.call(do)
+
+    def end_job(self):
+        def do():
+            job, prev = self.job, self.job_prev or {}
+            self.job, self.job_prev = None, None
+            if job and job.get("action") in ("wefax", "sstv", "lrpt", "pager", "data", "dsd"):
+                self.decoders.stop()
+            if job and job.get("action") == "record" and self.rec and not prev.get("recording"):
+                self.rec.close()
+                self.rec = None
+            if prev:
+                self._tune(prev["freq"], prev["mode"], force=True)
+                if prev.get("decoder"):
+                    self.decoders.start(prev["decoder"], prev.get("sub") or "auto")
+                if prev.get("scan") == "scan":
+                    self.start_scan()
+            self._push_state(True)
+        self.call(do)
 
     def offset(self):
         return self.freq - (self.dev.center if self.dev else self.freq)
@@ -523,6 +705,10 @@ class Radio:
                        "step": self.s["search_step"], "mode": self.s["search_mode"],
                        "threshold": self.s["search_threshold_db"]},
             "priority": self.priority,
+            "auto_identify": bool(self.s.get("auto_identify", True)),
+            "auto_owned": self.auto_owned,
+            "signal": self.signal,
+            "job": {"name": self.job["name"], "action": self.job.get("action")} if self.job else None,
         }
 
     def _push_state(self, force=False):
@@ -594,6 +780,10 @@ class Radio:
                 self._priority_check(spec_db)
 
             if produce:
+                try:
+                    self._auto_feed(out)
+                except Exception:
+                    log.exception("auto-identify")
                 self.decoders.feed(out)
                 audio = out["audio"]
                 pcm = np.clip(audio * 32767, -32767, 32767).astype("<i2").tobytes()

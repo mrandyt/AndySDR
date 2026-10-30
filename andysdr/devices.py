@@ -381,6 +381,15 @@ class RtlTcpDevice(BaseDevice):
 
 
 # --------------------------------------------------------------------------------------
+def _cis(ph):
+    """exp(j*ph) as complex64 – cos/sin in float32 is many times faster than numpy's complex exp."""
+    p = np.asarray(ph, np.float32)
+    out = np.empty(p.shape, np.complex64)
+    out.real = np.cos(p)
+    out.imag = np.sin(p)
+    return out
+
+
 class SimDevice(BaseDevice):
     """Built-in signal generator for demonstrating / testing AndySDR without hardware."""
     kind = "sim"
@@ -395,6 +404,9 @@ class SimDevice(BaseDevice):
         (153350000, "fsk", 0.04, 2.0),
         (446006250, "nfm_voice", 0.03, 3.5),
         (8040000, "wefax", 0.05, 0.0),
+        (145437500, "dmr", 0.03, 6.0),       # DMR handset: 4FSK 4800 Bd, 30 ms TDMA bursts
+        (144800000, "aprs", 0.03, 2.5),      # APRS AFSK 1200
+        (145800000, "sstv", 0.04, 0.0),      # SSTV Robot 36 test card, repeating (like the ISS)
     ]
 
     def __init__(self):
@@ -403,6 +415,7 @@ class SimDevice(BaseDevice):
         self.n = 0
         self._last = time.time()
         self._ph = {}
+        self._osc = {}
 
     def open(self):
         self.n = 0
@@ -427,6 +440,21 @@ class SimDevice(BaseDevice):
         if kind == "fsk":
             bits = (np.floor(t * 1200) * 2654435761 % 7 > 3)
             return np.where(bits, 1.0, -1.0)
+        if kind == "dmr":
+            sym = (np.floor(t * 4800).astype(np.int64) * 2654435761 >> 7) % 4
+            return np.array([-1.0, -1 / 3, 1 / 3, 1.0])[sym]
+        if kind == "aprs":
+            bits = (np.floor(t * 1200).astype(np.int64) * 2654435761 >> 5) % 2
+            f = np.where(bits == 1, 1200.0, 2200.0)
+            ph = getattr(self, "_aprs_ph", 0.0) + 2 * np.pi * np.cumsum(f) / self.sample_rate
+            self._aprs_ph = float(ph[-1] % (2 * np.pi))
+            return np.sin(ph)
+        if kind == "sstv":
+            if not hasattr(self, "_sstv_audio"):
+                from .sstv import encode
+                self._sstv_audio = np.concatenate((encode("Robot 36"), np.zeros(48000 * 3, np.float32)))
+            L = len(self._sstv_audio)
+            return self._sstv_audio[(t * 48000).astype(np.int64) % L]
         return np.zeros_like(t)
 
     def read(self, n):
@@ -442,7 +470,9 @@ class SimDevice(BaseDevice):
         t = idx / fs
         rng = np.random.default_rng()
         noise_amp = 0.002 * (10 ** ((50 - self.gain) / 40))
-        x = (rng.standard_normal(n) + 1j * rng.standard_normal(n)) * noise_amp
+        x = np.empty(n, np.complex64)
+        x.real = rng.standard_normal(n, np.float32) * noise_amp
+        x.imag = rng.standard_normal(n, np.float32) * noise_amp
         for f, kind, amp, period in self.SIGNALS:
             off = f - self.center
             if abs(off) > fs * 0.48:
@@ -459,23 +489,41 @@ class SimDevice(BaseDevice):
                 ph0 = getattr(self, "_wf_ph", 0.0)
                 ph = ph0 + 2 * np.pi * np.cumsum(f_audio) / fs
                 self._wf_ph = float(ph[-1] % (2 * np.pi))
-                bb = np.exp(1j * ph)
-            elif kind in ("nfm_voice", "nfm_tone", "fsk"):
+                bb = _cis(ph)
+            elif kind in ("nfm_voice", "nfm_tone", "fsk", "dmr", "aprs", "sstv"):
                 a = self._audio(kind, t)
-                dev = 2500 if kind != "fsk" else 4500
+                if kind == "dmr":       # smooth the symbols a little and key the TDMA bursts
+                    c = np.concatenate(([0.0], np.cumsum(a)))
+                    a = np.concatenate((a[:250], (c[250:] - c[:-250])[: len(a) - 250] / 250))
+                dev = {"fsk": 4500, "dmr": 1944, "sstv": 3000}.get(kind, 2500)
                 ph = self._ph.get(f, 0.0) + 2 * np.pi * dev * np.cumsum(a) / fs
                 self._ph[f] = float(ph[-1] % (2 * np.pi))
-                bb = np.exp(1j * ph)
+                bb = None                       # FM: one complex exponential for phase + carrier
             elif kind == "am_voice":
                 bb = (1 + 0.6 * self._audio(kind, t)).astype(np.complex128)
             elif kind == "wfm":
                 a = self._audio(kind, t)
                 ph = self._ph.get(f, 0.0) + 2 * np.pi * 60000 * np.cumsum(a) / fs
                 self._ph[f] = float(ph[-1] % (2 * np.pi))
-                bb = np.exp(1j * ph)
+                bb = _cis(ph)
             else:
                 continue
-            x = x + amp * (10 ** ((self.gain - 30) / 40)) * bb * np.exp(2j * np.pi * off * t)
+            g = amp * (10 ** ((self.gain - 30) / 40))
+            # carrier: cached oscillator for this offset, rotated to the block start
+            key = (off, n, fs)
+            osc = self._osc.get(key)
+            if osc is None:
+                if len(self._osc) > 64:
+                    self._osc.clear()
+                osc = self._osc[key] = _cis(np.mod(2 * np.pi * off / fs * np.arange(n), 2 * np.pi))
+            rot = np.complex64(np.exp(1j * ((2 * np.pi * off / fs * idx[0]) % (2 * np.pi))) * g)
+            if bb is None:
+                sig = _cis(ph)
+                if kind == "dmr":
+                    sig *= ((t % 0.06) < 0.0275)
+                x += sig * osc * rot
+            else:
+                x += (bb * osc * rot).astype(np.complex64)
         return x.astype(np.complex64)
 
 
