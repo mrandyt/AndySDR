@@ -38,7 +38,7 @@ PROGRAMS = {
     "multimon-ng": {
         "exe": "multimon-ng",
         "repos": ["EliasOenal/multimon-ng"],
-        "asset": r"(win|windows|mingw|w64|x64).*\.(zip|7z)$",
+        "asset": r"(win64|x64|w64|amd64).*\.(zip|7z)$",
         "avoid": r"(source|src|linux|arm|aarch64|mac|osx|\.deb)",
         "licence": "GPL-2.0 – https://github.com/EliasOenal/multimon-ng",
     },
@@ -125,7 +125,7 @@ def fetch(prog, dest, token=None, log=print, force=False):
         log(f"{prog}: no Windows build found on GitHub releases")
         return None
     tag, name, url, overlay = hit
-    log(f"{prog}: downloading {name} ({tag}) …")
+    log(f"{prog}: downloading {name} ({tag})...")
     try:
         blob = _get(url, token)
         if os.path.isdir(sub):
@@ -143,11 +143,11 @@ def fetch(prog, dest, token=None, log=print, force=False):
                 f.write(newexe)
             log(f"{prog}: applied the updated {os.path.basename(path)} from the same release")
         except Exception as e:  # noqa: BLE001
-            log(f"{prog}: updated exe not applied ({e}) – using the one from the zip")
+            log(f"{prog}: updated exe not applied ({e}) - using the one from the zip")
     if path:
         with open(os.path.join(sub, "ANDYSDR_SOURCE.txt"), "w", encoding="utf-8") as f:
             f.write(f"{prog} {tag}\nfile: {name}\nfrom: {url}\nlicence: {PROGRAMS[prog]['licence']}\n")
-        log(f"{prog}: installed {tag} → {path}")
+        log(f"{prog}: installed {tag} -> {path}")
     else:
         log(f"{prog}: unpacked {name} but no {PROGRAMS[prog]['exe']}.exe inside")
     return path
@@ -178,6 +178,11 @@ def main(argv=None):
     ap.add_argument("--force", action="store_true", help="re-download even if present")
     ap.add_argument("--require", default="", help="comma list that must succeed, e.g. satdump,dsd-fme")
     a = ap.parse_args(argv)
+    for stream in (sys.stdout, sys.stderr):  # Windows consoles default to cp1252
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:  # noqa: BLE001
+            pass
     res = fetch_all(a.dest, force=a.force)
     print("\nSummary:")
     for k, v in res.items():

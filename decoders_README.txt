@@ -8,7 +8,7 @@ The AndySDR download already contains these free programs (one sub-folder each):
                    which AndySDR starts automatically so decoded voice is heard)
 
   multimon-ng\     POCSAG 512/1200/2400, FLEX pagers, APRS, DTMF, ZVEI, EAS
-                   https://github.com/EliasOenal/multimon-ng  (compiled for Windows by AndySDR's build)
+                   https://github.com/EliasOenal/multimon-ng  (official Windows 64-bit build)
 
   satdump\         Meteor-M N2-3 / N2-4 LRPT weather satellite images
                    https://www.satdump.org  (Windows x64 portable)
