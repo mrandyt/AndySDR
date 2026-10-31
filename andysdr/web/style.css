@@ -362,3 +362,25 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
   .vfo-hint { display: none; }
   #scopeInfo { display: none; }
 }
+
+/* ---------- compact LCD (about half the previous size, every style) ---------- */
+.radio-center { align-items: center; justify-content: center; }
+.lcd, [data-theme] .lcd { flex: 0 1 620px; max-width: 620px; min-height: 0; padding: 6px 10px; gap: 3px; border-width: 5px; }
+.lcd-flags span { font-size: 8px; padding: 0 3px; letter-spacing: .5px; }
+.lcd-banks { font-size: 9px; gap: 3px; }
+.lcd-banks span { width: 12px; }
+.lcd-main { gap: 8px; }
+.lcd-ch small { font-size: 8px; }
+.lcd-ch .seg { height: 16px; width: auto; }
+.lcd-freq { height: 46px; }
+.lcd-freq .seg { height: 42px; width: auto; }
+.lcd-unit { font-size: 10px; padding-bottom: 3px; }
+.lcd-mode { font-size: 10px; padding: 0 4px; border-width: 1.5px; }
+.lcd-tag, [data-theme] .lcd-tag { font-size: 15px !important; letter-spacing: 1.5px; }
+.lcd-step, .lcd-meter { font-size: 9px; }
+.smeter { height: 8px; gap: 2px; }
+.smeter i.sq { box-shadow: 0 -3px 0 0 var(--lcd-on); }
+.lcd-decode, [data-theme] .lcd-decode { font-size: 10px; min-height: 12px; }
+[data-theme="ubcd260"] .lcd-freq-txt, [data-theme="trx2"] .lcd-freq-txt { font-size: 31px; letter-spacing: 1px; }
+@media (max-width: 1150px) { .lcd, [data-theme] .lcd { flex-basis: 100%; } }
+@media (max-width: 600px) { .lcd-freq-txt { font-size: 28px !important; } .lcd-freq .seg { height: 36px; } }
