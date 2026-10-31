@@ -1,0 +1,32 @@
+name: diag
+on:
+  push:
+    branches: [diag]
+jobs:
+  assets:
+    runs-on: windows-latest
+    defaults: { run: { shell: bash } }
+    steps:
+      - uses: actions/checkout@v4
+      - name: list assets
+        env: { GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+        run: |
+          for r in SatDump/SatDump EliasOenal/multimon-ng lwvmobile/dsd-fme; do
+            gh api "repos/$r/releases?per_page=6" --jq '.[] | .tag_name+" pre="+(.prerelease|tostring)+" :: "+([.assets[].name]|join(" | "))' | while read -r l; do echo "::notice::$r $l"; done
+          done
+      - name: fetch test
+        env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+        run: python -m andysdr.fetchdecoders out 2>&1 | while read -r l; do echo "::notice::$l"; done
+  mmng:
+    runs-on: windows-latest
+    steps:
+      - uses: msys2/setup-msys2@v2
+        with: { msystem: UCRT64, update: false, install: git mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja }
+      - name: build
+        shell: msys2 {0}
+        run: |
+          git clone --depth 1 https://github.com/EliasOenal/multimon-ng.git src
+          ls src | tr '\n' ' ' | sed 's/^/::notice::files /'; echo
+          ( cmake -S src -B b -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXE_LINKER_FLAGS="-static -static-libgcc" && cmake --build b ) > log.txt 2>&1; echo "rc=$?" >> log.txt
+          grep -iE "error|undefined|rc=|fatal" log.txt | head -25 | while read -r l; do echo "::notice::$l"; done
+          tail -5 log.txt | while read -r l; do echo "::notice::tail $l"; done
