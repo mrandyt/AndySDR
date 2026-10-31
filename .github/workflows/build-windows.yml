@@ -44,6 +44,9 @@ jobs:
         run: |
           pyinstaller --noconfirm AndySDR.spec
           ls dist/AndySDR/_internal/soapy/lib/SoapySDR/*/ | tee /dev/stderr | grep -qi rtlsdr && echo "RTL-SDR driver bundled in the exe"
+          # AndySDR drives RTL dongles (Nooelec NESDR etc.) directly through librtlsdr - it must be in the exe
+          f=$(ls dist/AndySDR/_internal/soapy/bin/ | grep -iE '^(lib)?rtlsdr\.dll$' | head -1)
+          if [ -n "$f" ]; then echo "::notice::RTL-SDR library bundled: $f"; else echo "::error::rtlsdr.dll missing"; exit 1; fi
           mkdir -p dist/AndySDR/decoders
           cp decoders_README.txt dist/AndySDR/decoders/README.txt
           cp README.md dist/AndySDR/
@@ -125,7 +128,7 @@ jobs:
             * `AndySDR-windows.zip` – portable: unzip and run `AndySDR.exe`
 
             Decoders bundled in the `decoders` folder: DSD-FME (DMR, P25, NXDN, dPMR, YSF, M17), multimon-ng (POCSAG, FLEX, APRS, DTMF, ZVEI, EAS), SatDump (Meteor-M LRPT). WEFAX and SSTV are built in.
-            Smaller LCD on every scanner style.
+            1.2.1: RTL-SDR dongles (Nooelec NESDR SMArt v5 etc.) now open directly through librtlsdr - fixes "SoapySDR::Device::make() no match". Smaller LCD on every scanner style.
 
             SDRplay RSP users: install SDRplay API 3.x from sdrplay.com first. RTL-SDR / Nooelec: install WinUSB once with Zadig.
           files: |

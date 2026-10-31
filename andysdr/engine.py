@@ -120,7 +120,8 @@ class Radio:
         dev = next((d for d in self.dev_list if d.key == key), None)
         if dev is None:
             real = [d for d in self.dev_list if d.kind != "sim"]
-            dev = real[0] if (real and not key) else self.dev_list[-1]
+            # saved receiver not found (e.g. listed under a new name) - use the first real one
+            dev = real[0] if (real and key != "sim") else self.dev_list[-1]
         try:
             # pick a sample rate the DSP chain divides evenly
             want = int(self.s.get("sample_rate") or 0)

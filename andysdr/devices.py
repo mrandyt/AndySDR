@@ -139,9 +139,36 @@ class SoapyDevice(BaseDevice):
         self._buf = None
         self.is_sdrplay = "sdrplay" in args.get("driver", "")
 
+    def _make(self, S):
+        """SoapySDR::Device::make() can say 'no match' for the very args enumerate() returned
+        (seen with RTL dongles on Windows). Try progressively looser args before giving up."""
+        tries = [dict(self.args)]
+        tries.append({k: v for k, v in self.args.items() if k != "label"})
+        if "driver" in self.args:
+            tries.append({"driver": self.args["driver"]})
+        try:
+            for d in S.Device.enumerate({"driver": self.args.get("driver", "")}):
+                full = {k: d[k] for k in d.keys()}
+                if not self.args.get("serial") or full.get("serial") == self.args.get("serial"):
+                    tries.insert(1, full)
+        except Exception:
+            pass
+        err = None
+        seen = []
+        for a in tries:
+            if a in seen:
+                continue
+            seen.append(a)
+            try:
+                return S.Device(a)
+            except Exception as e:  # noqa: BLE001
+                err = e
+                log.warning("Soapy make(%s) failed: %s", a, e)
+        raise err or RuntimeError("no device")
+
     def open(self):
         S = soapy()
-        self.dev = S.Device(self.args)
+        self.dev = self._make(S)
         self.dev.setSampleRate(S.SOAPY_SDR_RX, 0, self.sample_rate)
         try:
             self.dev.setBandwidth(S.SOAPY_SDR_RX, 0, self.sample_rate * 0.8)
@@ -297,6 +324,224 @@ class SoapyDevice(BaseDevice):
     def write_setting(self, key, value):
         if self.dev:
             self.dev.writeSetting(key, str(value))
+
+
+
+# --------------------------------------------------------------------------------------
+# RTL-SDR (Nooelec NESDR, RTL-SDR Blog, generic RTL2832U) straight through librtlsdr.
+# This is how SDR++ / SDR# talk to the dongle and avoids SoapySDR's
+# "Device::make() no match" problem with some RTL dongles on Windows.
+# --------------------------------------------------------------------------------------
+_rtl = None
+
+
+def rtl_lib():
+    global _rtl
+    if _rtl is None:
+        import ctypes
+        import ctypes.util
+        soapy()  # sets up the DLL search path to the bundled drivers
+        names = ["rtlsdr.dll", "librtlsdr.dll"] if sys.platform.startswith("win") else \
+            [ctypes.util.find_library("rtlsdr") or "librtlsdr.so.0", "librtlsdr.so"]
+        _rtl = False
+        for n in names:
+            try:
+                lib = ctypes.CDLL(n)
+            except OSError:
+                continue
+            P, I, U = ctypes.c_void_p, ctypes.c_int, ctypes.c_uint32
+            lib.rtlsdr_get_device_count.restype = U
+            lib.rtlsdr_get_device_name.restype = ctypes.c_char_p
+            lib.rtlsdr_get_device_name.argtypes = [U]
+            lib.rtlsdr_get_device_usb_strings.argtypes = [U, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
+            lib.rtlsdr_open.argtypes = [ctypes.POINTER(P), U]
+            lib.rtlsdr_close.argtypes = [P]
+            lib.rtlsdr_set_sample_rate.argtypes = [P, U]
+            lib.rtlsdr_set_center_freq.argtypes = [P, U]
+            lib.rtlsdr_set_freq_correction.argtypes = [P, I]
+            lib.rtlsdr_set_tuner_gain_mode.argtypes = [P, I]
+            lib.rtlsdr_set_tuner_gain.argtypes = [P, I]
+            lib.rtlsdr_get_tuner_gains.argtypes = [P, ctypes.POINTER(I)]
+            lib.rtlsdr_set_agc_mode.argtypes = [P, I]
+            lib.rtlsdr_set_direct_sampling.argtypes = [P, I]
+            lib.rtlsdr_get_tuner_type.argtypes = [P]
+            lib.rtlsdr_reset_buffer.argtypes = [P]
+            lib.rtlsdr_read_sync.argtypes = [P, ctypes.c_void_p, I, ctypes.POINTER(I)]
+            if hasattr(lib, "rtlsdr_set_bias_tee"):
+                lib.rtlsdr_set_bias_tee.argtypes = [P, I]
+            _rtl = lib
+            log.info("librtlsdr loaded: %s", n)
+            break
+        if not _rtl:
+            log.warning("librtlsdr not found - RTL dongles will go through SoapySDR")
+    return _rtl or None
+
+
+def list_rtl_native():
+    lib = rtl_lib()
+    if not lib:
+        return []
+    import ctypes
+    out = []
+    for i in range(lib.rtlsdr_get_device_count()):
+        m, p, s = (ctypes.create_string_buffer(256) for _ in range(3))
+        lib.rtlsdr_get_device_usb_strings(i, m, p, s)
+        man, prod, ser = (x.value.decode("latin-1", "replace").strip() for x in (m, p, s))
+        name = " ".join(x for x in (man, prod) if x) or (lib.rtlsdr_get_device_name(i) or b"RTL-SDR").decode("latin-1")
+        out.append(RtlNativeDevice(i, ser, f"{name} :: {ser}" if ser else name))
+    return out
+
+
+class RtlNativeDevice(BaseDevice):
+    kind = "rtlsdr"
+    RATES = [250000, 960000, 1200000, 1440000, 1920000, 2400000, 2880000]
+    TUNERS = {1: "E4000", 2: "FC0012", 3: "FC0013", 4: "FC2580", 5: "R820T/R860", 6: "R828D"}
+
+    def __init__(self, index, serial, label):
+        super().__init__(f"rtlsdr:{serial or index}", label)
+        self.index, self.serial = index, serial
+        self.dev = None
+        self.ppm = 0
+        self.direct = 0
+        self.bias = False
+        self._gains = []
+        self._buf = None
+
+    def _find_index(self):
+        # USB order can change between plug-ins - find our dongle again by serial
+        lib = rtl_lib()
+        import ctypes
+        for i in range(lib.rtlsdr_get_device_count()):
+            m, p, s = (ctypes.create_string_buffer(256) for _ in range(3))
+            lib.rtlsdr_get_device_usb_strings(i, m, p, s)
+            if self.serial and s.value.decode("latin-1", "replace").strip() == self.serial:
+                return i
+        return self.index
+
+    def open(self):
+        import ctypes
+        lib = rtl_lib()
+        if not lib:
+            raise RuntimeError("RTL-SDR driver library (rtlsdr.dll) not found")
+        h = ctypes.c_void_p()
+        r = lib.rtlsdr_open(ctypes.byref(h), self._find_index())
+        if r < 0 or not h.value:
+            raise RuntimeError(
+                f"rtlsdr_open failed ({r}). Check the dongle uses the WinUSB driver (Zadig: "
+                "Options > List All Devices > 'Bulk-In, Interface (Interface 0)' > WinUSB) and that "
+                "no other program (SDR#, SDR++, rtl_tcp) is using it")
+        self.dev = h
+        n = lib.rtlsdr_get_tuner_gains(h, None)
+        if n > 0:
+            arr = (ctypes.c_int * n)()
+            lib.rtlsdr_get_tuner_gains(h, arr)
+            self._gains = sorted(arr)
+        lib.rtlsdr_set_sample_rate(h, int(self.sample_rate))
+        if self.direct:
+            lib.rtlsdr_set_direct_sampling(h, self.direct)
+        lib.rtlsdr_set_center_freq(h, int(self.center))
+        if self.ppm:
+            lib.rtlsdr_set_freq_correction(h, int(self.ppm))
+        if self.bias and hasattr(lib, "rtlsdr_set_bias_tee"):
+            lib.rtlsdr_set_bias_tee(h, 1)
+        self.set_agc(self.agc)
+        lib.rtlsdr_reset_buffer(h)
+        self._buf = (ctypes.c_uint8 * (1 << 18))()
+        log.info("RTL-SDR open: %s, tuner %s, %d gain steps", self.label,
+                 self.TUNERS.get(lib.rtlsdr_get_tuner_type(h), "?"), len(self._gains))
+
+    def close(self):
+        if self.dev:
+            try:
+                rtl_lib().rtlsdr_close(self.dev)
+            except Exception:
+                pass
+        self.dev = None
+
+    def read(self, n):
+        import ctypes
+        if not self.dev:
+            return np.zeros(0, np.complex64)
+        nbytes = min(2 * n, len(self._buf)) // 512 * 512 or 512
+        got = ctypes.c_int(0)
+        r = rtl_lib().rtlsdr_read_sync(self.dev, self._buf, nbytes, ctypes.byref(got))
+        if r < 0 or got.value <= 0:
+            time.sleep(0.01)
+            return np.zeros(0, np.complex64)
+        raw = np.frombuffer(self._buf, np.uint8, got.value & ~1).astype(np.float32)
+        raw = (raw - 127.4) / 128.0
+        return (raw[0::2] + 1j * raw[1::2]).astype(np.complex64)
+
+    def set_sample_rate(self, sr):
+        self.sample_rate = sr
+        if self.dev:
+            rtl_lib().rtlsdr_set_sample_rate(self.dev, int(sr))
+            rtl_lib().rtlsdr_reset_buffer(self.dev)
+
+    def set_center(self, f):
+        self.center = f
+        if self.dev:
+            rtl_lib().rtlsdr_set_center_freq(self.dev, int(f))
+
+    def set_gain(self, g):
+        self.gain = g
+        if self.dev and not self.agc:
+            tenth = int(round(g * 10))
+            if self._gains:
+                tenth = min(self._gains, key=lambda x: abs(x - tenth))
+            rtl_lib().rtlsdr_set_tuner_gain(self.dev, tenth)
+
+    def set_agc(self, on):
+        self.agc = bool(on)
+        if self.dev:
+            lib = rtl_lib()
+            lib.rtlsdr_set_tuner_gain_mode(self.dev, 0 if self.agc else 1)
+            lib.rtlsdr_set_agc_mode(self.dev, 1 if self.agc else 0)
+            if not self.agc:
+                self.set_gain(self.gain)
+
+    def set_ppm(self, ppm):
+        self.ppm = int(round(float(ppm or 0)))
+        if self.dev:
+            rtl_lib().rtlsdr_set_freq_correction(self.dev, self.ppm)  # returns -2 if unchanged: fine
+
+    def antennas(self):
+        return ["RX"]
+
+    def gain_range(self):
+        if self._gains:
+            return (self._gains[0] / 10.0, self._gains[-1] / 10.0)
+        return (0.0, 49.6)
+
+    def sample_rates(self):
+        return list(self.RATES)
+
+    def freq_range(self):
+        return (0.5e6 if self.direct else 24e6, 1766e6)
+
+    def extra_settings(self):
+        out = [{"key": "direct_samp", "name": "HF direct sampling", "type": 3,
+                "value": {0: "Off", 1: "I branch", 2: "Q branch"}[self.direct],
+                "options": ["Off", "I branch", "Q branch"],
+                "description": "Receive 0.5-28.8 MHz on dongles wired for it (RTL-SDR Blog V3/V4: Q branch). "
+                               "NESDR SMArt has no HF input - leave Off."}]
+        if hasattr(rtl_lib() or object(), "rtlsdr_set_bias_tee"):
+            out.append({"key": "biastee", "name": "Bias-T (antenna power)", "type": 0,
+                        "value": "true" if self.bias else "false", "options": [],
+                        "description": "Powers an LNA through the coax on dongles that support it."})
+        return out
+
+    def write_setting(self, key, value):
+        lib = rtl_lib()
+        if key == "direct_samp":
+            self.direct = {"Off": 0, "I branch": 1, "Q branch": 2, "0": 0, "1": 1, "2": 2}.get(str(value), 0)
+            if self.dev:
+                lib.rtlsdr_set_direct_sampling(self.dev, self.direct)
+                lib.rtlsdr_set_center_freq(self.dev, int(self.center))
+        elif key == "biastee":
+            self.bias = str(value).lower() in ("true", "1", "on")
+            if self.dev and hasattr(lib, "rtlsdr_set_bias_tee"):
+                lib.rtlsdr_set_bias_tee(self.dev, 1 if self.bias else 0)
 
 
 # --------------------------------------------------------------------------------------
@@ -539,13 +784,20 @@ def list_devices(extra_rtltcp=None):
         out.extend(native_rsp)
     except Exception as e:
         log.warning("SDRplay API: %s", e)
+    # RTL-SDR dongles (Nooelec NESDR etc.): straight through librtlsdr (preferred)
+    native_rtl = []
+    try:
+        native_rtl = list_rtl_native()
+        out.extend(native_rtl)
+    except Exception as e:  # noqa: BLE001
+        log.warning("librtlsdr: %s", e)
     S = soapy()
     if S:
         try:
             for d in S.Device.enumerate():
                 args = {k: d[k] for k in d.keys()}
                 drv = args.get("driver", "?")
-                if drv in ("audio",) or (native_rsp and "sdrplay" in drv):
+                if drv in ("audio",) or (native_rsp and "sdrplay" in drv) or (native_rtl and drv == "rtlsdr"):
                     continue
                 label = args.get("label") or f"{drv} {args.get('serial', '')}".strip()
                 keep = {k: args[k] for k in ("driver", "serial", "label") if k in args}

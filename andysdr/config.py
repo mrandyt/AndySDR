@@ -6,7 +6,7 @@ import sys
 import threading
 
 APP_NAME = "AndySDR"
-VERSION = "1.2.0"
+VERSION = "1.2.1"
 
 
 def app_dir():
