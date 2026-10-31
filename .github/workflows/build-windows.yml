@@ -29,6 +29,37 @@ jobs:
           python-version: "3.11"
           channels: conda-forge
 
+      # multimon-ng (POCSAG / FLEX / APRS / DTMF / ZVEI / EAS) has no official Windows download,
+      # so it is compiled here with MSYS2 MinGW-w64 as a stand-alone .exe.
+      - uses: msys2/setup-msys2@v2
+        id: msys2
+        continue-on-error: true
+        with:
+          msystem: MINGW64
+          update: false
+          install: git mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja
+
+      - name: Build multimon-ng.exe
+        id: multimon
+        continue-on-error: true
+        shell: msys2 {0}
+        run: |
+          set -e
+          git clone --depth 1 https://github.com/EliasOenal/multimon-ng.git mmng-src
+          # binmode.o puts stdin in binary mode - AndySDR pipes raw 22050 Hz audio into it
+          BINMODE=$(cygpath -m /mingw64/lib/binmode.o)
+          cmake -S mmng-src -B mmng-build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_EXE_LINKER_FLAGS="-static -static-libgcc $BINMODE"
+          cmake --build mmng-build
+          mkdir -p vendor/multimon-ng
+          cp mmng-build/multimon-ng.exe vendor/multimon-ng/
+          # copy any MinGW DLL it still needs (normally none - it is linked statically)
+          ldd vendor/multimon-ng/multimon-ng.exe | awk '/mingw64/ {print $3}' | xargs -r -I{} cp {} vendor/multimon-ng/
+          cp mmng-src/COPYING* vendor/multimon-ng/ 2>/dev/null || true
+          echo "multimon-ng built from $(git -C mmng-src rev-parse --short HEAD)" > vendor/multimon-ng/ANDYSDR_SOURCE.txt
+          echo "licence: GPL-2.0 - https://github.com/EliasOenal/multimon-ng" >> vendor/multimon-ng/ANDYSDR_SOURCE.txt
+          ./vendor/multimon-ng/multimon-ng.exe -h 2>&1 | head -5 || true
+
       - name: Install SDR libraries
         run: |
           conda install -y numpy scipy soapysdr
@@ -48,6 +79,35 @@ jobs:
           cp decoders_README.txt dist/AndySDR/decoders/README.txt
           cp README.md dist/AndySDR/
           cp -r samples dist/AndySDR/
+
+      - name: Bundle decoder programs (DSD-FME, multimon-ng, SatDump)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          D=dist/AndySDR/decoders
+          [ -f vendor/multimon-ng/multimon-ng.exe ] && cp -r vendor/multimon-ng "$D/"
+          python -m andysdr.fetchdecoders "$D" || true
+          # Visual C++ runtime next to SatDump (Microsoft's app-local deployment) so it runs on a clean PC
+          SD=$(dirname "$(find "$D" -iname satdump.exe | head -1)" 2>/dev/null || true)
+          if [ -n "$SD" ] && [ -d "$SD" ]; then
+            for f in msvcp140.dll msvcp140_1.dll msvcp140_2.dll vcruntime140.dll vcruntime140_1.dll concrt140.dll vcomp140.dll; do
+              [ -f "$SD/$f" ] || cp "/c/Windows/System32/$f" "$SD/" 2>/dev/null || true
+            done
+          fi
+          echo "== Decoders bundled:"
+          missing=0
+          for e in dsd-fme multimon-ng satdump; do
+            p=$(find "$D" -iname "$e.exe" | head -1)
+            if [ -n "$p" ]; then echo "  OK      $e -> $p"; else echo "::warning::$e.exe could not be bundled - users can press 'Download missing decoders' in AndySDR"; missing=1; fi
+          done
+          du -sh "$D"
+
+      - name: Visual C++ runtime for the installer
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force redist | Out-Null
+          Invoke-WebRequest https://aka.ms/vs/17/release/vc_redist.x64.exe -OutFile redist/vc_redist.x64.exe
 
       - name: Smoke test (start the server, fetch the GUI)
         run: |

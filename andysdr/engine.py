@@ -91,6 +91,8 @@ class Radio:
         if self.thread:
             self.thread.join(timeout=3)
         self.decoders.stop()
+        from .decoders import stop_pulse
+        stop_pulse()
         if self.dev:
             try:
                 self.dev.close()

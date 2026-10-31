@@ -43,7 +43,7 @@ network server so any other PC, laptop, tablet or phone in the house can use the
 * **SDRplay (RSP2pro etc.)** – install *SDRplay API 3.x for Windows* from sdrplay.com. AndySDR finds `C:\Program Files\SDRplay\API\x64\sdrplay_api.dll` automatically. Close SDRuno/SDR# first – only one program can use the RSP at a time.
 * **RTL-SDR / Nooelec** – run [Zadig](https://zadig.akeo.ie), *Options › List all devices*, pick *Bulk-In, Interface (Interface 0)*, install **WinUSB**.
 * **Airspy / HackRF** – install the manufacturer's Windows driver.
-* **Decoders** – unzip DSD-FME, multimon-ng and SatDump into the `decoders` folder next to `AndySDR.exe` (see `decoders/README.txt`). The DECODERS tab shows a green tick for each one found.
+* **Decoders** – nothing to do: DSD-FME, multimon-ng and SatDump are bundled in the `decoders` folder next to `AndySDR.exe` (the installer also adds the Visual C++ runtime SatDump needs). The DECODERS tab shows a green tick for each one; if any shows a red cross, press **⬇ Download missing decoders** and AndySDR fetches it from GitHub.
 
 ## Using it from another PC
 

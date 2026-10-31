@@ -39,6 +39,10 @@ copy /y "decoders_README.txt" "dist\AndySDR\decoders\README.txt" >nul
 copy /y "README.md" "dist\AndySDR\README.md" >nul
 xcopy /y /i "samples" "dist\AndySDR\samples" >nul
 
+echo === Downloading decoder programs (DSD-FME, multimon-ng, SatDump) into dist\AndySDR\decoders ...
+python -m andysdr.fetchdecoders "dist\AndySDR\decoders"
+echo     (anything listed as MISSING can be added later with "Download missing decoders" in AndySDR)
+
 echo.
 echo === Done!  Run dist\AndySDR\AndySDR.exe
 echo     SDRplay RSP users: install "SDRplay API 3.x" from sdrplay.com first.

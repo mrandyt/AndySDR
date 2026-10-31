@@ -65,9 +65,53 @@ def find_exe(base, overrides=None):
     roots = [os.path.join(app_dir(), "decoders"), os.path.join(data_dir(), "decoders"), app_dir()]
     for r in roots:
         hits = glob.glob(os.path.join(r, "**", exe), recursive=True)
+        # top-most copy first (DSD-FME zips also contain patched variants in sub-folders)
+        hits.sort(key=lambda h: (h.count(os.sep), len(h)))
         if hits:
             return hits[0]
     return shutil.which(base)
+
+
+_PULSE = {"proc": None}
+
+
+def _ensure_pulse(dsd_exe, log):
+    """DSD-FME's Windows release is a Cygwin build that plays voice through PulseAudio.
+    If the release ships pulseaudio.exe, start it (once) so decoded voice is heard."""
+    if not sys.platform.startswith("win"):
+        return
+    p = _PULSE["proc"]
+    if p and p.poll() is None:
+        return
+    root = os.path.dirname(dsd_exe)
+    dec_root = os.path.normcase(os.path.join(app_dir(), "decoders"))
+    for _ in range(3):  # look in the exe folder and up to two parents inside decoders/
+        hits = sorted(glob.glob(os.path.join(root, "**", "pulseaudio.exe"), recursive=True),
+                      key=lambda h: h.count(os.sep))
+        if hits:
+            try:
+                _PULSE["proc"] = _popen([hits[0], "--exit-idle-time=-1"],
+                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                        stdin=subprocess.DEVNULL)
+                time.sleep(1.5)
+                log("Started DSD-FME's PulseAudio for voice output")
+            except OSError as e:
+                log(f"PulseAudio did not start ({e}) – DSD-FME will decode without sound")
+            return
+        parent = os.path.dirname(root)
+        if parent == root or not os.path.normcase(parent).startswith(dec_root):
+            return
+        root = parent
+
+
+def stop_pulse():
+    p = _PULSE["proc"]
+    if p and p.poll() is None:
+        try:
+            p.terminate()
+        except OSError:
+            pass
+    _PULSE["proc"] = None
 
 
 def _popen(args, **kw):
@@ -161,6 +205,33 @@ class DecoderManager:
                         "ready": bool(path)})
         return out
 
+    def download_missing(self, done=None):
+        """Fetch DSD-FME / multimon-ng / SatDump from GitHub into %APPDATA%\\AndySDR\\decoders."""
+        if getattr(self, "_fetching", False):
+            self.log("Decoder download already running")
+            return
+        self._fetching = True
+
+        def run():
+            from . import fetchdecoders
+            dest = os.path.join(data_dir(), "decoders")
+            try:
+                for prog in fetchdecoders.PROGRAMS:
+                    base = fetchdecoders.PROGRAMS[prog]["exe"]
+                    if find_exe(base, self.settings.get("decoder_paths", {})):
+                        self.log(f"{prog}: already installed")
+                        continue
+                    fetchdecoders.fetch(prog, dest, log=self.log)
+                fetchdecoders.write_licences(dest)
+                self.log("Decoder download finished")
+            except Exception as e:  # noqa: BLE001
+                self.log(f"Decoder download failed: {e}", "error")
+            finally:
+                self._fetching = False
+                if done:
+                    done()
+        threading.Thread(target=run, daemon=True).start()
+
     def log(self, text, kind="decoder"):
         self.emit(kind, {"t": time.strftime("%H:%M:%S"), "text": text, "decoder": self.active})
 
@@ -198,6 +269,7 @@ class DecoderManager:
                 exe = find_exe("dsd-fme", ov)
                 if not exe:
                     raise FileNotFoundError("dsd-fme.exe not found – see Help > Decoders")
+                _ensure_pulse(exe, self.log)
                 self.tcp = TcpAudioServer(7355)
                 self.tcp.start()
                 args = [exe, "-i", "tcp:127.0.0.1:7355"] + DSD_MODES.get(sub, ["-ft"])

@@ -370,6 +370,9 @@ class Server:
                 self._reply(c, "images", self._images())
             elif cmd == "decoders":
                 self._reply(c, "decoders", r.decoders.available())
+            elif cmd == "fetch_decoders":
+                r.decoders.download_missing(
+                    done=lambda: self._from_radio("decoders", r.decoders.available()))
             elif cmd == "auto_identify":
                 r.set_auto_identify(bool(m.get("on", True)))
             elif cmd == "schedule":

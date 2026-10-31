@@ -1,5 +1,5 @@
 ; Inno Setup script – makes AndySDR-Setup.exe (Start menu + desktop shortcuts + uninstaller)
-#define AppVer "1.1.0"
+#define AppVer "1.2.0"
 
 [Setup]
 AppId={{6C1E2A47-1D3B-4E7A-9C11-A4D5D0B2045A}
@@ -22,6 +22,8 @@ Name: "firewall"; Description: "Allow other PCs on my network to use AndySDR (Wi
 
 [Files]
 Source: "dist\AndySDR\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
+; Microsoft Visual C++ runtime (needed by SatDump) - installed silently if it is missing
+Source: "redist\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall skipifsourcedoesntexist
 
 [Dirs]
 Name: "{app}\decoders"; Permissions: users-modify
@@ -33,6 +35,7 @@ Name: "{group}\Decoders folder"; Filename: "{app}\decoders"
 Name: "{autodesktop}\AndySDR"; Filename: "{app}\AndySDR.exe"; Tasks: desktopicon
 
 [Run]
+Filename: "{tmp}\vc_redist.x64.exe"; Parameters: "/install /quiet /norestart"; StatusMsg: "Installing Visual C++ runtime for the decoders..."; Flags: waituntilterminated skipifdoesntexist
 Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""AndySDR"" dir=in action=allow program=""{app}\AndySDR.exe"" profile=private"; Flags: runhidden; Tasks: firewall
 Filename: "{app}\AndySDR.exe"; Description: "Start AndySDR now"; Flags: nowait postinstall skipifsilent
 
