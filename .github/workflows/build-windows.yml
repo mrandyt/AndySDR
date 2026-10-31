@@ -104,10 +104,30 @@ jobs:
             AndySDR-windows.zip
             Output/AndySDR-Setup.exe
 
+      - name: Read version
+        id: ver
+        run: echo "v=$(python -c "from andysdr.config import VERSION; print(VERSION)")" >> "$GITHUB_OUTPUT"
+
+      # Every build of main publishes (or refreshes) the GitHub Release for the program's version,
+      # e.g. v1.2.0, with the zip and the installer attached.
       - name: Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ steps.ver.outputs.v }}
+          name: AndySDR ${{ steps.ver.outputs.v }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          body: |
+            **AndySDR ${{ steps.ver.outputs.v }} for Windows 10/11**
+
+            * `AndySDR-Setup.exe` – installer (Start menu + desktop shortcut, firewall rule for remote use, Visual C++ runtime)
+            * `AndySDR-windows.zip` – portable: unzip and run `AndySDR.exe`
+
+            Decoders bundled in the `decoders` folder: DSD-FME (DMR, P25, NXDN, dPMR, YSF, M17), multimon-ng (POCSAG, FLEX, APRS, DTMF, ZVEI, EAS), SatDump (Meteor-M LRPT). WEFAX and SSTV are built in.
+            Smaller LCD on every scanner style.
+
+            SDRplay RSP users: install SDRplay API 3.x from sdrplay.com first. RTL-SDR / Nooelec: install WinUSB once with Zadig.
           files: |
             AndySDR-windows.zip
             Output/AndySDR-Setup.exe
