@@ -21,6 +21,7 @@ network server so any other PC, laptop, tablet or phone in the house can use the
 | Scheduler | Timed captures for **WEFAX charts, SSTV (ISS events), Meteor-M passes** or plain recordings: pick a station, start time, length, days of the week or a single date. AndySDR tunes, decodes, then puts the radio back how it was. Quick picks for Northwood WEFAX, ISS/2 m/HF SSTV and Meteor-M. |
 | Memory | 10 banks × 100 channels. RadioReference CSV / copied-table import (UK or any country), talkgroup lists, export to CSV. |
 | Decoders | DMR, P25 Phase 1/2, NXDN, dPMR, YSF, M17 (via DSD-FME) · POCSAG & FLEX pagers, APRS, DTMF, ZVEI, EAS (via multimon-ng) · **WEFAX weather charts and SSTV pictures (Martin, Scottie, Robot, PD modes) built in** · Meteor-M LRPT satellite pictures (via SatDump) · TETRA baseband out over UDP. |
+| MeshCore messaging | **MESHCORE** tab: text chat over the MeshCore LoRa mesh through a MeshCore companion board (Heltec V3/V4, RAK4631, T-Deck, T-Beam, Xiao…) on USB, Wi-Fi or Bluetooth. Public and #hashtag channels, private channels, direct messages with delivery ticks, node list with last-heard and hops, adverts, UK/EU preset, unread badges, message history, and **Watch on SDR** to see the packets on the waterfall. Works from remote PCs and phones too. |
 | Remote | Every copy of AndySDR is also a server (port 8045). Open `http://<pc-name-or-ip>:8045` in a browser on any device on the network, enter the password, and you get the full radio with audio and waterfall. |
 | Help | **? HELP** explains every control; *Explain mode* lets you click any knob or key for a description. Hover tooltips everywhere. |
 
@@ -44,6 +45,24 @@ network server so any other PC, laptop, tablet or phone in the house can use the
 * **RTL-SDR / Nooelec** – run [Zadig](https://zadig.akeo.ie), *Options › List all devices*, pick *Bulk-In, Interface (Interface 0)*, install **WinUSB**.
 * **Airspy / HackRF** – install the manufacturer's Windows driver.
 * **Decoders** – nothing to do: DSD-FME, multimon-ng and SatDump are bundled in the `decoders` folder next to `AndySDR.exe` (the installer also adds the Visual C++ runtime SatDump needs). The DECODERS tab shows a green tick for each one; if any shows a red cross, press **⬇ Download missing decoders** and AndySDR fetches it from GitHub.
+
+## MeshCore messaging
+
+AndySDR's receivers can only listen, so messages are sent and received by a small **MeshCore companion
+board** (about £20–40: Heltec V3/V4, RAK WisBlock 4631, LilyGO T-Deck or T-Beam, Seeed Xiao…).
+
+1. Flash it with **Companion** firmware from <https://flasher.meshcore.co.uk> – *USB Serial* if it will be
+   plugged into the PC, *Bluetooth* or *Wi-Fi* otherwise (not Repeater or Room Server).
+2. In AndySDR open the **MESHCORE** tab, choose *USB (COM port)*, pick the board's port (★ marks likely
+   radio boards) and press **Connect**. For Wi-Fi enter `ip:port` (usually port 5000); for Bluetooth press
+   **Find boards** (enter the PIN if one is set). AndySDR reconnects automatically next time.
+3. If your board is new, press **Use UK preset** (869.618 MHz, 62.5 kHz, SF8, CR8 – what most UK nodes use),
+   set a **Node name**, and press **Send advert** so others can see you.
+
+Channels: *Public* is on every board; **+ Join** adds a public `#hashtag` channel (e.g. `#uk`) or a private
+channel with a 32-hex-digit key. Contacts appear when nodes advertise – click one for an end-to-end encrypted
+direct message (✓ sent, ✓✓ delivered). 869.4–869.65 MHz is licence-exempt in the UK; the board's firmware
+keeps to the power and duty-cycle limits.
 
 ## Using it from another PC
 
@@ -79,7 +98,7 @@ FMN/FM/AM/DMR/P25/NXDN/TETRA/POCSAG modes are mapped and the right decoder is at
 
 ## Where things are stored
 
-`%APPDATA%\AndySDR\` – `settings.json`, `memory.json`, `images\`, `recordings\`, `logs\andysdr.log`.
+`%APPDATA%\AndySDR\` – `settings.json`, `memory.json`, `meshcore_messages.jsonl`, `images\`, `recordings\`, `logs\andysdr.log`.
 
 ## Legal (UK)
 
@@ -98,6 +117,7 @@ andysdr/sdrplay.py     native SDRplay API 3.x backend
 andysdr/decoders.py    DSD-FME / multimon-ng / SatDump / TETRA plumbing
 andysdr/wefax.py       built-in weather fax decoder
 andysdr/memory.py      memory banks + RadioReference import
+andysdr/meshlink.py    MeshCore messaging through a companion board (USB / Wi-Fi / Bluetooth)
 andysdr/server.py      network server (HTTP + WebSocket, password protected)
 andysdr/web/           the front panel (HTML/CSS/JS) and logo
 AndySDR.spec           PyInstaller recipe        build_windows.bat   local build

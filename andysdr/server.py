@@ -254,6 +254,7 @@ class Server:
             "activity": sorted(r.activity.values(), key=lambda x: -x["count"])[:300],
             "images": self._images(),
             "schedule": r.scheduler.status(),
+            "mesh": r.mesh.snapshot(), "mesh_history": r.mesh.history[-1500:],
             "settings": {k: self.s[k] for k in ("scan_delay", "scan_dwell", "search_threshold_db",
                                                  "server_port", "require_password_local",
                                                  "deemphasis_us", "theme")},
@@ -370,6 +371,28 @@ class Server:
                 self._reply(c, "images", self._images())
             elif cmd == "decoders":
                 self._reply(c, "decoders", r.decoders.available())
+            elif cmd == "mesh_connect":
+                r.mesh.connect(m.get("kind", "serial"), m.get("target", ""), m.get("pin", ""))
+            elif cmd == "mesh_disconnect":
+                r.mesh.disconnect(forget=True)
+            elif cmd == "mesh_send":
+                r.mesh.send(str(m.get("conv", "")), str(m.get("text", "")))
+            elif cmd == "mesh_advert":
+                r.mesh.advert(bool(m.get("flood", True)))
+            elif cmd == "mesh_refresh":
+                r.mesh.refresh()
+            elif cmd == "mesh_name":
+                r.mesh.set_name(str(m.get("name", "")).strip())
+            elif cmd == "mesh_radio":
+                r.mesh.set_radio(m["freq"], m["bw"], m["sf"], m["cr"])
+            elif cmd == "mesh_channel_add":
+                r.mesh.add_channel(int(m.get("idx", 1)), str(m.get("name", "")), str(m.get("secret", "")))
+            elif cmd == "mesh_channel_remove":
+                r.mesh.remove_channel(int(m["idx"]))
+            elif cmd == "mesh_clear":
+                r.mesh.clear_history(m.get("conv"))
+            elif cmd == "mesh_ble_scan":
+                r.mesh.scan_ble()
             elif cmd == "fetch_decoders":
                 r.decoders.download_missing(
                     done=lambda: self._from_radio("decoders", r.decoders.available()))

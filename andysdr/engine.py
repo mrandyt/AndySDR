@@ -63,6 +63,8 @@ class Radio:
         self.job = None                   # scheduled capture in progress
         self.job_prev = None
         self.scheduler = Scheduler(self, settings)
+        from .meshlink import MeshLink
+        self.mesh = MeshLink(settings, self._emit)   # MeshCore messaging via a companion board
 
     # ------------------------------------------------------------------ plumbing
     def add_listener(self, fn):
@@ -84,9 +86,14 @@ class Radio:
         self.thread = threading.Thread(target=self._run, name="radio", daemon=True)
         self.thread.start()
         self.scheduler.start()
+        self.mesh.autoconnect()
 
     def stop(self):
         self.scheduler.stop()
+        try:
+            self.mesh.stop()
+        except Exception:
+            pass
         self.running = False
         if self.thread:
             self.thread.join(timeout=3)

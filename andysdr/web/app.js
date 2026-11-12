@@ -76,6 +76,10 @@ function onJSON(m) {
     case "signal": S.signal = d; renderSignal(); break;
     case "schedule": SCH = d; renderSchedule(); break;
     case "images": renderImages(d); break;
+    case "mesh": MESH = d; renderMesh(); break;
+    case "mesh_msg": meshAddMsg(d); break;
+    case "mesh_history": MESHMSG = d; renderMeshList(); renderMeshMsgs(); break;
+    case "mesh_ble": meshBleFound(d); break;
     case "event": toast(d.text, d.level); if (d.level === "error") decLine("! " + d.text); break;
     case "import_result":
       $("csvResult").textContent = `Imported ${d.added} channels` + (d.talkgroups ? `, ${d.talkgroups} talkgroups` : "") +
@@ -94,6 +98,7 @@ function onHello(h) {
   renderDevices(h.devices); renderDevice(); renderMemory(); renderActivity(h.activity);
   renderDecoders(); renderImages(h.images); renderState();
   if (h.schedule) { SCH = h.schedule; renderSchedule(); }
+  if (h.mesh) { MESH = h.mesh; MESHMSG = h.mesh_history || []; renderMesh(); }
   const st = h.settings || {};
   $("setDelay").value = st.scan_delay; $("setDwell").value = st.scan_dwell;
   $("setDeemph").value = String(st.deemphasis_us || 50);
@@ -769,6 +774,7 @@ function showTab(name) {
   if (name === "dec") send({ cmd: "decoders" });
   if (name === "bp") renderBandPlan();
   if (name === "sch") send({ cmd: "schedule" });
+  if (name === "mesh") { meshRead(meshConv); renderMesh(); setTimeout(() => $("meshMsgs").scrollTop = 1e9, 0); }
   sizeCanvases();
 }
 document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => showTab(t.dataset.tab)));
@@ -1042,6 +1048,171 @@ $("schAdd").onclick = () => {
 $("schClear").onclick = () => fillSchForm(null);
 $("schStop").onclick = () => send({ cmd: "schedule_stop" });
 
+
+/* ======================================================= MeshCore messaging */
+let MESH = null, MESHMSG = [], meshConv = "ch:0", meshBle = [];
+const meshSeen = JSON.parse((() => { try { return localStorage.getItem("andysdr_mesh_seen") || "{}"; } catch (e) { return "{}"; } })());
+function meshSaveSeen() { try { localStorage.setItem("andysdr_mesh_seen", JSON.stringify(meshSeen)); } catch (e) {} }
+function meshRead(conv) { meshSeen[conv] = Math.floor(Date.now() / 1000) + 1; meshSaveSeen(); }
+function meshUnread(conv) { const t = meshSeen[conv] || 0; return MESHMSG.filter((m) => m.conv === conv && m.dir === "in" && m.rx > t).length; }
+function meshTabOpen() { return $("tab-mesh").classList.contains("active"); }
+function ago(t) {
+  if (!t) return "";
+  const s = Date.now() / 1000 - t;
+  if (s < 90) return "now"; if (s < 3600) return Math.round(s / 60) + "m"; if (s < 86400) return Math.round(s / 3600) + "h";
+  return Math.round(s / 86400) + "d";
+}
+function meshConvName(conv) {
+  if (!MESH) return conv;
+  if (conv.startsWith("ch:")) { const c = MESH.channels.find((x) => "ch:" + x.idx === conv); return c ? c.name : "Channel " + conv.slice(3); }
+  const k = conv.slice(2); const c = MESH.contacts.find((x) => x.key === k || x.key.startsWith(k));
+  return c ? c.name : k.slice(0, 12);
+}
+function renderMesh() {
+  if (!MESH) return;
+  const st = MESH.status;
+  $("meshDot").className = "mesh-dot " + st;
+  $("meshStatus").textContent = { connected: "Connected", connecting: "Connecting…", error: "Problem", disconnected: "Not connected" }[st] || st;
+  const n = MESH.node || {};
+  $("meshNode").textContent = st === "connected"
+    ? [n.name, n.model, n.fw && "fw " + n.fw, n.battery_mv && (n.battery_mv / 1000).toFixed(2) + " V"].filter(Boolean).join(" · ") : "";
+  $("meshRadio").textContent = n.freq ? `Radio ${n.freq} MHz · BW ${n.bw} kHz · SF${n.sf} · CR${n.cr} · ${n.tx_power} dBm` : "";
+  if (document.activeElement !== $("meshName")) $("meshName").value = n.name || "";
+  const err = MESH.error || "";
+  $("meshErr").hidden = !err; $("meshErr").textContent = err;
+  // connection form
+  const conn = MESH.conn || {};
+  if (!$("meshKind").dataset.touched && conn.kind) $("meshKind").value = conn.kind;
+  const ports = MESH.ports || [];
+  const cur = $("meshPort").value || conn.target || "";
+  $("meshPort").innerHTML = ports.length
+    ? ports.map((p) => `<option value="${esc(p.port)}" ${p.port === cur ? "selected" : ""}>${esc(p.port)} – ${esc(p.desc)}${p.likely ? " ★" : ""}</option>`).join("")
+    : `<option value="">no COM ports found</option>`;
+  if (!$("meshTarget").dataset.touched && conn.kind !== "serial") $("meshTarget").value = conn.target || "";
+  meshKindUI();
+  renderMeshList();
+  renderMeshMsgs();
+}
+function meshKindUI() {
+  const k = $("meshKind").value;
+  $("meshPort").hidden = k !== "serial";
+  $("meshTarget").hidden = k === "serial";
+  $("meshTarget").placeholder = k === "tcp" ? "192.168.1.50:5000" : "Bluetooth address (blank = first found)";
+  $("meshPin").hidden = $("meshBleScan").hidden = k !== "ble";
+}
+function renderMeshList() {
+  if (!MESH) return;
+  const chans = MESH.channels.length ? MESH.channels : [{ idx: 0, name: "Public" }];
+  $("meshChans").innerHTML = chans.map((c) => {
+    const conv = "ch:" + c.idx, u = meshUnread(conv);
+    return `<div data-conv="${conv}" class="${conv === meshConv ? "on" : ""}"><span class="ic">#</span><span class="nm">${esc(c.name)}</span>` +
+      (u ? `<span class="unread">${u}</span>` : "") +
+      (c.idx ? `<button class="btn sm" data-leave="${c.idx}" title="Leave channel">✕</button>` : "") + `</div>`;
+  }).join("");
+  const q = $("meshFind").value.trim().toLowerCase();
+  const ic = { chat: "👤", repeater: "📶", room: "🏠", sensor: "🌡" };
+  const list = MESH.contacts.filter((c) => !q || c.name.toLowerCase().includes(q));
+  $("meshContacts").innerHTML = list.length ? list.map((c) => {
+    const conv = "c:" + c.key, u = meshUnread(conv);
+    const hops = c.hops < 0 ? "flood" : c.hops + " hop" + (c.hops === 1 ? "" : "s");
+    return `<div data-conv="${conv}" class="${conv === meshConv ? "on" : ""}" title="${esc(c.type)} · ${esc(c.key.slice(0, 16))}… · ${hops}">` +
+      `<span class="ic">${ic[c.type] || "•"}</span><span class="nm">${esc(c.name)}</span>` +
+      (u ? `<span class="unread">${u}</span>` : `<span class="meta">${ago(c.last_advert)}</span>`) + `</div>`;
+  }).join("") : `<div class="mesh-empty">${MESH.status === "connected" ? "No contacts yet – nodes appear when they advertise." : "Connect a MeshCore board to see nodes."}</div>`;
+  const total = MESHMSG.filter((m) => m.dir === "in" && m.rx > (meshSeen[m.conv] || 0)).length;
+  $("meshBadge").hidden = !total; $("meshBadge").textContent = total;
+}
+function meshMsgHtml(m, prevDay) {
+  const d = new Date((m.ts || m.rx) * 1000);
+  const day = d.toLocaleDateString();
+  let h = day !== prevDay ? `<div class="mesh-day">${esc(day)}</div>` : "";
+  const isCh = m.conv.startsWith("ch:");
+  const who = m.dir === "in" && isCh ? `<div class="who">${esc(m.from)}</div>` : "";
+  const bits = [d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })];
+  if (m.dir === "in") { if (m.hops != null && m.hops >= 0 && m.hops < 255) bits.push(m.hops + " hop" + (m.hops === 1 ? "" : "s")); if (m.snr != null) bits.push("SNR " + m.snr); }
+  else bits.push({ sending: "sending…", sent: isCh ? "sent" : "sent ✓", delivered: "delivered ✓✓" }[m.status] || m.status || "");
+  const bad = String(m.status || "").startsWith("failed");
+  return h + `<div class="mesh-msg ${m.dir}" data-id="${esc(m.id)}">${who}<div>${esc(m.text)}</div><div class="ft ${bad ? "bad" : ""}">${esc(bits.join(" · "))}</div></div>`;
+}
+function renderMeshMsgs() {
+  if (!MESH) return;
+  $("meshConvName").textContent = (meshConv.startsWith("ch:") ? "# " : "") + meshConvName(meshConv);
+  const c = !meshConv.startsWith("ch:") && MESH.contacts.find((x) => "c:" + x.key === meshConv);
+  $("meshConvInfo").textContent = c ? `${c.type} · heard ${ago(c.last_advert)} ago` + (c.lat ? ` · ${c.lat.toFixed(3)}, ${c.lon.toFixed(3)}` : "") : "";
+  const box = $("meshMsgs");
+  const atEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+  const msgs = MESHMSG.filter((m) => m.conv === meshConv);
+  let prev = "", html = "";
+  for (const m of msgs) { html += meshMsgHtml(m, prev); prev = new Date((m.ts || m.rx) * 1000).toLocaleDateString(); }
+  box.innerHTML = html || `<div class="mesh-empty">No messages here yet.</div>`;
+  if (atEnd) box.scrollTop = 1e9;
+}
+function meshAddMsg(m) {
+  const i = MESHMSG.findIndex((x) => x.id === m.id);
+  if (i >= 0) MESHMSG[i] = m; else MESHMSG.push(m);
+  if (MESHMSG.length > 3000) MESHMSG = MESHMSG.slice(-2500);
+  if (m.conv === meshConv && meshTabOpen()) meshRead(meshConv);
+  if (m.dir === "in" && i < 0 && !(m.conv === meshConv && meshTabOpen())) toast(`💬 ${meshConvName(m.conv)}: ${m.from ? m.from + ": " : ""}${m.text}`.slice(0, 140));
+  renderMeshList(); renderMeshMsgs();
+}
+function meshBleFound(list) {
+  meshBle = list || [];
+  if (!meshBle.length) { toast("No MeshCore boards found over Bluetooth – is the board on and not connected to a phone?", "error"); return; }
+  $("meshTarget").value = meshBle[0].address; $("meshTarget").dataset.touched = "1";
+  toast("Found " + meshBle.map((d) => `${d.name} (${d.address})`).join(", "));
+}
+$("meshKind").onchange = () => { $("meshKind").dataset.touched = "1"; meshKindUI(); };
+$("meshTarget").oninput = () => ($("meshTarget").dataset.touched = "1");
+$("meshConnect").onclick = () => {
+  const kind = $("meshKind").value;
+  const target = kind === "serial" ? $("meshPort").value : $("meshTarget").value.trim();
+  send({ cmd: "mesh_connect", kind, target, pin: $("meshPin").value.trim() });
+};
+$("meshDisconnect").onclick = () => send({ cmd: "mesh_disconnect" });
+$("meshBleScan").onclick = () => { toast("Searching for MeshCore boards over Bluetooth…"); send({ cmd: "mesh_ble_scan" }); };
+$("meshRefresh").onclick = () => send({ cmd: "mesh_refresh" });
+$("meshAdvert").onclick = () => send({ cmd: "mesh_advert", flood: true });
+$("meshNameSet").onclick = () => send({ cmd: "mesh_name", name: $("meshName").value.trim() });
+$("meshUk").onclick = () => {
+  const p = (MESH && MESH.uk_preset) || { freq: 869.618, bw: 62.5, sf: 8, cr: 8 };
+  if (confirm(`Set the board's radio to ${p.freq} MHz, BW ${p.bw} kHz, SF${p.sf}, CR${p.cr} (UK/EU narrow)?\nAll nodes you talk to must use the same settings.`))
+    send({ cmd: "mesh_radio", ...p });
+};
+$("meshTune").onclick = () => {
+  const f = (MESH && MESH.node && MESH.node.freq) || 869.618;
+  send({ cmd: "tune", freq: Math.round(f * 1e6), mode: "WFM" });
+  toast(`SDR tuned to ${f} MHz – LoRa packets show as short wide bursts on the waterfall (the SDR cannot read them; the board does)`);
+};
+$("meshFind").oninput = renderMeshList;
+$("meshChans").onclick = (e) => {
+  const lv = e.target.closest("[data-leave]");
+  if (lv) { e.stopPropagation(); if (confirm("Leave this channel?")) send({ cmd: "mesh_channel_remove", idx: +lv.dataset.leave }); return; }
+  const r = e.target.closest("[data-conv]"); if (r) meshOpen(r.dataset.conv);
+};
+$("meshContacts").onclick = (e) => { const r = e.target.closest("[data-conv]"); if (r) meshOpen(r.dataset.conv); };
+function meshOpen(conv) { meshConv = conv; meshRead(conv); renderMeshList(); renderMeshMsgs(); $("meshMsgs").scrollTop = 1e9; $("meshText").focus(); }
+$("meshChAdd").onclick = () => {
+  const name = prompt("Channel to join:\n• a public hashtag channel, e.g. #uk or #london\n• or a private channel name (you'll be asked for its key)");
+  if (!name) return;
+  let secret = "";
+  if (!name.trim().startsWith("#")) {
+    secret = (prompt("32 hex-digit secret key for '" + name + "' (from whoever shared the channel):") || "").replace(/\s/g, "");
+    if (!/^[0-9a-fA-F]{32}$/.test(secret)) { toast("That key isn't 32 hex digits", "error"); return; }
+  }
+  const used = new Set((MESH && MESH.channels || []).map((c) => c.idx));
+  let idx = 1; while (used.has(idx)) idx++;
+  send({ cmd: "mesh_channel_add", idx, name: name.trim(), secret });
+};
+$("meshClearConv").onclick = () => { if (confirm(`Delete the history of ${meshConvName(meshConv)} from AndySDR?`)) send({ cmd: "mesh_clear", conv: meshConv }); };
+$("meshText").oninput = () => ($("meshCount").textContent = `${$("meshText").value.length}/160`);
+$("meshForm").onsubmit = (e) => {
+  e.preventDefault();
+  const t = $("meshText").value.trim(); if (!t) return;
+  send({ cmd: "mesh_send", conv: meshConv, text: t });
+  $("meshText").value = ""; $("meshCount").textContent = "0/160";
+};
+setInterval(() => { if (MESH && meshTabOpen()) renderMeshList(); }, 30000);
+
 /* ======================================================= help */
 const HELP = {
   conn: ["Connection light", "Green CONNECTED means this screen is talking to the AndySDR receiver (on this PC or across the network). If it shows OFFLINE, AndySDR is not running or the network is down – it reconnects by itself."],
@@ -1081,6 +1252,7 @@ const HELP = {
   vfo: ["VFO bar", "The VFO is the frequency you are tuned to. This bar shows it, which UK band and sub-band it is in, and – if the band normally uses a different mode or step – a 'Use' button that sets them for you. The red line and red VFO flag on the spectrum mark the same frequency."],
   bandmap: ["Band map", "The whole radio spectrum from 9 kHz to 6.5 GHz on one strip, coloured by who uses it (see the legend in the UK BAND PLAN tab). The red needle is your VFO and the white box is the part the spectrum display is showing. Hover to see a band's name; click a band to jump there in the right mode and step."],
   bptab: ["UK band plan list", "Every UK allocation, amateur sub-band and key frequency from 9 kHz to 6.5 GHz. Type a name or a frequency (e.g. 156.8) to find it, pick a category or click the coloured legend, untick sub-bands for the big picture. Tune goes straight there in the right mode; Search loads the band into the Live Activity search so you can find everything active in it. 'Where am I?' lists the bands your VFO is in."],
+  mesh: ["MeshCore messaging", "Text chat over the MeshCore LoRa mesh. Your SDRs can only receive, so AndySDR sends and receives through a MeshCore companion board (Heltec V3/V4, RAK4631, T-Deck, T-Beam, Xiao…) flashed with Companion firmware from flasher.meshcore.co.uk – USB Serial firmware for a cable, Bluetooth or Wi-Fi firmware otherwise. Plug it in, pick its COM port (★ = looks like a radio board) and press Connect; AndySDR reconnects by itself next time. Channels on the left: Public and any #hashtag channel anyone can join (+ Join, e.g. #uk), or private channels with a shared key. Contacts are nodes heard advertising – click one for a private, end-to-end encrypted message (✓ = sent, ✓✓ = delivered). Send advert announces you to nearby nodes. UK users normally use the UK/EU narrow preset (869.618 MHz, 62.5 kHz, SF8, CR8) – licence-exempt, the board keeps to the power and duty-cycle limits. Watch on SDR tunes your receiver to the mesh frequency so you can see the packets on the waterfall. Messages are kept in %APPDATA%\\AndySDR\\meshcore_messages.jsonl and work from remote PCs and phones too."],
   remote: ["Remote control", "AndySDR is also a server: any PC, laptop, tablet or phone on your home network can open the address shown and control the radio with full audio and waterfall. Enter the password shown here. Windows may ask to allow AndySDR through the firewall – choose 'Private networks'. Do not forward the port to the internet."],
 };
 

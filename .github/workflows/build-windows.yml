@@ -35,7 +35,8 @@ jobs:
           for m in soapysdr-module-rtlsdr soapysdr-module-airspy soapysdr-module-airspyhf soapysdr-module-hackrf soapysdr-module-remote soapysdr-module-lms7 soapysdr-module-plutosdr; do
             conda install -y "$m" || echo "skipped $m"
           done
-          python -m pip install pywebview pyinstaller
+          python -m pip install pywebview pyinstaller meshcore pyserial bleak
+          python -c "import meshcore, serial, bleak; print(\"MeshCore library\", meshcore.__name__, \"OK\")"
           python -c "import SoapySDR; print('SoapySDR', SoapySDR.getAPIVersion(), SoapySDR.listModules())"
           # RTL-SDR (Nooelec etc.) support is essential - fail the build if its driver module is missing
           python -c "import SoapySDR,sys; m=[x.lower() for x in SoapySDR.listModules()]; ok=any('rtlsdr' in x for x in m); print('RTL-SDR module present:', ok); sys.exit(0 if ok else 1)"
@@ -87,6 +88,10 @@ jobs:
           ./dist/AndySDR/AndySDR.exe --server --port 8099 &
           for i in $(seq 1 30); do curl -sf http://127.0.0.1:8099/ -o /dev/null && break; sleep 2; done
           curl -sf http://127.0.0.1:8099/ | grep -q AndySDR && echo "GUI served OK"
+          # MeshCore messaging must be inside the exe
+          LOG="$(cygpath -u "$APPDATA")/AndySDR/logs/andysdr.log"
+          grep -h "MeshCore library" "$LOG" || true
+          if grep -q "MeshCore library: OK" "$LOG"; then echo "::notice::MeshCore library bundled"; else echo "::error::MeshCore library missing from the exe"; taskkill //IM AndySDR.exe //F || true; exit 1; fi
           taskkill //IM AndySDR.exe //F || true
 
       - name: Zip
@@ -128,6 +133,7 @@ jobs:
             * `AndySDR-windows.zip` – portable: unzip and run `AndySDR.exe`
 
             Decoders bundled in the `decoders` folder: DSD-FME (DMR, P25, NXDN, dPMR, YSF, M17), multimon-ng (POCSAG, FLEX, APRS, DTMF, ZVEI, EAS), SatDump (Meteor-M LRPT). WEFAX and SSTV are built in.
+            1.3.0: MeshCore messaging tab – chat over the MeshCore LoRa mesh through a companion board on USB, Wi-Fi or Bluetooth.
             1.2.1: RTL-SDR dongles (Nooelec NESDR SMArt v5 etc.) now open directly through librtlsdr - fixes "SoapySDR::Device::make() no match". Smaller LCD on every scanner style.
 
             SDRplay RSP users: install SDRplay API 3.x from sdrplay.com first. RTL-SDR / Nooelec: install WinUSB once with Zadig.

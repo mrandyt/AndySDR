@@ -7,7 +7,18 @@ import sys
 block_cipher = None
 datas = [("andysdr/web", "web")]
 binaries = []
-hidden = ["scipy.signal", "scipy.special._cdflib", "webview", "SoapySDR", "andysdr.sdrplay"]
+hidden = ["scipy.signal", "scipy.special._cdflib", "webview", "SoapySDR", "andysdr.sdrplay", "andysdr.meshlink"]
+
+# ---- MeshCore messaging (companion board over USB / Bluetooth / Wi-Fi)
+try:
+    from PyInstaller.utils.hooks import collect_submodules
+    for pkg in ("meshcore", "serial", "serial_asyncio_fast", "bleak", "cayennelpp", "Crypto.Cipher", "Crypto.Hash"):
+        try:
+            hidden += collect_submodules(pkg)
+        except Exception:
+            pass
+except Exception:
+    pass
 
 # ---- bundle SoapySDR runtime + every installed driver module (RTL-SDR, Airspy, HackRF, Remote ...)
 prefix = os.environ.get("CONDA_PREFIX", sys.prefix)

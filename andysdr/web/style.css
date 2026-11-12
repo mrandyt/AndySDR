@@ -384,3 +384,38 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 [data-theme="ubcd260"] .lcd-freq-txt, [data-theme="trx2"] .lcd-freq-txt { font-size: 31px; letter-spacing: 1px; }
 @media (max-width: 1150px) { .lcd, [data-theme] .lcd { flex-basis: 100%; } }
 @media (max-width: 600px) { .lcd-freq-txt { font-size: 28px !important; } .lcd-freq .seg { height: 36px; } }
+
+/* ---------- MeshCore messaging ---------- */
+.tab-badge { background: var(--accent); color: var(--accent-ink); border-radius: 9px; padding: 0 6px; font-size: 10px; margin-left: 4px; }
+.mesh-dot { width: 10px; height: 10px; border-radius: 50%; background: #666; display: inline-block; }
+.mesh-dot.connected { background: #36c46b; box-shadow: 0 0 6px #36c46b; }
+.mesh-dot.connecting { background: #e8b72d; }
+.mesh-dot.error { background: #e0503a; }
+.mesh-err { background: rgba(224,80,58,.12); border: 1px solid #a8402f; color: #f3b3a8; border-radius: 6px; padding: 6px 10px; font-size: 13px; }
+.mesh-wrap { display: grid; grid-template-columns: 240px 1fr; gap: 10px; min-height: 360px; }
+.mesh-side { border: 1px solid var(--line); border-radius: 8px; overflow: auto; max-height: 460px; background: var(--panel2); }
+.mesh-h { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 7px 10px; font-size: 11px; letter-spacing: 1.5px; color: var(--muted); font-weight: 700; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel2); }
+.mesh-list > div { padding: 6px 10px; cursor: pointer; border-bottom: 1px solid var(--line); display: flex; gap: 6px; align-items: center; font-size: 13px; }
+.mesh-list > div:hover { background: rgba(255,255,255,.04); }
+.mesh-list > div.on { background: color-mix(in srgb, var(--accent) 20%, transparent); }
+.mesh-list .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mesh-list .meta { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.mesh-list .unread { background: var(--accent); color: var(--accent-ink); border-radius: 8px; padding: 0 6px; font-size: 11px; font-weight: 700; }
+.mesh-list .ic { width: 1.2em; text-align: center; }
+.mesh-chat { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+.mesh-chat-h { display: flex; gap: 10px; align-items: center; padding: 7px 10px; border-bottom: 1px solid var(--line); background: var(--panel2); border-radius: 8px 8px 0 0; }
+.mesh-msgs { flex: 1; overflow: auto; padding: 10px; display: flex; flex-direction: column; gap: 6px; height: 340px; }
+.mesh-msg { max-width: 78%; padding: 6px 10px; border-radius: 10px; background: var(--panel2); border: 1px solid var(--line); align-self: flex-start; overflow-wrap: anywhere; }
+.mesh-msg.out { align-self: flex-end; background: color-mix(in srgb, var(--accent) 22%, var(--panel2)); }
+.mesh-msg .who { font-size: 11px; font-weight: 700; color: var(--accent); }
+.mesh-msg .ft { font-size: 10.5px; color: var(--muted); margin-top: 2px; text-align: right; }
+.mesh-msg .ft.bad { color: #f08a78; }
+.mesh-day { align-self: center; font-size: 11px; color: var(--muted); padding: 2px 0; }
+.mesh-send { display: flex; gap: 8px; align-items: center; padding: 8px; border-top: 1px solid var(--line); }
+.mesh-send .inp { flex: 1; min-width: 0; }
+.mesh-empty { color: var(--muted); font-size: 13px; padding: 10px; }
+@media (max-width: 760px) {
+  .mesh-wrap { grid-template-columns: 1fr; }
+  .mesh-side { max-height: 200px; }
+  .mesh-msg { max-width: 92%; }
+}

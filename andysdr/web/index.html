@@ -153,6 +153,7 @@
     <button class="tab" data-tab="img">WEATHER IMAGES</button>
     <button class="tab" data-tab="bp">UK BAND PLAN</button>
     <button class="tab" data-tab="sch">SCHEDULER</button>
+    <button class="tab" data-tab="mesh">MESHCORE <span class="tab-badge" id="meshBadge" hidden></span></button>
     <button class="tab" data-tab="rx">RECEIVER</button>
     <button class="tab" data-tab="net">REMOTE &amp; SETTINGS</button>
   </nav>
@@ -232,6 +233,53 @@
     </div>
     <div class="declist" id="decStatus"></div>
     <pre class="console" id="decLog"></pre>
+  </div>
+
+
+  <!-- MESHCORE -->
+  <div class="tabpage" id="tab-mesh">
+    <div class="row wrapline mesh-conn" data-help="mesh">
+      <span class="mesh-dot" id="meshDot"></span><b id="meshStatus">Not connected</b>
+      <label>Board on <select id="meshKind">
+        <option value="serial">USB (COM port)</option><option value="tcp">Wi-Fi (IP address)</option><option value="ble">Bluetooth</option>
+      </select></label>
+      <select id="meshPort" title="COM port of the MeshCore board"></select>
+      <input class="inp" id="meshTarget" placeholder="192.168.1.50:5000" style="width:13em" hidden>
+      <input class="inp" id="meshPin" placeholder="BLE PIN (if set)" style="width:9em" hidden>
+      <button class="btn" id="meshBleScan" hidden>Find boards</button>
+      <button class="btn primary" id="meshConnect">Connect</button>
+      <button class="btn" id="meshDisconnect">Disconnect</button>
+      <span class="grow"></span>
+      <span class="muted small" id="meshNode"></span>
+    </div>
+    <div class="mesh-err" id="meshErr" hidden></div>
+    <div class="mesh-wrap">
+      <aside class="mesh-side">
+        <div class="mesh-h">CHANNELS <button class="btn sm" id="meshChAdd" title="Join a #hashtag channel or a private channel">+ Join</button></div>
+        <div id="meshChans" class="mesh-list"></div>
+        <div class="mesh-h">CONTACTS <input class="inp" id="meshFind" placeholder="find" style="width:7em;padding:2px 6px"></div>
+        <div id="meshContacts" class="mesh-list mesh-contacts"></div>
+      </aside>
+      <section class="mesh-chat">
+        <div class="mesh-chat-h"><b id="meshConvName">Public</b><span class="muted small" id="meshConvInfo"></span><span class="grow"></span>
+          <button class="btn sm" id="meshClearConv" title="Delete this conversation's history from AndySDR">Clear</button></div>
+        <div id="meshMsgs" class="mesh-msgs"></div>
+        <form class="mesh-send" id="meshForm">
+          <input class="inp" id="meshText" maxlength="160" placeholder="Type a message…" autocomplete="off">
+          <span class="muted small" id="meshCount">0/160</span>
+          <button class="btn primary" type="submit">Send</button>
+        </form>
+      </section>
+    </div>
+    <div class="row wrapline mesh-tools">
+      <button class="btn" id="meshAdvert" title="Tell nearby nodes you are here (flood advert)">📣 Send advert</button>
+      <button class="btn" id="meshRefresh">⟳ Refresh</button>
+      <button class="btn" id="meshTune" title="Tune the SDR to the MeshCore frequency so you can see LoRa bursts on the waterfall">📡 Watch on SDR</button>
+      <label>Node name <input class="inp" id="meshName" maxlength="31" style="width:10em"></label><button class="btn sm" id="meshNameSet">Set</button>
+      <span class="grow"></span>
+      <span class="muted small" id="meshRadio"></span>
+      <button class="btn sm" id="meshUk" title="UK/EU narrow: 869.618 MHz, 62.5 kHz, SF8, CR8">Use UK preset</button>
+    </div>
   </div>
 
   <!-- IMAGES -->

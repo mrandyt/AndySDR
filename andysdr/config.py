@@ -6,7 +6,7 @@ import sys
 import threading
 
 APP_NAME = "AndySDR"
-VERSION = "1.2.1"
+VERSION = "1.3.0"
 
 
 def app_dir():
@@ -68,7 +68,8 @@ DEFAULTS = {
     "auto_decoder": True,         # start a memory channel's decoder automatically
     "auto_identify": True,        # identify signals and start the right decoder by itself
     "schedule": [],               # timed captures (WEFAX, SSTV, LRPT, recordings)
-    "rtl_tcp_servers": [],        # e.g. ["192.168.1.20:1234"]
+    "rtl_tcp_servers": [],
+    "mesh_conn": {},              # MeshCore companion board: {"kind": serial|tcp|ble, "target": ..., "auto": True}        # e.g. ["192.168.1.20:1234"]
     "tetra_udp_port": 42000,
     "dsd_extra_args": "",
 }
