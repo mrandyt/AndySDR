@@ -6,7 +6,7 @@ import sys
 import threading
 
 APP_NAME = "AndySDR"
-VERSION = "1.3.0"
+VERSION = "1.3.1"
 
 
 def app_dir():
@@ -72,6 +72,9 @@ DEFAULTS = {
     "mesh_conn": {},              # MeshCore companion board: {"kind": serial|tcp|ble, "target": ..., "auto": True}        # e.g. ["192.168.1.20:1234"]
     "tetra_udp_port": 42000,
     "dsd_extra_args": "",
+    "pager_aliases": {},          # capcode -> name shown in the Pager Messages tab
+    "pager_highlight": [],        # capcodes to highlight (and pop up a notice for)
+    "pager_log": True,            # write pager messages to %APPDATA%\\AndySDR\\pager\\pager_YYYY-MM-DD.csv
 }
 
 

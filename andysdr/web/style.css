@@ -419,3 +419,26 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
   .mesh-side { max-height: 200px; }
   .mesh-msg { max-width: 92%; }
 }
+
+/* ---------- pager messages ---------- */
+.tab-badge[hidden] { display: none; }
+.pagwrap { max-height: 460px; }
+#pagTable td { vertical-align: top; }
+#pagTable td.msg { font-family: var(--mono); white-space: pre-wrap; word-break: break-word; min-width: 18em; }
+#pagTable td.cap { font-family: var(--mono); cursor: pointer; }
+#pagTable td.cap:hover, #pagTable td.alias:hover { text-decoration: underline; }
+#pagTable td.alias { cursor: pointer; }
+#pagTable td.t { white-space: nowrap; font-family: var(--mono); }
+#pagTable .star { background: none; border: 0; color: var(--muted); font-size: 16px; cursor: pointer; padding: 0 2px; line-height: 1; }
+#pagTable tr.hl td { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+#pagTable tr.hl .star { color: var(--accent); }
+#pagTable tr.new td { animation: pagnew 2.5s ease-out; }
+@keyframes pagnew { from { background: color-mix(in srgb, var(--accent) 40%, transparent); } }
+.ptype { font-size: 11px; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.ptype.Alpha { color: var(--text); }
+@media (max-width: 600px) {
+  #pagTable th:nth-child(3), #pagTable td:nth-child(3), #pagTable th:nth-child(4), #pagTable td:nth-child(4), #pagTable th:nth-child(7), #pagTable td:nth-child(7) { display: none; }
+  #pagTable td.msg { min-width: 0; }
+  #pagTable td, #pagTable th { padding-left: 5px; padding-right: 5px; }
+  #pagSearch { width: 100% !important; }
+}

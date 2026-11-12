@@ -194,6 +194,7 @@ class DecoderManager:
         self.resample_state = None
         self.images_dir = os.path.join(data_dir(), "images")
         self.status = "off"
+        self.on_pager = None       # set by the radio: on_pager(line) -> Pager Messages tab
 
     # ------------------------------------------------------------------
     def available(self):
@@ -294,7 +295,8 @@ class DecoderManager:
                 args.append("-")
                 self.proc = _popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT)
-                _Reader(self.proc.stdout, self.log,
+                out_cb = self._pager_line if dec_id == "pager" else self.log
+                _Reader(self.proc.stdout, out_cb,
                         lambda l: not l.startswith(("multimon-ng", "Enabled", "Available", "(C)"))).start()
                 self._start_feeder()
                 self.log("multimon-ng started: " + ", ".join(modes))
@@ -321,6 +323,14 @@ class DecoderManager:
             self.active = None
             self.status = "error"
             return False
+
+    def _pager_line(self, line):
+        self.log(line)
+        if self.on_pager:
+            try:
+                self.on_pager(line)
+            except Exception as e:  # noqa: BLE001 - never let the message list stop the decoder
+                log.exception("pager: %s", e)
 
     def _dsd_filter(self, line):
         return not line.startswith(("Digital Speech Decoder", "Build", "mbelib", "Audio In",

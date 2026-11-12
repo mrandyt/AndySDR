@@ -80,6 +80,9 @@ function onJSON(m) {
     case "mesh_msg": meshAddMsg(d); break;
     case "mesh_history": MESHMSG = d; renderMeshList(); renderMeshMsgs(); break;
     case "mesh_ble": meshBleFound(d); break;
+    case "pager": addPager(d); break;
+    case "pager_cfg": PAG.cfg = d; renderPager(); break;
+    case "pager_all": PAG.msgs = d.messages || []; PAG.cfg = d; renderPager(); break;
     case "event": toast(d.text, d.level); if (d.level === "error") decLine("! " + d.text); break;
     case "import_result":
       $("csvResult").textContent = `Imported ${d.added} channels` + (d.talkgroups ? `, ${d.talkgroups} talkgroups` : "") +
@@ -99,6 +102,8 @@ function onHello(h) {
   renderDecoders(); renderImages(h.images); renderState();
   if (h.schedule) { SCH = h.schedule; renderSchedule(); }
   if (h.mesh) { MESH = h.mesh; MESHMSG = h.mesh_history || []; renderMesh(); }
+  if (h.pager) { PAG.msgs = h.pager.messages || []; PAG.cfg = h.pager; PAG.unseen = 0; renderPager(); }
+  $("pagExport").href = `/api/pager.csv?token=${encodeURIComponent(token)}`;
   const st = h.settings || {};
   $("setDelay").value = st.scan_delay; $("setDwell").value = st.scan_dwell;
   $("setDeemph").value = String(st.deemphasis_us || 50);
@@ -775,6 +780,7 @@ function showTab(name) {
   if (name === "bp") renderBandPlan();
   if (name === "sch") send({ cmd: "schedule" });
   if (name === "mesh") { meshRead(meshConv); renderMesh(); setTimeout(() => $("meshMsgs").scrollTop = 1e9, 0); }
+  if (name === "pag") { PAG.unseen = 0; pagBadge(); }
   sizeCanvases();
 }
 document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => showTab(t.dataset.tab)));
@@ -892,6 +898,86 @@ function decLine(text, t) {
   if (atBottom) log.scrollTop = log.scrollHeight;
   $("lcdDecode").textContent = text;
 }
+
+/* ----- pager messages ----- */
+const PAG = { msgs: [], cfg: { aliases: {}, highlight: [] }, unseen: 0 };
+const PAG_MAX_ROWS = 1000;
+const pagAlias = (cap) => (PAG.cfg.aliases || {})[cap] || "";
+const pagIsHl = (cap) => (PAG.cfg.highlight || []).includes(cap);
+function pagMatch(m) {
+  const proto = $("pagProto").value, type = $("pagType").value, q = $("pagSearch").value.trim().toLowerCase();
+  if (proto && !m.proto.startsWith(proto)) return false;
+  if (type && m.type !== type) return false;
+  if ($("pagHideTone").checked && m.type === "Tone") return false;
+  if ($("pagStarOnly").checked && !pagIsHl(m.capcode)) return false;
+  if (q) {
+    const hay = `${m.capcode} ${pagAlias(m.capcode)} ${m.text} ${m.channel || ""} ${m.freq ? fmtMHz(m.freq, 4) : ""}`.toLowerCase();
+    if (!hay.includes(q)) return false;
+  }
+  return true;
+}
+function pagRow(m, isNew) {
+  const al = pagAlias(m.capcode), hl = pagIsHl(m.capcode);
+  const text = m.type === "Tone" ? '<span class="muted">(tone only – no message)</span>' : esc(m.text);
+  const d0 = new Date(), today = `${d0.getFullYear()}-${String(d0.getMonth() + 1).padStart(2, "0")}-${String(d0.getDate()).padStart(2, "0")}`;
+  return `<tr data-id="${m.id}" class="${hl ? "hl" : ""}${isNew ? " new" : ""}">
+    <td><button class="star" data-cap="${esc(m.capcode)}" title="${hl ? "Stop highlighting" : "Highlight"} capcode ${esc(m.capcode)}">${hl ? "★" : "☆"}</button></td>
+    <td class="t" title="${esc(m.date)}">${m.date && m.date !== today ? esc(m.date.slice(5)) + " " : ""}${esc(m.t)}</td>
+    <td class="f" ${m.freq ? `data-f="${m.freq}"` : ""} title="${esc(m.channel || "")}">${m.freq ? fmtMHz(m.freq, 4) : "—"}</td>
+    <td>${esc(m.proto)}</td>
+    <td class="cap" data-q="${esc(m.capcode)}" title="Show only this capcode">${esc(m.capcode)}${m.func !== "" && m.func != null ? `<span class="muted">/${esc(m.func)}</span>` : ""}</td>
+    <td class="alias" data-cap="${esc(m.capcode)}" title="Click to name this capcode">${al ? esc(al) : '<span class="muted">+ name</span>'}</td>
+    <td><span class="ptype ${esc(m.type)}">${esc(m.type)}</span></td>
+    <td class="msg">${text}${m.group ? `<div class="muted small">also to: ${esc(m.group)}</div>` : ""}</td></tr>`;
+}
+function renderPager() {
+  const shown = PAG.msgs.filter(pagMatch).slice(-PAG_MAX_ROWS).reverse();
+  $("pagTable").querySelector("tbody").innerHTML = shown.map((m) => pagRow(m, false)).join("") ||
+    `<tr><td colspan="8" class="muted">${PAG.msgs.length ? "No messages match the filter." :
+      "No pager messages yet. Tune a pager frequency (UK: try the 153.0–153.5 MHz range – the \"Pagers\" quick range in Live Activity / Search finds them) and press ▶ Start pager decoder, or leave Auto-identify on."}</td></tr>`;
+  pagCount(shown.length);
+  $("pagLogDir").textContent = PAG.cfg.log_dir && isLocal && PAG.cfg.logging !== false ? `Every message is also saved to ${PAG.cfg.log_dir} (one CSV file per day).` : "";
+}
+function pagCount(n) {
+  const total = PAG.msgs.length;
+  $("pagCount").textContent = n === total ? `${total} message${total === 1 ? "" : "s"}` : `${n} of ${total} shown`;
+}
+function pagBadge() {
+  $("pagBadge").hidden = !PAG.unseen;
+  $("pagBadge").textContent = PAG.unseen > 99 ? "99+" : PAG.unseen;
+}
+function addPager(m) {
+  PAG.msgs.push(m);
+  if (PAG.msgs.length > 2000) PAG.msgs.splice(0, PAG.msgs.length - 2000);
+  if (!$("tab-pag").classList.contains("active")) { PAG.unseen++; pagBadge(); }
+  if (pagIsHl(m.capcode)) toast(`★ ${pagAlias(m.capcode) || m.capcode}: ${m.type === "Tone" ? "(tone)" : m.text}`.slice(0, 160));
+  if (!pagMatch(m)) { pagCount($("pagTable").querySelectorAll("tr[data-id]").length); return; }
+  const tb = $("pagTable").querySelector("tbody");
+  if (!tb.querySelector("tr[data-id]")) tb.innerHTML = "";
+  tb.insertAdjacentHTML("afterbegin", pagRow(m, true));
+  const rows = tb.querySelectorAll("tr[data-id]");
+  for (let i = PAG_MAX_ROWS; i < rows.length; i++) rows[i].remove();
+  pagCount(Math.min(rows.length, PAG_MAX_ROWS));
+}
+$("pagTable").addEventListener("click", (e) => {
+  const star = e.target.closest(".star");
+  if (star) { send({ cmd: "pager_highlight", capcode: star.dataset.cap, on: !pagIsHl(star.dataset.cap) }); return; }
+  const al = e.target.closest("td.alias");
+  if (al) {
+    const cap = al.dataset.cap;
+    const n = prompt(`Name for capcode ${cap} (leave empty to remove):`, pagAlias(cap));
+    if (n !== null) send({ cmd: "pager_alias", capcode: cap, name: n.slice(0, 40) });
+    return;
+  }
+  const cap = e.target.closest("td.cap");
+  if (cap) { $("pagSearch").value = $("pagSearch").value === cap.dataset.q ? "" : cap.dataset.q; renderPager(); return; }
+  const f = e.target.closest("td.f[data-f]");
+  if (f) send({ cmd: "tune", freq: +f.dataset.f });
+});
+["pagProto", "pagType", "pagHideTone", "pagStarOnly"].forEach((id) => ($(id).onchange = renderPager));
+$("pagSearch").oninput = renderPager;
+$("pagClear").onclick = () => { if (confirm("Clear the pager message list? (Daily log files are kept.)")) send({ cmd: "pager_clear" }); };
+$("pagStart").onclick = () => send({ cmd: "decoder", id: "pager" });
 
 /* ----- images ----- */
 const imgUrl = (f) => `/images/${f.split("/").map(encodeURIComponent).join("/")}?token=${encodeURIComponent(token)}&t=${Date.now()}`;
@@ -1243,7 +1329,7 @@ const HELP = {
   banks: ["Memory banks", "10 banks × 100 channels = 1000 memories. Click a bank to view it, right-click to include/exclude it from scanning. In the table: click a frequency or ▶ to listen, click the name to rename, change mode/decoder in the drop-downs, tick L/O to lock out, PRI to make it the priority channel, ✕ to delete."],
   import: ["RadioReference UK import", "On radioreference.com open a UK county/agency database page and use its CSV download (premium) – or select the frequency table on the page, copy it and save it as a .txt file. Choose the file, pick the bank, and Import. AndySDR recognises Frequency, Alpha Tag, Description, Mode, Tag and Tone columns, converts FMN/AM/DMR/P25/NXDN/TETRA modes, and attaches the right decoder. Talkgroup lists (Decimal/Alpha Tag) are stored as talkgroups. Banks overflow into the next free bank."],
   search: ["Search", "Set From/To in MHz, the channel step, mode and sensitivity (lower dB = finds weaker signals but more false hits), then Search. UK quick ranges fill the boxes for you. Results list each active frequency with hit count and strength – click a frequency to listen, Store to save it to the selected bank."],
-  decoders: ["Decoders", "Pick what to decode on the current frequency. Digital voice uses DSD-FME (choose DMR, P25, NXDN, dPMR, YSF, M17 or Auto); pagers use multimon-ng (POCSAG & FLEX); WEFAX and SSTV are built in; Meteor-M LRPT records the satellite pass and hands it to SatDump. Decoded text appears in the log and on the LCD bottom line. Memory channels can start their decoder automatically."],
+  decoders: ["Decoders", "Pick what to decode on the current frequency. Digital voice uses DSD-FME (choose DMR, P25, NXDN, dPMR, YSF, M17 or Auto); pagers use multimon-ng (POCSAG & FLEX); WEFAX and SSTV are built in; Meteor-M LRPT records the satellite pass and hands it to SatDump. Decoded text appears in the log and on the LCD bottom line; pager messages are also listed in the PAGER MESSAGES tab. Memory channels can start their decoder automatically."],
   receiver: ["Receiver", "Choose which SDR to use: every SoapySDR device (RTL-SDR/Nooelec, SDRplay RSP1A/RSP2/RSP2pro/RSPdx/RSPduo, Airspy, HackRF, LimeSDR, Pluto…), rtl_tcp servers on other machines, or the Simulator for practice. Sample rate sets how wide the waterfall is. Antenna picks the input (RSP2: Antenna A, B or Hi-Z). Device switches (bias-T, notch filters, direct sampling) appear underneath automatically."],
   autoid: ["Auto ID (automatic signal identification)", "When ticked, AndySDR analyses whatever you are listening to and shows what it is next to the VFO: DMR (it spots the 30 ms TDMA bursts), P25, NXDN, dPMR, pagers (POCSAG/FLEX), APRS, DTMF, SSTV, WEFAX, TETRA or analogue voice (with any CTCSS tone). It then switches to the right mode and starts the matching decoder by itself, and stops it again when the channel goes back to voice. SSTV pictures are caught from their very first line. A decoder you pick yourself, or one stored on a memory channel, is never overridden. Untick to turn it off."],
   sched: ["Scheduler", "Captures that run by themselves at set times – ideal for weather fax charts, ISS SSTV events and Meteor-M satellite passes. Pick a station from Quick pick (or type a frequency), choose what to do (WEFAX, SSTV, LRPT, record…), the start time on this PC's clock and how long, and either tick days of the week or pick a single date. At the start time AndySDR stops scanning, tunes, runs the decoder; at the end it saves the pictures and puts the radio back exactly as it was. ▶ Now runs one straight away. AndySDR must be running (it can run as a server in the background)."],
@@ -1253,6 +1339,7 @@ const HELP = {
   bandmap: ["Band map", "The whole radio spectrum from 9 kHz to 6.5 GHz on one strip, coloured by who uses it (see the legend in the UK BAND PLAN tab). The red needle is your VFO and the white box is the part the spectrum display is showing. Hover to see a band's name; click a band to jump there in the right mode and step."],
   bptab: ["UK band plan list", "Every UK allocation, amateur sub-band and key frequency from 9 kHz to 6.5 GHz. Type a name or a frequency (e.g. 156.8) to find it, pick a category or click the coloured legend, untick sub-bands for the big picture. Tune goes straight there in the right mode; Search loads the band into the Live Activity search so you can find everything active in it. 'Where am I?' lists the bands your VFO is in."],
   mesh: ["MeshCore messaging", "Text chat over the MeshCore LoRa mesh. Your SDRs can only receive, so AndySDR sends and receives through a MeshCore companion board (Heltec V3/V4, RAK4631, T-Deck, T-Beam, Xiao…) flashed with Companion firmware from flasher.meshcore.co.uk – USB Serial firmware for a cable, Bluetooth or Wi-Fi firmware otherwise. Plug it in, pick its COM port (★ = looks like a radio board) and press Connect; AndySDR reconnects by itself next time. Channels on the left: Public and any #hashtag channel anyone can join (+ Join, e.g. #uk), or private channels with a shared key. Contacts are nodes heard advertising – click one for a private, end-to-end encrypted message (✓ = sent, ✓✓ = delivered). Send advert announces you to nearby nodes. UK users normally use the UK/EU narrow preset (869.618 MHz, 62.5 kHz, SF8, CR8) – licence-exempt, the board keeps to the power and duty-cycle limits. Watch on SDR tunes your receiver to the mesh frequency so you can see the packets on the waterfall. Messages are kept in %APPDATA%\\AndySDR\\meshcore_messages.jsonl and work from remote PCs and phones too."],
+  pager: ["Pager messages", "Every POCSAG and FLEX page decoded by the pager decoder appears here as a row, newest at the top: time, frequency, protocol and speed, capcode (the pager's address, with the POCSAG function number), your name for it, the type (Alpha text, Numeric or Tone only) and the message. Click ☆ to highlight a capcode – its rows are coloured and a notice pops up whenever it is paged. Click + name to give a capcode a name, click a capcode to show only that one, click a frequency to tune there. Search and the filters narrow the list. Export CSV saves the list; every message is also logged to a CSV file per day in %APPDATA%\\AndySDR\\pager. The same page repeated within a minute is shown once. The tab shows a count of new messages while you are on another tab."],
   remote: ["Remote control", "AndySDR is also a server: any PC, laptop, tablet or phone on your home network can open the address shown and control the radio with full audio and waterfall. Enter the password shown here. Windows may ask to allow AndySDR through the firewall – choose 'Private networks'. Do not forward the port to the internet."],
 };
 
@@ -1271,7 +1358,7 @@ function openHelp() {
   <h3>KNOBS &amp; DISPLAY</h3>${ctl(["volume", "squelch", "gain", "power", "lcd"])}
   <h3>KEYPAD &amp; FUNCTION KEYS</h3>${ctl(["k_scan", "k_man", "k_srch", "k_pgm", "k_lo", "k_pri", "k_mode", "k_step", "k_bank", "k_dly", "k_rec", "k_dec", "k_dot", "k_e", "k_arrows", "k_clr"])}
   <p class="small">Keyboard: digits and <code>.</code> type, <code>Enter</code> tunes, <code>↑ ↓</code> step, <code>S</code> scan, <code>M</code> manual, <code>P</code> program, <code>L</code> lockout, <code>H</code> help, <code>Esc</code> clear.</p>
-  <h3>SCREENS</h3>${ctl(["scope", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "banks", "import", "search", "decoders", "receiver", "remote", "theme", "conn"])}
+  <h3>SCREENS</h3>${ctl(["scope", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "banks", "import", "search", "decoders", "pager", "receiver", "remote", "theme", "conn"])}
   <h3>DECODER PROGRAMS</h3>
   <p>AndySDR has WEFAX and SSTV built in (SSTV: Martin, Scottie, Robot and PD modes – ISS 145.800 NFM, 2 m 144.500 NFM, 20 m 14.230 USB). DSD-FME, multimon-ng and SatDump now come bundled in the <code>decoders</code> folder next to <code>AndySDR.exe</code>. If one shows ✖ in the DECODERS tab, press <b>⬇ Download missing decoders</b> and AndySDR fetches it from GitHub into <code>%APPDATA%\\AndySDR\\decoders</code>. You can also unzip your own copy into either folder (any sub-folder is fine – AndySDR finds the .exe):</p>
   <dl><dt>DSD-FME</dt><dd>github.com/lwvmobile/dsd-fme – DMR, P25 1/2, NXDN, dPMR, YSF, M17. AndySDR feeds it like SDR++'s network sink (TCP 127.0.0.1:7355, 48 kHz); DSD-FME plays decoded voice on your speakers itself (AndySDR starts the PulseAudio sound server that comes with it).</dd>

@@ -12,6 +12,7 @@ from . import devices
 from .autodetect import SignalClassifier
 from .config import data_dir
 from .decoders import DecoderManager
+from .pager import PagerStore
 from .dsp import (AUDIO_RATE, BLOCK_SECONDS, MODES, Receiver, Spectrum, find_peaks_db,
                   pick_sample_rate)
 from .memory import MemoryBank
@@ -34,6 +35,9 @@ class Radio:
         self.rx = None
         self.spec = Spectrum(2048)
         self.decoders = DecoderManager(settings, self._emit)
+        self.pager = PagerStore(settings, self._emit)
+        self.decoders.on_pager = lambda line: self.pager.add_line(
+            line, self.freq, self.channel[2].get("name", "") if self.channel else "")
         self.running = False
         self.thread = None
         self.freq = int(self.s["frequency"])

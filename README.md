@@ -5,6 +5,8 @@ spectrum/waterfall, 1000 memory channels, a band search that finds every live tr
 RadioReference UK CSV import, digital/analogue decoding, weather pictures, and a built-in
 network server so any other PC, laptop, tablet or phone in the house can use the radio.
 
+**Latest: 1.3.1** – new **PAGER MESSAGES** tab: POCSAG and FLEX pages in a searchable table with capcode names, highlights, CSV export and daily logs. (1.3.0 added MeshCore messaging.)
+
 ![logo](andysdr/web/logo.png)
 
 ## What's in it
@@ -22,6 +24,7 @@ network server so any other PC, laptop, tablet or phone in the house can use the
 | Memory | 10 banks × 100 channels. RadioReference CSV / copied-table import (UK or any country), talkgroup lists, export to CSV. |
 | Decoders | DMR, P25 Phase 1/2, NXDN, dPMR, YSF, M17 (via DSD-FME) · POCSAG & FLEX pagers, APRS, DTMF, ZVEI, EAS (via multimon-ng) · **WEFAX weather charts and SSTV pictures (Martin, Scottie, Robot, PD modes) built in** · Meteor-M LRPT satellite pictures (via SatDump) · TETRA baseband out over UDP. |
 | MeshCore messaging | **MESHCORE** tab: text chat over the MeshCore LoRa mesh through a MeshCore companion board (Heltec V3/V4, RAK4631, T-Deck, T-Beam, Xiao…) on USB, Wi-Fi or Bluetooth. Public and #hashtag channels, private channels, direct messages with delivery ticks, node list with last-heard and hops, adverts, UK/EU preset, unread badges, message history, and **Watch on SDR** to see the packets on the waterfall. Works from remote PCs and phones too. |
+| Pager messages | **PAGER MESSAGES** tab lists every POCSAG (512/1200/2400) and FLEX page as a table: time, frequency, protocol, capcode, your name for the capcode, type (text / numeric / tone only) and the message, newest first. Search, filter by protocol or type, highlight capcodes (with a pop-up notice when they are paged), export to CSV. Every page is also logged to a daily CSV file. Repeats within a minute are shown once. A badge on the tab counts new messages. Works the same from remote PCs, tablets and phones. |
 | Remote | Every copy of AndySDR is also a server (port 8045). Open `http://<pc-name-or-ip>:8045` in a browser on any device on the network, enter the password, and you get the full radio with audio and waterfall. |
 | Help | **? HELP** explains every control; *Explain mode* lets you click any knob or key for a description. Hover tooltips everywhere. |
 
@@ -83,6 +86,34 @@ press **Import CSV**. Frequency, Alpha Tag, Description, Mode, Tag and Tone colu
 FMN/FM/AM/DMR/P25/NXDN/TETRA/POCSAG modes are mapped and the right decoder is attached.
 `samples/radioreference_uk_example.csv` shows the format.
 
+## Pager messages (POCSAG / FLEX)
+
+1. Tune a pager frequency in **DIG** mode. In the UK most pager traffic is between about 153.0 and 153.5 MHz –
+   the **Pagers** quick range in *LIVE ACTIVITY / SEARCH* finds the busy channels for you.
+2. Open the **PAGER MESSAGES** tab and press **▶ Start pager decoder** (or leave *Auto-identify* on and AndySDR
+   starts it when it recognises a pager signal). multimon-ng decodes POCSAG 512, 1200, 2400 and FLEX at the same time.
+3. Each page appears as a new row at the top:
+
+| Column | What it shows |
+|---|---|
+| ★ | Click to highlight that capcode: its rows are coloured and a notice pops up whenever it is paged. *★ Highlighted only* hides the rest. |
+| Time / Frequency | When it was received and the frequency (click the frequency to tune there). |
+| Protocol | POCSAG 512 / 1200 / 2400 or FLEX 1600 / 3200 / 6400. |
+| Capcode | The pager's address (POCSAG adds the function number, e.g. `123456/3`). Click it to show only that capcode. |
+| Name | Your name for the capcode – click **+ name** to set or change it. Names are saved and used in exports. |
+| Type | *Alpha* (text), *Numeric* or *Tone* (a beep with no message). |
+| Message | The decoded text. FLEX group pages list the other capcodes they went to. |
+
+* **Search** looks in the message, capcode, name and frequency. *Protocol*, *Type* and *Hide tone-only* narrow the list further.
+* **Export CSV** downloads the list (with names). **Clear list** empties the screen; log files are kept.
+* Every message is also saved to `%APPDATA%\AndySDR\pager\pager_YYYY-MM-DD.csv` (one file per day), and today's
+  messages come back when AndySDR restarts.
+* The same page heard again within a minute (repeat transmissions, or two POCSAG speeds catching it) is listed once.
+* The raw multimon-ng output still appears in the DECODERS tab log.
+
+Remember that in the UK it is an offence to act on, or pass on, the content of pager messages you are not
+authorised to receive – see *Legal* below.
+
 ## Weather pictures
 
 * **HF WEFAX** (built in): UK Met Office Northwood on 2618.5, 4610, 8040 and 11086.5 kHz. Tune the
@@ -98,7 +129,7 @@ FMN/FM/AM/DMR/P25/NXDN/TETRA/POCSAG modes are mapped and the right decoder is at
 
 ## Where things are stored
 
-`%APPDATA%\AndySDR\` – `settings.json`, `memory.json`, `meshcore_messages.jsonl`, `images\`, `recordings\`, `logs\andysdr.log`.
+`%APPDATA%\AndySDR\` – `settings.json` (also holds capcode names and highlights), `memory.json`, `meshcore_messages.jsonl`, `images\`, `recordings\`, `pager\` (daily pager message logs), `logs\andysdr.log`.
 
 ## Legal (UK)
 
@@ -116,6 +147,7 @@ andysdr/devices.py     SoapySDR, rtl_tcp, simulator
 andysdr/sdrplay.py     native SDRplay API 3.x backend
 andysdr/decoders.py    DSD-FME / multimon-ng / SatDump / TETRA plumbing
 andysdr/wefax.py       built-in weather fax decoder
+andysdr/pager.py       POCSAG/FLEX message parser, capcode names, daily pager logs
 andysdr/memory.py      memory banks + RadioReference import
 andysdr/meshlink.py    MeshCore messaging through a companion board (USB / Wi-Fi / Bluetooth)
 andysdr/server.py      network server (HTTP + WebSocket, password protected)

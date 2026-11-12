@@ -150,6 +150,7 @@
     <button class="tab active" data-tab="mem">MEMORY</button>
     <button class="tab" data-tab="act">LIVE ACTIVITY / SEARCH</button>
     <button class="tab" data-tab="dec">DECODERS</button>
+    <button class="tab" data-tab="pag">PAGER MESSAGES <span class="tab-badge" id="pagBadge" hidden>0</span></button>
     <button class="tab" data-tab="img">WEATHER IMAGES</button>
     <button class="tab" data-tab="bp">UK BAND PLAN</button>
     <button class="tab" data-tab="sch">SCHEDULER</button>
@@ -280,6 +281,29 @@
       <span class="muted small" id="meshRadio"></span>
       <button class="btn sm" id="meshUk" title="UK/EU narrow: 869.618 MHz, 62.5 kHz, SF8, CR8">Use UK preset</button>
     </div>
+  </div>
+
+  <!-- PAGER MESSAGES -->
+  <div class="tabpage" id="tab-pag">
+    <div class="row wrapline" data-help="pager">
+      <input class="inp" id="pagSearch" type="search" placeholder="Search message, capcode, name" style="width:18em">
+      <label>Protocol <select id="pagProto"><option value="">All</option><option value="POCSAG">POCSAG</option><option value="FLEX">FLEX</option></select></label>
+      <label>Type <select id="pagType"><option value="">All</option><option value="Alpha">Alpha (text)</option><option value="Numeric">Numeric</option><option value="Tone">Tone only</option></select></label>
+      <label><input type="checkbox" id="pagHideTone"> Hide tone-only</label>
+      <label><input type="checkbox" id="pagStarOnly"> ★ Highlighted only</label>
+      <span class="grow"></span>
+      <span class="muted small" id="pagCount"></span>
+      <button class="btn" id="pagStart" title="Starts the POCSAG/FLEX decoder on the frequency you are tuned to">▶ Start pager decoder</button>
+      <a class="btn" id="pagExport" href="#" download>Export CSV</a>
+      <button class="btn danger" id="pagClear">Clear list</button>
+    </div>
+    <div class="tablewrap pagwrap">
+      <table class="grid" id="pagTable">
+        <thead><tr><th title="Highlight this capcode">★</th><th>Time</th><th>Frequency</th><th>Protocol</th><th>Capcode</th><th>Name</th><th>Type</th><th>Message</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="muted small" id="pagLogDir"></div>
   </div>
 
   <!-- IMAGES -->

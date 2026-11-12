@@ -132,6 +132,12 @@ class Server:
             await self._send(writer, 200, data, "text/csv",
                              extra={"Content-Disposition": 'attachment; filename="andysdr_memory.csv"'})
             return
+        if path == "/api/pager.csv":
+            data = self.radio.pager.export_csv().encode("utf-8-sig")
+            fname = time.strftime("andysdr_pager_%Y%m%d_%H%M.csv")
+            await self._send(writer, 200, data, "text/csv",
+                             extra={"Content-Disposition": f'attachment; filename="{fname}"'})
+            return
         if path.startswith("/images/"):
             await self._file(writer, self.images, path[len("/images/"):])
             return
@@ -255,6 +261,7 @@ class Server:
             "images": self._images(),
             "schedule": r.scheduler.status(),
             "mesh": r.mesh.snapshot(), "mesh_history": r.mesh.history[-1500:],
+            "pager": r.pager.snapshot(),
             "settings": {k: self.s[k] for k in ("scan_delay", "scan_dwell", "search_threshold_db",
                                                  "server_port", "require_password_local",
                                                  "deemphasis_us", "theme")},
@@ -396,6 +403,12 @@ class Server:
             elif cmd == "fetch_decoders":
                 r.decoders.download_missing(
                     done=lambda: self._from_radio("decoders", r.decoders.available()))
+            elif cmd == "pager_clear":
+                r.pager.clear()
+            elif cmd == "pager_alias":
+                r.pager.set_alias(m["capcode"], m.get("name", ""))
+            elif cmd == "pager_highlight":
+                r.pager.set_highlight(m["capcode"], bool(m.get("on", True)))
             elif cmd == "auto_identify":
                 r.set_auto_identify(bool(m.get("on", True)))
             elif cmd == "schedule":

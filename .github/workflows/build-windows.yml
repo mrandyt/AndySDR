@@ -133,6 +133,7 @@ jobs:
             * `AndySDR-windows.zip` – portable: unzip and run `AndySDR.exe`
 
             Decoders bundled in the `decoders` folder: DSD-FME (DMR, P25, NXDN, dPMR, YSF, M17), multimon-ng (POCSAG, FLEX, APRS, DTMF, ZVEI, EAS), SatDump (Meteor-M LRPT). WEFAX and SSTV are built in.
+            1.3.1: new PAGER MESSAGES tab - POCSAG/FLEX pages in a searchable table (time, frequency, capcode, name, type, message), capcode names and highlights with pop-up notices, CSV export, daily logs in %APPDATA%\AndySDR\pager.
             1.3.0: MeshCore messaging tab – chat over the MeshCore LoRa mesh through a companion board on USB, Wi-Fi or Bluetooth.
             1.2.1: RTL-SDR dongles (Nooelec NESDR SMArt v5 etc.) now open directly through librtlsdr - fixes "SoapySDR::Device::make() no match". Smaller LCD on every scanner style.
 
