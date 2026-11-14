@@ -65,7 +65,7 @@ function onJSON(m) {
       $("loginErr").textContent = "Wrong password";
       break;
     case "hello": onHello(d); break;
-    case "state": S = d; renderState(); break;
+    case "state": S = d; renderState(); adsbStat(); break;
     case "memory": MEM = d; renderMemory(); break;
     case "activity": renderActivity(d); break;
     case "device": DEV = d; renderDevice(); break;
@@ -80,6 +80,8 @@ function onJSON(m) {
     case "mesh_msg": meshAddMsg(d); break;
     case "mesh_history": MESHMSG = d; renderMeshList(); renderMeshMsgs(); break;
     case "mesh_ble": meshBleFound(d); break;
+    case "adsb": onAdsb(d); break;
+    case "adsb_cfg": ADS.cfg = d; adsbCfg(); adsbStat(); break;
     case "pager": addPager(d); break;
     case "pager_cfg": PAG.cfg = d; renderPager(); break;
     case "pager_all": PAG.msgs = d.messages || []; PAG.cfg = d; renderPager(); break;
@@ -104,6 +106,8 @@ function onHello(h) {
   if (h.mesh) { MESH = h.mesh; MESHMSG = h.mesh_history || []; renderMesh(); }
   if (h.pager) { PAG.msgs = h.pager.messages || []; PAG.cfg = h.pager; PAG.unseen = 0; renderPager(); }
   $("pagExport").href = `/api/pager.csv?token=${encodeURIComponent(token)}`;
+  $("adsbExport").href = `/api/adsb.csv?token=${encodeURIComponent(token)}`;
+  if (h.adsb) adsbHello(h.adsb);
   const st = h.settings || {};
   $("setDelay").value = st.scan_delay; $("setDwell").value = st.scan_dwell;
   $("setDeemph").value = String(st.deemphasis_us || 50);
@@ -781,6 +785,7 @@ function showTab(name) {
   if (name === "sch") send({ cmd: "schedule" });
   if (name === "mesh") { meshRead(meshConv); renderMesh(); setTimeout(() => $("meshMsgs").scrollTop = 1e9, 0); }
   if (name === "pag") { PAG.unseen = 0; pagBadge(); }
+  if (name === "adsb") setTimeout(() => { adsbBadge(); renderAdsbTable(); adsbStat(); adsDraw(); }, 0);
   sizeCanvases();
 }
 document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => showTab(t.dataset.tab)));
@@ -978,6 +983,331 @@ $("pagTable").addEventListener("click", (e) => {
 $("pagSearch").oninput = renderPager;
 $("pagClear").onclick = () => { if (confirm("Clear the pager message list? (Daily log files are kept.)")) send({ cmd: "pager_clear" }); };
 $("pagStart").onclick = () => send({ cmd: "decoder", id: "pager" });
+
+
+/* ----- ADS-B aircraft ----- */
+const ADS = { list: [], trails: new Map(), cfg: {}, stats: {}, sel: null, sort: { k: "seen", d: 1 },
+  view: { lat: 54.0, lon: -2.0, z: 5, user: false, fitN: 0 }, tiles: new Map(), raf: 0, emSeen: new Set(), hit: [], hitBox: null };
+const ADS_EMER = { "7500": "hijack", "7600": "radio failure", "7700": "emergency" };
+const adsLS = (k, d) => { try { const v = localStorage.getItem("andysdr_adsb_" + k); return v === null ? d : v; } catch (e) { return d; } };
+const adsSetLS = (k, v) => { try { localStorage.setItem("andysdr_adsb_" + k, v); } catch (e) { /* private mode */ } };
+const adsMet = () => $("adsbUnits").value === "met";
+const adsRunning = () => S.decoder === "adsb";
+const adsTabOpen = () => $("tab-adsb").classList.contains("active");
+const adsAlt = (a) => (a == null ? null : adsMet() ? Math.round(a * 0.3048) : a);
+const adsSpd = (v) => (v == null ? null : adsMet() ? Math.round(v * 1.852) : Math.round(v));
+const adsVs = (v) => (v == null ? null : adsMet() ? +(v * 0.00508).toFixed(1) : v);
+const adsDist = (v) => (v == null ? null : adsMet() ? Math.round(v * 1.852) : v);
+const adsN = (v, d = "–") => (v == null ? d : typeof v === "number" ? v.toLocaleString() : v);
+const adsRef = () => (ADS.cfg.lat != null && ADS.cfg.lon != null ? [ADS.cfg.lat, ADS.cfg.lon] : null);
+
+function adsbHello(a) {
+  ADS.cfg = a.cfg || {}; ADS.list = a.aircraft || []; ADS.stats = a.stats || {};
+  ADS.trails.clear();
+  for (const x of ADS.list) if (x.trail && x.trail.length) ADS.trails.set(x.icao, x.trail.map((p) => [p[0], p[1], p[2]]));
+  ["units", "tiles", "trails", "labels", "posonly"].forEach((k) => {
+    const el = { units: "adsbUnits", tiles: "adsbTiles", trails: "adsbTrails", labels: "adsbLabels", posonly: "adsbPosOnly" }[k];
+    const v = adsLS(k, null);
+    if (v !== null) { if ($(el).type === "checkbox") $(el).checked = v === "1"; else $(el).value = v; }
+  });
+  adsbCfg(); adsbUnitsHdr();
+}
+function adsbCfg() {
+  const c = ADS.cfg || {};
+  if (document.activeElement !== $("adsbLat")) $("adsbLat").value = c.lat != null ? c.lat : "";
+  if (document.activeElement !== $("adsbLon")) $("adsbLon").value = c.lon != null ? c.lon : "";
+  $("adsbShare").checked = !!c.share; $("adsbLog").checked = c.log !== false;
+  $("adsbShareInfo").textContent = `SBS/BaseStation text on port ${c.sbs_port || 30003} and raw AVR on port ${c.raw_port || 30002} – for Virtual Radar Server, tar1090, PlanePlotter, FlightAware/FR24 feeders and similar. Windows may ask to allow AndySDR through the firewall. Keep it on your home network.`;
+  $("adsbNote").innerHTML = (c.lat == null ? "Set your position (above) to see distance and bearing and to get the range rings on the map. " : "") +
+    (isLocal && c.log && c.log_dir ? `Positions are logged to ${esc(c.log_dir)} (one CSV per day).` : "");
+  adsDraw();
+}
+function adsbUnitsHdr() {
+  const m = adsMet();
+  $("thAlt").textContent = m ? "Alt (m)" : "Alt (ft)"; $("thGs").textContent = m ? "km/h" : "Speed (kt)";
+  $("thVr").textContent = m ? "V/S (m/s)" : "V/S (fpm)"; $("thDist").textContent = m ? "Dist (km)" : "Dist (NM)";
+}
+function onAdsb(d) {
+  ADS.list = d.aircraft || []; ADS.stats = d.stats || {};
+  const live = new Set();
+  for (const a of ADS.list) {
+    live.add(a.icao);
+    if (a.lat == null || a.seen > 90) continue;
+    let tr = ADS.trails.get(a.icao);
+    if (!tr) ADS.trails.set(a.icao, (tr = []));
+    const last = tr[tr.length - 1];
+    if (!last || Math.abs(last[0] - a.lat) + Math.abs(last[1] - a.lon) > 0.0015) { tr.push([a.lat, a.lon, a.alt]); if (tr.length > 40) tr.shift(); }
+    const em = a.squawk && ADS_EMER[a.squawk];
+    if (em && !ADS.emSeen.has(a.icao + a.squawk)) { ADS.emSeen.add(a.icao + a.squawk); toast(`⚠ ${a.flight || a.icao} squawking ${a.squawk} (${em})`, "warn"); }
+  }
+  for (const k of [...ADS.trails.keys()]) if (!live.has(k)) ADS.trails.delete(k);
+  const nPos = ADS.list.filter((a) => a.lat != null && a.seen <= 90).length;
+  if (!ADS.view.user && nPos > (ADS.view.fitN || 0)) { adsFit(); ADS.view.fitN = nPos; }     // keep zooming out as more aircraft appear, until you touch the map
+  adsbBadge();
+  if (adsTabOpen()) { renderAdsbTable(); adsbStat(); adsDraw(); }
+}
+function adsbBadge() {
+  const n = adsRunning() && ADS.stats ? ADS.stats.aircraft || 0 : 0;
+  const b = $("adsbBadge");
+  b.hidden = !n || adsTabOpen();
+  b.textContent = n;
+}
+function adsbStat() {
+  const st = ADS.stats || {}, run = adsRunning();
+  $("adsbStart").classList.toggle("on", run);
+  $("adsbStat").innerHTML = run
+    ? `<span class="run">● RUNNING</span> · <b>${st.aircraft || 0}</b> aircraft · <b>${st.with_pos || 0}</b> with position · <b>${st.rate || 0}</b> msg/s` +
+      (st.max_range ? ` · max range <b>${adsMet() ? Math.round(st.max_range * 1.852) + " km" : st.max_range + " NM"}</b>` : "")
+    : `stopped · ${(ADS.list || []).filter((a) => a.seen <= 120).length ? "showing the last aircraft heard" : "press ▶ Start ADS-B"}`;
+  adsbBadge();
+}
+function renderAdsbTable() {
+  if (!adsTabOpen()) return;
+  const q = $("adsbFind").value.trim().toLowerCase(), posOnly = $("adsbPosOnly").checked;
+  const { k, d } = ADS.sort;
+  const val = (a) => (k === "airline" ? (a.airline || a.country || "") : k === "flight" ? a.flight || "~" : a[k]);
+  const rows = ADS.list.filter((a) => a.seen <= 120 && (!posOnly || a.lat != null) &&
+    (!q || `${a.icao} ${a.flight} ${a.airline} ${a.country} ${a.squawk}`.toLowerCase().includes(q)));
+  rows.sort((a, b) => {
+    const x = val(a), y = val(b);
+    if (x == null || x === "") return 1; if (y == null || y === "") return -1;
+    return (typeof x === "string" ? x.localeCompare(y) : x - y) * d;
+  });
+  $("adsbTable").querySelectorAll("th").forEach((th) => { th.classList.toggle("sorted", th.dataset.k === k); th.classList.toggle("asc", th.dataset.k === k && d < 0); });
+  $("adsbTable").querySelector("tbody").innerHTML = rows.map((a) => {
+    const em = ADS_EMER[a.squawk];
+    return `<tr data-id="${a.icao}" class="${ADS.sel === a.icao ? "sel " : ""}${a.seen > 30 ? "stale " : ""}${em ? "emerg" : ""}">
+      <td class="cs">${esc(a.flight || "—")}</td><td class="mono">${a.icao}</td>
+      <td title="${esc(a.country)}">${a.airline ? esc(a.airline) : `<span class="muted">${esc(a.country)}</span>`}</td>
+      <td class="num">${a.ground ? "GND" : adsN(adsAlt(a.alt))}</td><td class="num">${adsN(adsSpd(a.gs))}</td>
+      <td class="num">${a.trk == null ? "–" : Math.round(a.trk) + "°"}</td><td class="num">${adsN(adsVs(a.vr))}</td>
+      <td class="mono">${esc(a.squawk || "–")}</td><td class="num">${adsN(adsDist(a.dist))}</td>
+      <td class="num">${a.msgs}</td><td class="num">${a.seen < 1 ? "now" : Math.round(a.seen) + "s"}</td></tr>`;
+  }).join("") || `<tr><td colspan="11" class="muted">${adsRunning() ? "Listening for aircraft … (they can take a few seconds to appear; a 1090 MHz antenna with a clear view of the sky helps a lot)" : "No aircraft yet. Press ▶ Start ADS-B (1090 MHz)."}</td></tr>`;
+  adsDetail();
+}
+function adsDetail() {
+  const a = ADS.list.find((x) => x.icao === ADS.sel), el = $("adsbDetail");
+  if (!a) { el.hidden = true; return; }
+  const m = adsMet();
+  el.hidden = false;
+  el.innerHTML = `<button class="x" id="adsbDetX" title="Close">✕</button><b class="big">${esc(a.flight || a.icao)}</b><br>
+    ${a.airline ? esc(a.airline) + "<br>" : ""}Hex ${a.icao} · ${esc(a.country || "country unknown")}${a.cat ? " · cat " + esc(a.cat) : ""}<br>
+    Altitude: ${a.ground ? "on the ground" : a.alt == null ? "–" : adsAlt(a.alt).toLocaleString() + (m ? " m" : " ft")}<br>
+    Speed: ${a.gs == null ? "–" : adsSpd(a.gs) + (m ? " km/h" : " kt")} · Heading: ${a.trk == null ? "–" : Math.round(a.trk) + "°"}<br>
+    Climb: ${a.vr == null ? "–" : adsVs(a.vr) + (m ? " m/s" : " ft/min")}<br>
+    Squawk: ${esc(a.squawk || "–")}${ADS_EMER[a.squawk] ? " ⚠ " + ADS_EMER[a.squawk] : ""}<br>
+    ${a.dist != null ? `Distance: ${adsDist(a.dist)} ${m ? "km" : "NM"} at ${a.brg}°<br>` : ""}
+    ${a.lat != null ? `Position: ${a.lat.toFixed(4)}, ${a.lon.toFixed(4)}<br>` : "No position yet<br>"}
+    Signal ${a.rssi} dBFS · ${a.msgs} messages`;
+  const x = $("adsbDetX"); if (x) x.onclick = () => { ADS.sel = null; renderAdsbTable(); adsDraw(); };
+}
+$("adsbTable").querySelector("thead").addEventListener("click", (e) => {
+  const th = e.target.closest("th"); if (!th) return;
+  ADS.sort = ADS.sort.k === th.dataset.k ? { k: th.dataset.k, d: -ADS.sort.d } : { k: th.dataset.k, d: 1 };
+  renderAdsbTable();
+});
+$("adsbTable").querySelector("tbody").addEventListener("click", (e) => {
+  const tr = e.target.closest("tr[data-id]"); if (!tr) return;
+  ADS.sel = ADS.sel === tr.dataset.id ? null : tr.dataset.id;
+  const a = ADS.list.find((x) => x.icao === ADS.sel);
+  if (a && a.lat != null) { ADS.view.lat = a.lat; ADS.view.lon = a.lon; ADS.view.user = true; }
+  renderAdsbTable(); adsDraw();
+});
+$("adsbStart").onclick = () => send({ cmd: "adsb_start" });
+$("adsbStop").onclick = () => send({ cmd: "adsb_stop" });
+$("adsbClear").onclick = () => { if (confirm("Clear the aircraft list?")) { send({ cmd: "adsb_clear" }); ADS.trails.clear(); ADS.list = []; renderAdsbTable(); adsDraw(); } };
+$("adsbPosSet").onclick = () => {
+  const lat = $("adsbLat").value.trim(), lon = $("adsbLon").value.trim();
+  send({ cmd: "adsb_pos", lat: lat === "" ? null : lat.replace(",", "."), lon: lon === "" ? null : lon.replace(",", ".") });
+  ADS.view.user = false; ADS.view.fitN = 0;
+};
+$("adsbPosGps").onclick = () => {
+  if (!navigator.geolocation) { toast("This browser cannot give its location – type your latitude and longitude instead", "warn"); return; }
+  navigator.geolocation.getCurrentPosition(
+    (p) => { send({ cmd: "adsb_pos", lat: p.coords.latitude.toFixed(5), lon: p.coords.longitude.toFixed(5) }); ADS.view.user = false; ADS.view.fitN = 0; },
+    () => toast("Location not available here (it only works on https or on the radio PC itself) – type your latitude and longitude instead", "warn"),
+    { timeout: 10000 });
+};
+["adsbUnits", "adsbTiles", "adsbTrails", "adsbLabels", "adsbPosOnly"].forEach((id) => ($(id).onchange = () => {
+  const k = { adsbUnits: "units", adsbTiles: "tiles", adsbTrails: "trails", adsbLabels: "labels", adsbPosOnly: "posonly" }[id];
+  adsSetLS(k, $(id).type === "checkbox" ? ($(id).checked ? "1" : "0") : $(id).value);
+  adsbUnitsHdr(); renderAdsbTable(); adsDraw();
+}));
+$("adsbFind").oninput = renderAdsbTable;
+$("adsbShare").onchange = () => send({ cmd: "adsb_share", on: $("adsbShare").checked });
+$("adsbLog").onchange = () => send({ cmd: "adsb_option", key: "log", value: $("adsbLog").checked });
+$("adsbFit").onclick = () => { ADS.view.user = false; ADS.view.fitN = 0; adsFit(); adsDraw(); };
+$("adsbZoomIn").onclick = () => adsZoom(0.5);
+$("adsbZoomOut").onclick = () => adsZoom(-0.5);
+
+/* ---- map (Web Mercator so optional street-map tiles line up with the aircraft) */
+const adsMx = (lon, z) => ((lon + 180) / 360) * 256 * 2 ** z;
+const adsMy = (lat, z) => { const s = Math.sin((Math.max(-85, Math.min(85, lat)) * Math.PI) / 180); return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * 256 * 2 ** z; };
+const adsLon = (x, z) => (x / (256 * 2 ** z)) * 360 - 180;
+const adsLat = (y, z) => { const n = Math.PI - (2 * Math.PI * y) / (256 * 2 ** z); return (180 / Math.PI) * Math.atan(Math.sinh(n)); };
+function adsSize() {
+  const c = $("adsbMap"), r = c.parentElement.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  const w = Math.max(200, Math.round(r.width)), h = Math.max(200, Math.round(r.height));
+  if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); c.style.width = w + "px"; c.style.height = h + "px"; }
+  return [c.getContext("2d"), w, h, dpr];
+}
+function adsFit() {
+  const r = adsRef(), pts = ADS.list.filter((a) => a.lat != null && a.seen <= 90).map((a) => [a.lat, a.lon]);
+  if (r) pts.push(r);
+  if (!pts.length) return;
+  const [, w, h] = adsSize();
+  let cLat, cLon;
+  if (r) { [cLat, cLon] = r; } else {
+    cLat = (Math.min(...pts.map((p) => p[0])) + Math.max(...pts.map((p) => p[0]))) / 2;
+    cLon = (Math.min(...pts.map((p) => p[1])) + Math.max(...pts.map((p) => p[1]))) / 2;
+  }
+  let z = 12;
+  for (; z > 3; z -= 0.25) {
+    const cx = adsMx(cLon, z), cy = adsMy(cLat, z);
+    if (pts.every((p) => Math.abs(adsMx(p[1], z) - cx) < w * 0.45 && Math.abs(adsMy(p[0], z) - cy) < h * 0.45)) break;
+  }
+  Object.assign(ADS.view, { lat: cLat, lon: cLon, z: Math.min(z, 11) });
+}
+function adsZoom(dz, px, py) {
+  const [, w, h] = adsSize(), v = ADS.view;
+  px = px ?? w / 2; py = py ?? h / 2;
+  const z0 = v.z, cx = adsMx(v.lon, z0), cy = adsMy(v.lat, z0);
+  const lon = adsLon(cx + px - w / 2, z0), lat = adsLat(cy + py - h / 2, z0);
+  v.z = Math.max(3, Math.min(12, v.z + dz)); v.user = true;
+  v.lon = lon - (px - w / 2) / (256 * 2 ** v.z) * 360; v.lat = adsLat(adsMy(lat, v.z) - (py - h / 2), v.z);
+  adsDraw();
+}
+function adsAltColor(a, alpha = 1) {
+  if (a.ground) return `hsla(0,0%,60%,${alpha})`;
+  if (a.alt == null) return `hsla(0,0%,75%,${alpha})`;
+  const hue = 18 + Math.min(Math.max(a.alt, 0), 40000) / 40000 * 222;     // orange (low) -> green -> blue (high)
+  return `hsla(${hue},95%,58%,${alpha})`;
+}
+const ADS_PLANE = [[0, -10], [1.6, -3], [9, 2], [9, 4], [1.6, 2.5], [1.2, 7], [3.5, 9], [3.5, 10.5], [0, 9.5], [-3.5, 10.5], [-3.5, 9], [-1.2, 7], [-1.6, 2.5], [-9, 4], [-9, 2], [-1.6, -3]];
+function adsDraw() { if (!ADS.raf) ADS.raf = requestAnimationFrame(adsRender); }
+function adsRender() {
+  ADS.raf = 0;
+  if (!adsTabOpen()) return;
+  const [ctx, w, h, dpr] = adsSize(), v = ADS.view, z = v.z;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = "#0b0e12"; ctx.fillRect(0, 0, w, h);
+  const cx = adsMx(v.lon, z), cy = adsMy(v.lat, z), ox = cx - w / 2, oy = cy - h / 2;
+  const P = (lat, lon) => [adsMx(lon, z) - ox, adsMy(lat, z) - oy];
+  // street map tiles (optional)
+  if ($("adsbTiles").checked) {
+    const zi = Math.max(3, Math.min(12, Math.round(z))), n = 2 ** zi, ts = 256 * 2 ** (z - zi);
+    ctx.save();
+    if ("filter" in ctx) ctx.filter = "invert(1) hue-rotate(180deg) brightness(.75) saturate(.6)";
+    for (let tx = Math.floor(ox / ts); tx <= Math.floor((ox + w) / ts); tx++) {
+      for (let ty = Math.max(0, Math.floor(oy / ts)); ty <= Math.min(n - 1, Math.floor((oy + h) / ts)); ty++) {
+        const key = `${zi}/${((tx % n) + n) % n}/${ty}`;
+        let im = ADS.tiles.get(key);
+        if (!im) {
+          if (ADS.tiles.size > 400) ADS.tiles.delete(ADS.tiles.keys().next().value);
+          im = new Image(); im.src = `https://tile.openstreetmap.org/${key}.png`; im._ok = false;
+          im.onload = () => { im._ok = true; adsDraw(); };
+          ADS.tiles.set(key, im);
+        }
+        if (im._ok) ctx.drawImage(im, Math.round(tx * ts - ox), Math.round(ty * ts - oy), Math.ceil(ts) + 1, Math.ceil(ts) + 1);
+      }
+    }
+    ctx.restore();
+    ctx.fillStyle = "rgba(0,0,0,.55)"; ctx.fillRect(w - 168, h - 17, 168, 17);
+    ctx.fillStyle = "#cfd6df"; ctx.font = "10px sans-serif"; ctx.textAlign = "right"; ctx.fillText("© OpenStreetMap contributors", w - 5, h - 5);
+  }
+  const met = adsMet(), ref = adsRef();
+  // range rings around the receiver
+  if (ref) {
+    const [rx, ry] = P(ref[0], ref[1]);
+    const pxPerNM = (256 * 2 ** z) / (40075016.686 * Math.cos((ref[0] * Math.PI) / 180)) * 1852;
+    const unitPx = met ? pxPerNM / 1.852 : pxPerNM;
+    const steps = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000];
+    const step = steps.find((s) => s * unitPx >= 80) || 1000;
+    ctx.lineWidth = 1; ctx.font = "10px sans-serif"; ctx.textAlign = "left";
+    const far = Math.hypot(Math.max(rx, w - rx), Math.max(ry, h - ry));
+    for (let k = 1; k * step * unitPx < far + 20 && k < 40; k++) {
+      const r = k * step * unitPx;
+      ctx.strokeStyle = "rgba(120,170,220,.28)"; ctx.beginPath(); ctx.arc(rx, ry, r, 0, 7); ctx.stroke();
+      ctx.fillStyle = "rgba(150,190,230,.7)"; ctx.fillText(`${k * step} ${met ? "km" : "NM"}`, rx + 4, ry - r + 11);
+    }
+    ctx.strokeStyle = "rgba(120,170,220,.35)"; ctx.beginPath(); ctx.moveTo(rx - 9999, ry); ctx.lineTo(rx + 9999, ry); ctx.moveTo(rx, ry - 9999); ctx.lineTo(rx, ry + 9999); ctx.stroke();
+    ctx.fillStyle = "#4ddb7a"; ctx.beginPath(); ctx.arc(rx, ry, 4, 0, 7); ctx.fill();
+    ctx.strokeStyle = "#0b0e12"; ctx.lineWidth = 1.5; ctx.stroke();
+  }
+  // trails + aircraft
+  const showTrails = $("adsbTrails").checked, showLbl = $("adsbLabels").checked, now = performance.now();
+  const q = $("adsbFind").value.trim().toLowerCase();
+  ADS.hit = [];
+  const draw = ADS.list.filter((a) => a.lat != null && a.seen <= 90);
+  if (showTrails) {
+    ctx.lineWidth = 1.6; ctx.lineCap = "round";
+    for (const a of draw) {
+      const tr = ADS.trails.get(a.icao); if (!tr || tr.length < 2) continue;
+      for (let i = 1; i < tr.length; i++) {
+        const [x0, y0] = P(tr[i - 1][0], tr[i - 1][1]), [x1, y1] = P(tr[i][0], tr[i][1]);
+        ctx.strokeStyle = adsAltColor({ alt: tr[i][2], ground: a.ground }, 0.15 + 0.55 * (i / tr.length));
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+      }
+    }
+  }
+  ctx.font = "11px sans-serif"; ctx.textAlign = "left";
+  for (const a of draw) {
+    const [x, y] = P(a.lat, a.lon);
+    if (x < -30 || y < -30 || x > w + 30 || y > h + 30) continue;
+    const dim = q && !`${a.icao} ${a.flight} ${a.airline} ${a.country}`.toLowerCase().includes(q);
+    const fade = (dim ? 0.25 : 1) * (a.seen > 30 ? 0.55 : 1);
+    ADS.hit.push([x, y, a.icao]);
+    const em = ADS_EMER[a.squawk];
+    if (em) { ctx.strokeStyle = `rgba(255,59,48,${0.5 + 0.5 * Math.sin(now / 200)})`; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, y, 16, 0, 7); ctx.stroke(); }
+    if (ADS.sel === a.icao) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, 15, 0, 7); ctx.stroke(); }
+    ctx.save(); ctx.translate(x, y); ctx.globalAlpha = fade;
+    if (a.trk != null) ctx.rotate((a.trk * Math.PI) / 180);
+    ctx.beginPath();
+    if (a.ground || a.trk == null) { ctx.arc(0, 0, 4.5, 0, 7); } else { ADS_PLANE.forEach(([px, py], i) => (i ? ctx.lineTo(px * 0.85, py * 0.85) : ctx.moveTo(px * 0.85, py * 0.85))); ctx.closePath(); }
+    ctx.fillStyle = adsAltColor(a); ctx.fill(); ctx.strokeStyle = "rgba(0,0,0,.8)"; ctx.lineWidth = 1; ctx.stroke();
+    ctx.restore();
+    if (showLbl && !dim) {
+      const t1 = a.flight || a.icao, t2 = a.ground ? "GND" : a.alt != null ? (met ? Math.round(a.alt * 0.3048) + "m" : "FL" + String(Math.round(a.alt / 100)).padStart(3, "0")) : "";
+      ctx.globalAlpha = fade; ctx.lineWidth = 3; ctx.strokeStyle = "rgba(0,0,0,.8)"; ctx.fillStyle = "#e8edf3";
+      ctx.strokeText(t1, x + 12, y - 1); ctx.fillText(t1, x + 12, y - 1);
+      ctx.fillStyle = "#9fb0c3"; ctx.strokeText(t2, x + 12, y + 10); ctx.fillText(t2, x + 12, y + 10);
+      ctx.globalAlpha = 1;
+    }
+  }
+  if (!draw.length) {
+    ctx.fillStyle = "#6f7c8c"; ctx.font = "13px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText(adsRunning() ? "Waiting for aircraft with a position …" : "Press ▶ Start ADS-B (1090 MHz)", w / 2, h / 2);
+  }
+  if (ADS.list.some((a) => ADS_EMER[a.squawk] && a.seen <= 90)) setTimeout(adsDraw, 120);   // keep the emergency ring pulsing
+}
+(function adsMapEvents() {
+  const c = $("adsbMap");
+  let drag = null;
+  c.addEventListener("pointerdown", (e) => { c.setPointerCapture(e.pointerId); drag = { x: e.clientX, y: e.clientY, lat: ADS.view.lat, lon: ADS.view.lon, moved: false }; c.classList.add("drag"); });
+  c.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
+    if (!drag.moved) return;
+    const z = ADS.view.z;
+    ADS.view.lon = adsLon(adsMx(drag.lon, z) - dx, z); ADS.view.lat = adsLat(adsMy(drag.lat, z) - dy, z); ADS.view.user = true; adsDraw();
+  });
+  c.addEventListener("pointerup", (e) => {
+    c.classList.remove("drag");
+    if (drag && !drag.moved) {
+      const r = c.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+      let best = null, bd = 16;
+      for (const [hx, hy, id] of ADS.hit) { const dd = Math.hypot(hx - x, hy - y); if (dd < bd) { bd = dd; best = id; } }
+      ADS.sel = best === ADS.sel ? null : best; renderAdsbTable(); adsDraw();
+    }
+    drag = null;
+  });
+  c.addEventListener("wheel", (e) => { e.preventDefault(); const r = c.getBoundingClientRect(); adsZoom(e.deltaY < 0 ? 0.5 : -0.5, e.clientX - r.left, e.clientY - r.top); }, { passive: false });
+  c.addEventListener("dblclick", (e) => { const r = c.getBoundingClientRect(); adsZoom(1, e.clientX - r.left, e.clientY - r.top); });
+  new ResizeObserver(() => adsDraw()).observe(c.parentElement);
+})();
+setInterval(() => { if (adsTabOpen()) { renderAdsbTable(); } }, 5000);
 
 /* ----- images ----- */
 const imgUrl = (f) => `/images/${f.split("/").map(encodeURIComponent).join("/")}?token=${encodeURIComponent(token)}&t=${Date.now()}`;
@@ -1329,7 +1659,7 @@ const HELP = {
   banks: ["Memory banks", "10 banks × 100 channels = 1000 memories. Click a bank to view it, right-click to include/exclude it from scanning. In the table: click a frequency or ▶ to listen, click the name to rename, change mode/decoder in the drop-downs, tick L/O to lock out, PRI to make it the priority channel, ✕ to delete."],
   import: ["RadioReference UK import", "On radioreference.com open a UK county/agency database page and use its CSV download (premium) – or select the frequency table on the page, copy it and save it as a .txt file. Choose the file, pick the bank, and Import. AndySDR recognises Frequency, Alpha Tag, Description, Mode, Tag and Tone columns, converts FMN/AM/DMR/P25/NXDN/TETRA modes, and attaches the right decoder. Talkgroup lists (Decimal/Alpha Tag) are stored as talkgroups. Banks overflow into the next free bank."],
   search: ["Search", "Set From/To in MHz, the channel step, mode and sensitivity (lower dB = finds weaker signals but more false hits), then Search. UK quick ranges fill the boxes for you. Results list each active frequency with hit count and strength – click a frequency to listen, Store to save it to the selected bank."],
-  decoders: ["Decoders", "Pick what to decode on the current frequency. Digital voice uses DSD-FME (choose DMR, P25, NXDN, dPMR, YSF, M17 or Auto); pagers use multimon-ng (POCSAG & FLEX); WEFAX and SSTV are built in; Meteor-M LRPT records the satellite pass and hands it to SatDump. Decoded text appears in the log and on the LCD bottom line; pager messages are also listed in the PAGER MESSAGES tab. Memory channels can start their decoder automatically."],
+  decoders: ["Decoders", "Pick what to decode on the current frequency. Digital voice uses DSD-FME (choose DMR, P25, NXDN, dPMR, YSF, M17 or Auto); pagers use multimon-ng (POCSAG & FLEX); WEFAX, SSTV and ADS-B aircraft tracking (1090 MHz, see the ADS-B tab) are built in; Meteor-M LRPT records the satellite pass and hands it to SatDump. Decoded text appears in the log and on the LCD bottom line; pager messages are also listed in the PAGER MESSAGES tab. Memory channels can start their decoder automatically."],
   receiver: ["Receiver", "Choose which SDR to use: every SoapySDR device (RTL-SDR/Nooelec, SDRplay RSP1A/RSP2/RSP2pro/RSPdx/RSPduo, Airspy, HackRF, LimeSDR, Pluto…), rtl_tcp servers on other machines, or the Simulator for practice. Sample rate sets how wide the waterfall is. Antenna picks the input (RSP2: Antenna A, B or Hi-Z). Device switches (bias-T, notch filters, direct sampling) appear underneath automatically."],
   autoid: ["Auto ID (automatic signal identification)", "When ticked, AndySDR analyses whatever you are listening to and shows what it is next to the VFO: DMR (it spots the 30 ms TDMA bursts), P25, NXDN, dPMR, pagers (POCSAG/FLEX), APRS, DTMF, SSTV, WEFAX, TETRA or analogue voice (with any CTCSS tone). It then switches to the right mode and starts the matching decoder by itself, and stops it again when the channel goes back to voice. SSTV pictures are caught from their very first line. A decoder you pick yourself, or one stored on a memory channel, is never overridden. Untick to turn it off."],
   sched: ["Scheduler", "Captures that run by themselves at set times – ideal for weather fax charts, ISS SSTV events and Meteor-M satellite passes. Pick a station from Quick pick (or type a frequency), choose what to do (WEFAX, SSTV, LRPT, record…), the start time on this PC's clock and how long, and either tick days of the week or pick a single date. At the start time AndySDR stops scanning, tunes, runs the decoder; at the end it saves the pictures and puts the radio back exactly as it was. ▶ Now runs one straight away. AndySDR must be running (it can run as a server in the background)."],
@@ -1339,6 +1669,11 @@ const HELP = {
   bandmap: ["Band map", "The whole radio spectrum from 9 kHz to 6.5 GHz on one strip, coloured by who uses it (see the legend in the UK BAND PLAN tab). The red needle is your VFO and the white box is the part the spectrum display is showing. Hover to see a band's name; click a band to jump there in the right mode and step."],
   bptab: ["UK band plan list", "Every UK allocation, amateur sub-band and key frequency from 9 kHz to 6.5 GHz. Type a name or a frequency (e.g. 156.8) to find it, pick a category or click the coloured legend, untick sub-bands for the big picture. Tune goes straight there in the right mode; Search loads the band into the Live Activity search so you can find everything active in it. 'Where am I?' lists the bands your VFO is in."],
   mesh: ["MeshCore messaging", "Text chat over the MeshCore LoRa mesh. Your SDRs can only receive, so AndySDR sends and receives through a MeshCore companion board (Heltec V3/V4, RAK4631, T-Deck, T-Beam, Xiao…) flashed with Companion firmware from flasher.meshcore.co.uk – USB Serial firmware for a cable, Bluetooth or Wi-Fi firmware otherwise. Plug it in, pick its COM port (★ = looks like a radio board) and press Connect; AndySDR reconnects by itself next time. Channels on the left: Public and any #hashtag channel anyone can join (+ Join, e.g. #uk), or private channels with a shared key. Contacts are nodes heard advertising – click one for a private, end-to-end encrypted message (✓ = sent, ✓✓ = delivered). Send advert announces you to nearby nodes. UK users normally use the UK/EU narrow preset (869.618 MHz, 62.5 kHz, SF8, CR8) – licence-exempt, the board keeps to the power and duty-cycle limits. Watch on SDR tunes your receiver to the mesh frequency so you can see the packets on the waterfall. Messages are kept in %APPDATA%\\AndySDR\\meshcore_messages.jsonl and work from remote PCs and phones too."],
+  adsb: ["ADS-B aircraft (1090 MHz)", "Tracks aircraft that broadcast ADS-B (nearly every airliner and many smaller aircraft). Press ▶ Start ADS-B: AndySDR tunes to 1090 MHz, centres the receiver exactly on it and decodes the aircraft messages itself – no other program is needed. The table shows callsign, hex address (ICAO), airline and country (from the callsign/address), altitude, speed, heading, climb rate, squawk, distance from you and how long ago it was heard; click a heading to sort. The map shows each aircraft as a plane pointing the way it is flying, coloured by height (orange = low, green = middle, blue = high) with a trail behind it. Squawks 7500, 7600 and 7700 flash red and pop up a warning. You need a receiver running at 2 MS/s or more (any SDRplay RSP, RTL-SDR, Airspy, HackRF) and an antenna that works at 1090 MHz – a short 6.9 cm whip or a proper 1090 MHz collinear, as high and clear of buildings as you can get it. Use the RSP's Antenna A/B (50 Ω) socket, not Hi-Z. Turn RF GAIN up fairly high; if you see lots of messages but few aircraft, turn it down a little. Press Stop (or tune somewhere else) to go back to normal scanning. With the Simulator receiver you get ten practice aircraft."],
+  adsbopts: ["ADS-B options", "My position: type your latitude/longitude (decimal degrees, e.g. 51.5074 and -0.1278) or press 📍 Use my location. With it set the map shows range rings, the table shows each aircraft's distance, and positions come out faster and more reliably. Units: aviation (feet, knots, nautical miles) or metric. Street map downloads OpenStreetMap tiles from the internet (the radar-style map works offline). Trails and Labels switch the track lines and text on the map; 'Only with position' hides aircraft that have not sent a position yet; Find dims the others on the map."],
+  adsbmap: ["ADS-B map", "Drag to move, mouse wheel or +/− to zoom, double-click to zoom in on a spot, ⌖ Fit to show everything. Click an aircraft for its details; click it again (or ✕) to let go. Rings are 'distance from you' (set My position first)."],
+  adsbshare: ["Share aircraft feed", "Tick to let other programs on your network use AndySDR as an ADS-B receiver: SBS/BaseStation messages on TCP port 30003 and raw AVR (*8D…;) on port 30002. Point Virtual Radar Server, tar1090/readsb, PlanePlotter or a flight-tracking-site feeder at this PC and those ports. The second box turns the daily CSV position log on or off."],
+  adsbtable: ["Aircraft list", "One row per aircraft heard in the last two minutes (faded = not heard for 30 s). Click a column title to sort, click a row to highlight it on the map. Callsign and airline come from the aircraft's own identification message, so a new aircraft may show only its hex address for a few seconds. Share the live feed with other programs (Virtual Radar Server, tar1090, PlanePlotter …) from REMOTE & SETTINGS; a dump1090-style aircraft.json is at /api/aircraft.json?token=<password>."],
   pager: ["Pager messages", "Every POCSAG and FLEX page decoded by the pager decoder appears here as a row, newest at the top: time, frequency, protocol and speed, capcode (the pager's address, with the POCSAG function number), your name for it, the type (Alpha text, Numeric or Tone only) and the message. Click ☆ to highlight a capcode – its rows are coloured and a notice pops up whenever it is paged. Click + name to give a capcode a name, click a capcode to show only that one, click a frequency to tune there. Search and the filters narrow the list. Export CSV saves the list; every message is also logged to a CSV file per day in %APPDATA%\\AndySDR\\pager. The same page repeated within a minute is shown once. The tab shows a count of new messages while you are on another tab."],
   remote: ["Remote control", "AndySDR is also a server: any PC, laptop, tablet or phone on your home network can open the address shown and control the radio with full audio and waterfall. Enter the password shown here. Windows may ask to allow AndySDR through the firewall – choose 'Private networks'. Do not forward the port to the internet."],
 };
@@ -1358,7 +1693,7 @@ function openHelp() {
   <h3>KNOBS &amp; DISPLAY</h3>${ctl(["volume", "squelch", "gain", "power", "lcd"])}
   <h3>KEYPAD &amp; FUNCTION KEYS</h3>${ctl(["k_scan", "k_man", "k_srch", "k_pgm", "k_lo", "k_pri", "k_mode", "k_step", "k_bank", "k_dly", "k_rec", "k_dec", "k_dot", "k_e", "k_arrows", "k_clr"])}
   <p class="small">Keyboard: digits and <code>.</code> type, <code>Enter</code> tunes, <code>↑ ↓</code> step, <code>S</code> scan, <code>M</code> manual, <code>P</code> program, <code>L</code> lockout, <code>H</code> help, <code>Esc</code> clear.</p>
-  <h3>SCREENS</h3>${ctl(["scope", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "banks", "import", "search", "decoders", "pager", "receiver", "remote", "theme", "conn"])}
+  <h3>SCREENS</h3>${ctl(["scope", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "receiver", "remote", "theme", "conn"])}
   <h3>DECODER PROGRAMS</h3>
   <p>AndySDR has WEFAX and SSTV built in (SSTV: Martin, Scottie, Robot and PD modes – ISS 145.800 NFM, 2 m 144.500 NFM, 20 m 14.230 USB). DSD-FME, multimon-ng and SatDump now come bundled in the <code>decoders</code> folder next to <code>AndySDR.exe</code>. If one shows ✖ in the DECODERS tab, press <b>⬇ Download missing decoders</b> and AndySDR fetches it from GitHub into <code>%APPDATA%\\AndySDR\\decoders</code>. You can also unzip your own copy into either folder (any sub-folder is fine – AndySDR finds the .exe):</p>
   <dl><dt>DSD-FME</dt><dd>github.com/lwvmobile/dsd-fme – DMR, P25 1/2, NXDN, dPMR, YSF, M17. AndySDR feeds it like SDR++'s network sink (TCP 127.0.0.1:7355, 48 kHz); DSD-FME plays decoded voice on your speakers itself (AndySDR starts the PulseAudio sound server that comes with it).</dd>

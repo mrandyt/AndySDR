@@ -41,6 +41,10 @@ jobs:
           # RTL-SDR (Nooelec etc.) support is essential - fail the build if its driver module is missing
           python -c "import SoapySDR,sys; m=[x.lower() for x in SoapySDR.listModules()]; ok=any('rtlsdr' in x for x in m); print('RTL-SDR module present:', ok); sys.exit(0 if ok else 1)"
 
+      - name: ADS-B decoder self-test (informational)
+        continue-on-error: true
+        run: python tests/test_adsb.py
+
       - name: Build AndySDR.exe
         run: |
           pyinstaller --noconfirm AndySDR.spec

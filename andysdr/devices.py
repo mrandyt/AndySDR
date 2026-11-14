@@ -661,10 +661,42 @@ class SimDevice(BaseDevice):
         self._last = time.time()
         self._ph = {}
         self._osc = {}
+        self.ref_fn = None         # set by the radio: returns the receiver (lat, lon) or None
+        self._traffic = None       # simulated aircraft for ADS-B practice (1090 MHz)
+        self._traffic_ref = None
+        self._tr_t = 0.0
+        self._pend = []
 
     def open(self):
         self.n = 0
         self._last = time.time()
+        self._traffic, self._pend = None, []
+
+    def _adsb_mix(self, x, i0, fs):
+        """Add simulated ADS-B frames (10 aircraft) when 1090 MHz is inside the received band."""
+        from .adsb import ADSB_FREQ
+        from .adsb_sim import SimTraffic, modulate
+        n = len(x)
+        ref = self.ref_fn() if self.ref_fn else None
+        if self._traffic is None or ref != self._traffic_ref:
+            lat, lon = ref if ref else (51.50, -1.00)
+            self._traffic, self._traffic_ref, self._pend = SimTraffic(lat, lon), ref, []
+            self._tr_t = i0 / fs
+        t1 = (i0 + n) / fs
+        gain = 10 ** ((self.gain - 30) / 40)
+        for tt, msg, amp in self._traffic.messages(self._tr_t, t1):
+            self._pend.append((int(round(tt * fs)), modulate(msg, fs, amp * gain)))
+        self._tr_t = t1
+        off = ADSB_FREQ - self.center
+        keep = []
+        for s, env in self._pend:
+            a, b = max(s, i0), min(s + len(env), i0 + n)
+            if b > a:
+                tt = np.arange(a, b) / fs
+                x[a - i0:b - i0] += (env[a - s:b - s] * np.exp(2j * np.pi * off * tt)).astype(np.complex64)
+            if s + len(env) > i0 + n:
+                keep.append((s, env))
+        self._pend = keep
 
     def gain_range(self):
         return (0.0, 50.0)
@@ -769,6 +801,8 @@ class SimDevice(BaseDevice):
                 x += sig * osc * rot
             else:
                 x += (bb * osc * rot).astype(np.complex64)
+        if abs(1090000000 - self.center) < fs * 0.45:
+            self._adsb_mix(x, int(idx[0]), fs)
         return x.astype(np.complex64)
 
 

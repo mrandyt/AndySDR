@@ -5,6 +5,7 @@ External (free programs, put them in the 'decoders' folder next to AndySDR.exe):
   * DSD-FME     – DMR, P25 Phase 1/2, NXDN, dPMR, YSF, M17, ProVoice, EDACS, X2-TDMA (voice + data)
   * multimon-ng – POCSAG 512/1200/2400, FLEX, APRS/AFSK1200, DTMF, ZVEI, EAS, Morse, Hapn ...
   * SatDump     – Meteor-M LRPT weather satellite images (137.1 / 137.9 MHz)
+  * ADS-B       – built in: 1090 MHz Mode S / ADS-B aircraft tracking (see adsb.py)
   * TETRA       – complex baseband is streamed over UDP for an external TETRA demodulator.
     UK emergency-service TETRA (Airwave) is encrypted: only unencrypted networks can be decoded.
 
@@ -53,6 +54,8 @@ DECODERS = {
                "help": "Slow-scan TV: ISS 145.800 NFM, 2 m 144.500 NFM, 20 m 14.230 USB. Mode found from the VIS header."},
     "lrpt":   {"name": "Meteor-M LRPT satellite (SatDump)", "exe": "satdump",
                "help": "Records the pass, then SatDump makes the images. 137.9 MHz, DIG25 mode."},
+    "adsb":   {"name": "ADS-B aircraft 1090 MHz (built in)", "exe": None,
+               "help": "Tunes to 1090 MHz and tracks aircraft (callsign, position, altitude, speed). See the ADS-B tab."},
     "tetra":  {"name": "TETRA baseband out (UDP)", "exe": None,
                "help": "Streams 48 kHz complex IQ to UDP 127.0.0.1:42000 for a TETRA decoder."},
 }
@@ -195,6 +198,7 @@ class DecoderManager:
         self.images_dir = os.path.join(data_dir(), "images")
         self.status = "off"
         self.on_pager = None       # set by the radio: on_pager(line) -> Pager Messages tab
+        self.adsb = None           # set by the radio: the ADS-B engine (takes IQ, not audio)
 
     # ------------------------------------------------------------------
     def available(self):
@@ -311,6 +315,12 @@ class DecoderManager:
                 self.log("Recording Meteor LRPT pass (240 kS/s IQ). Press the decoder OFF "
                          "when the pass ends to make the pictures." +
                          ("" if exe else " SatDump not found – recording only."))
+            elif dec_id == "adsb":
+                if self.adsb is None:
+                    raise RuntimeError("ADS-B engine not available")
+                self.adsb.start()
+                self.log("ADS-B decoder running on 1090 MHz – needs a receiver running at 2 MS/s or more. "
+                         "Aircraft appear in the ADS-B tab.")
             elif dec_id == "tetra":
                 self.udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 port = int(self.settings.get("tetra_udp_port", 42000))
@@ -391,6 +401,8 @@ class DecoderManager:
         if self.udp:
             self.udp.close()
             self.udp = None
+        if self.active == "adsb" and self.adsb:
+            self.adsb.stop()
         if self.active:
             self.log("Decoder stopped")
         self.active = None
@@ -417,6 +429,11 @@ class DecoderManager:
         threading.Thread(target=run, daemon=True).start()
 
     # ------------------------------------------------------------------
+    def feed_iq(self, iq, fs):
+        """Decoders that work on the raw IQ stream (ADS-B) instead of demodulated audio."""
+        if self.active == "adsb" and self.adsb:
+            self.adsb.feed(iq, fs)
+
     def feed(self, out):
         """Called by the radio engine for every 50 ms block."""
         a = self.active

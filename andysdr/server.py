@@ -94,7 +94,7 @@ class Server:
                 payload = dict(payload, listeners=len(self.clients))
             frame = _ws_frame(json.dumps({"type": kind, "data": payload}).encode(), 1)
             for c in self.clients:
-                c.push(frame, droppable=(kind == "state"))
+                c.push(frame, droppable=(kind in ("state", "adsb")))
 
     # ---------------------------------------------------------------- HTTP
     async def handle(self, reader, writer):
@@ -137,6 +137,16 @@ class Server:
             fname = time.strftime("andysdr_pager_%Y%m%d_%H%M.csv")
             await self._send(writer, 200, data, "text/csv",
                              extra={"Content-Disposition": f'attachment; filename="{fname}"'})
+            return
+        if path == "/api/adsb.csv":
+            data = self.radio.adsb.tracker.export_csv(time.time()).encode("utf-8-sig")
+            fname = time.strftime("andysdr_aircraft_%Y%m%d_%H%M.csv")
+            await self._send(writer, 200, data, "text/csv",
+                             extra={"Content-Disposition": f'attachment; filename="{fname}"'})
+            return
+        if path == "/api/aircraft.json":              # same layout as dump1090 / readsb
+            data = json.dumps(self.radio.adsb.tracker.aircraft_json(time.time())).encode()
+            await self._send(writer, 200, data, "application/json")
             return
         if path.startswith("/images/"):
             await self._file(writer, self.images, path[len("/images/"):])
@@ -262,6 +272,7 @@ class Server:
             "schedule": r.scheduler.status(),
             "mesh": r.mesh.snapshot(), "mesh_history": r.mesh.history[-1500:],
             "pager": r.pager.snapshot(),
+            "adsb": r.adsb.snapshot(),
             "settings": {k: self.s[k] for k in ("scan_delay", "scan_dwell", "search_threshold_db",
                                                  "server_port", "require_password_local",
                                                  "deemphasis_us", "theme")},
@@ -409,6 +420,18 @@ class Server:
                 r.pager.set_alias(m["capcode"], m.get("name", ""))
             elif cmd == "pager_highlight":
                 r.pager.set_highlight(m["capcode"], bool(m.get("on", True)))
+            elif cmd == "adsb_start":
+                r.start_adsb()
+            elif cmd == "adsb_stop":
+                r.stop_adsb()
+            elif cmd == "adsb_clear":
+                r.adsb.clear()
+            elif cmd == "adsb_pos":
+                r.adsb.set_position(m.get("lat"), m.get("lon"))
+            elif cmd == "adsb_share":
+                r.adsb.set_share(bool(m.get("on")))
+            elif cmd == "adsb_option":
+                r.adsb.set_option(str(m.get("key", "")), m.get("value"))
             elif cmd == "auto_identify":
                 r.set_auto_identify(bool(m.get("on", True)))
             elif cmd == "schedule":

@@ -5,7 +5,7 @@ spectrum/waterfall, 1000 memory channels, a band search that finds every live tr
 RadioReference UK CSV import, digital/analogue decoding, weather pictures, and a built-in
 network server so any other PC, laptop, tablet or phone in the house can use the radio.
 
-**Latest: 1.3.1** – new **PAGER MESSAGES** tab: POCSAG and FLEX pages in a searchable table with capcode names, highlights, CSV export and daily logs. (1.3.0 added MeshCore messaging.)
+**Latest: 1.4.0** – new **ADS-B** tab: track aircraft on 1090 MHz with a live table and map, built in (no extra program). (1.3.1 added the PAGER MESSAGES tab, 1.3.0 MeshCore messaging.)
 
 ![logo](andysdr/web/logo.png)
 
@@ -22,7 +22,8 @@ network server so any other PC, laptop, tablet or phone in the house can use the
 | Auto ID | **Automatic signal identification**: AndySDR analyses whatever you're tuned to and works out what it is – DMR (spots the 30 ms TDMA bursts), P25, NXDN, dPMR, POCSAG/FLEX pagers, APRS, DTMF, SSTV, WEFAX, TETRA or analogue voice (with CTCSS tone) – then switches mode and starts the right decoder by itself. SSTV pictures are caught from their header. A decoder you choose yourself always wins. |
 | Scheduler | Timed captures for **WEFAX charts, SSTV (ISS events), Meteor-M passes** or plain recordings: pick a station, start time, length, days of the week or a single date. AndySDR tunes, decodes, then puts the radio back how it was. Quick picks for Northwood WEFAX, ISS/2 m/HF SSTV and Meteor-M. |
 | Memory | 10 banks × 100 channels. RadioReference CSV / copied-table import (UK or any country), talkgroup lists, export to CSV. |
-| Decoders | DMR, P25 Phase 1/2, NXDN, dPMR, YSF, M17 (via DSD-FME) · POCSAG & FLEX pagers, APRS, DTMF, ZVEI, EAS (via multimon-ng) · **WEFAX weather charts and SSTV pictures (Martin, Scottie, Robot, PD modes) built in** · Meteor-M LRPT satellite pictures (via SatDump) · TETRA baseband out over UDP. |
+| Decoders | DMR, P25 Phase 1/2, NXDN, dPMR, YSF, M17 (via DSD-FME) · POCSAG & FLEX pagers, APRS, DTMF, ZVEI, EAS (via multimon-ng) · **ADS-B aircraft (1090 MHz), WEFAX weather charts and SSTV pictures (Martin, Scottie, Robot, PD modes) built in** · Meteor-M LRPT satellite pictures (via SatDump) · TETRA baseband out over UDP. |
+| ADS-B aircraft | **ADS-B** tab: press **▶ Start ADS-B** and AndySDR tunes to 1090 MHz and decodes Mode S / ADS-B itself (any receiver running at 2 MS/s or more – RSP2pro, RTL-SDR, Airspy, HackRF…). Live **aircraft table** (callsign, hex, airline, country, altitude, speed, heading, climb, squawk, distance, messages, last seen – click a heading to sort, filter by text) and a **map** with plane icons pointing the way they fly, height colours, trails, range rings and click-for-details; optional street map. Emergency squawks (7500/7600/7700) flash red. Enter your position for distance/bearing and faster fixes. Daily CSV log, CSV export, and an optional feed to other programs (SBS port 30003, raw port 30002, dump1090-style `aircraft.json`). Works from remote PCs and phones too. |
 | MeshCore messaging | **MESHCORE** tab: text chat over the MeshCore LoRa mesh through a MeshCore companion board (Heltec V3/V4, RAK4631, T-Deck, T-Beam, Xiao…) on USB, Wi-Fi or Bluetooth. Public and #hashtag channels, private channels, direct messages with delivery ticks, node list with last-heard and hops, adverts, UK/EU preset, unread badges, message history, and **Watch on SDR** to see the packets on the waterfall. Works from remote PCs and phones too. |
 | Pager messages | **PAGER MESSAGES** tab lists every POCSAG (512/1200/2400) and FLEX page as a table: time, frequency, protocol, capcode, your name for the capcode, type (text / numeric / tone only) and the message, newest first. Search, filter by protocol or type, highlight capcodes (with a pop-up notice when they are paged), export to CSV. Every page is also logged to a daily CSV file. Repeats within a minute are shown once. A badge on the tab counts new messages. Works the same from remote PCs, tablets and phones. |
 | Remote | Every copy of AndySDR is also a server (port 8045). Open `http://<pc-name-or-ip>:8045` in a browser on any device on the network, enter the password, and you get the full radio with audio and waterfall. |
@@ -86,6 +87,35 @@ press **Import CSV**. Frequency, Alpha Tag, Description, Mode, Tag and Tone colu
 FMN/FM/AM/DMR/P25/NXDN/TETRA/POCSAG modes are mapped and the right decoder is attached.
 `samples/radioreference_uk_example.csv` shows the format.
 
+## ADS-B aircraft tracking
+
+1. You need an antenna that works at 1090 MHz – a 6.9 cm whip (quarter wave) or a proper 1090 MHz collinear/ADS-B
+   antenna, as high and clear as you can get it. VHF/airband antennas are poor at 1090 MHz. On an SDRplay RSP use the
+   **Antenna A / B** (50 Ω) socket, not Hi-Z. A 1090 MHz filter/LNA close to the antenna helps a lot with long cables.
+2. Open the **ADS-B** tab and press **▶ Start ADS-B (1090 MHz)**. AndySDR tunes to 1090 MHz, centres the receiver
+   exactly on it (if the receiver was running below 2 MS/s it is switched to 2.4 MS/s) and starts the built-in decoder.
+   Turn **RF GAIN** up fairly high; if you see plenty of messages but few aircraft, turn it down a little.
+3. Aircraft appear within seconds. Type your **My position** (latitude/longitude in decimal degrees, e.g. `51.5074`, `-0.1278`)
+   and press **Set** – you then get range rings, each aircraft's distance and bearing, and positions decode from a single
+   message instead of needing a pair.
+4. **Stop** (or tuning anywhere else) takes you back to normal scanning.
+
+| Item | What it shows |
+|---|---|
+| Table | Callsign · hex (ICAO) address · airline (from the callsign) or country (from the address) · altitude · speed · heading · climb rate · squawk · distance from you · messages · time since last heard. Click a column title to sort, click a row to highlight it; faded = not heard for 30 s; rows disappear after 2 minutes. |
+| Map | Plane icons point along their track and are coloured by height (orange low → green → blue high), with trails behind. Drag = pan, wheel / + − = zoom, **⌖ Fit** = show everything, click a plane for its details. **Street map** adds OpenStreetMap tiles (needs internet; the radar-style map works offline). |
+| Alerts | Squawk 7500 (hijack), 7600 (radio failure) and 7700 (emergency) flash red on the map and table and pop up a warning. |
+| Units | Aviation (ft · kt · NM) or metric (m · km/h · km) – remembered per computer. |
+| Log / export | `%APPDATA%\AndySDR\adsb\adsb_YYYY-MM-DD.csv` gets one line per aircraft every 30 s; **Export CSV** saves the current list. |
+| Sharing | In **REMOTE & SETTINGS** tick *Send the ADS-B feed over the network* to let other programs use AndySDR as their receiver: **SBS/BaseStation on TCP 30003**, **raw AVR on TCP 30002**. `http://<pc>:8045/api/aircraft.json?token=<password>` is a dump1090-style list. |
+
+How it works: the radio thread passes the raw samples to a decoder thread that builds a 2 MS/s amplitude stream, finds Mode S
+preambles (at two half-sample phases so no frame falls between samples), checks the 24-bit CRC (single-bit errors in
+ADS-B frames from known aircraft are repaired) and decodes identification, airborne/surface position (CPR), altitude,
+velocity, squawk and emergency state. Typical decode rate in the self-test is 97–98 % of simulated frames at any sample rate from 2 to 10 MS/s.
+With the **Simulator** receiver you get ten practice aircraft around 51.5 N, 1.0 W (or around your own position).
+Self-test: `python tests/test_adsb.py` (decoder) and `python tests/test_radio_adsb.py` (whole engine on the simulator).
+
 ## Pager messages (POCSAG / FLEX)
 
 1. Tune a pager frequency in **DIG** mode. In the UK most pager traffic is between about 153.0 and 153.5 MHz –
@@ -129,7 +159,7 @@ authorised to receive – see *Legal* below.
 
 ## Where things are stored
 
-`%APPDATA%\AndySDR\` – `settings.json` (also holds capcode names and highlights), `memory.json`, `meshcore_messages.jsonl`, `images\`, `recordings\`, `pager\` (daily pager message logs), `logs\andysdr.log`.
+`%APPDATA%\AndySDR\` – `settings.json` (also holds capcode names, highlights and your ADS-B position), `memory.json`, `meshcore_messages.jsonl`, `images\`, `recordings\`, `pager\` (daily pager message logs), `adsb\` (daily aircraft position logs), `logs\andysdr.log`.
 
 ## Legal (UK)
 
@@ -148,6 +178,9 @@ andysdr/sdrplay.py     native SDRplay API 3.x backend
 andysdr/decoders.py    DSD-FME / multimon-ng / SatDump / TETRA plumbing
 andysdr/wefax.py       built-in weather fax decoder
 andysdr/pager.py       POCSAG/FLEX message parser, capcode names, daily pager logs
+andysdr/adsb.py        ADS-B / Mode S demodulator, aircraft tracker, SBS + raw feeds
+andysdr/adsb_sim.py    ADS-B message encoder + simulated air traffic (Simulator receiver, tests)
+tests/                 decoder and whole-engine self-tests
 andysdr/memory.py      memory banks + RadioReference import
 andysdr/meshlink.py    MeshCore messaging through a companion board (USB / Wi-Fi / Bluetooth)
 andysdr/server.py      network server (HTTP + WebSocket, password protected)

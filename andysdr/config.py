@@ -6,7 +6,7 @@ import sys
 import threading
 
 APP_NAME = "AndySDR"
-VERSION = "1.3.1"
+VERSION = "1.4.0"
 
 
 def app_dir():
@@ -75,6 +75,12 @@ DEFAULTS = {
     "pager_aliases": {},          # capcode -> name shown in the Pager Messages tab
     "pager_highlight": [],        # capcodes to highlight (and pop up a notice for)
     "pager_log": True,            # write pager messages to %APPDATA%\\AndySDR\\pager\\pager_YYYY-MM-DD.csv
+    "adsb_lat": None,             # receiver position (decimal degrees) - gives distance/bearing and faster fixes
+    "adsb_lon": None,
+    "adsb_log": True,             # one CSV line per aircraft every 30 s in %APPDATA%\\AndySDR\\adsb
+    "adsb_share": False,          # re-broadcast as SBS (30003) and raw AVR (30002) for other programs
+    "adsb_sbs_port": 30003,
+    "adsb_raw_port": 30002,
 }
 
 

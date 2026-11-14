@@ -151,6 +151,7 @@
     <button class="tab" data-tab="act">LIVE ACTIVITY / SEARCH</button>
     <button class="tab" data-tab="dec">DECODERS</button>
     <button class="tab" data-tab="pag">PAGER MESSAGES <span class="tab-badge" id="pagBadge" hidden>0</span></button>
+    <button class="tab" data-tab="adsb">ADS-B <span class="tab-badge" id="adsbBadge" hidden>0</span></button>
     <button class="tab" data-tab="img">WEATHER IMAGES</button>
     <button class="tab" data-tab="bp">UK BAND PLAN</button>
     <button class="tab" data-tab="sch">SCHEDULER</button>
@@ -306,6 +307,46 @@
     <div class="muted small" id="pagLogDir"></div>
   </div>
 
+  <!-- ADS-B AIRCRAFT -->
+  <div class="tabpage" id="tab-adsb">
+    <div class="row wrapline" data-help="adsb">
+      <button class="btn primary" id="adsbStart" title="Tunes to 1090 MHz and starts decoding aircraft">▶ Start ADS-B (1090 MHz)</button>
+      <button class="btn" id="adsbStop">■ Stop</button>
+      <span class="adsb-stat" id="adsbStat"></span>
+      <span class="grow"></span>
+      <a class="btn" id="adsbExport" href="#" download>Export CSV</a>
+      <button class="btn danger" id="adsbClear">Clear</button>
+    </div>
+    <div class="row wrapline adsb-opts" data-help="adsbopts">
+      <label>My position <input class="inp" id="adsbLat" placeholder="lat e.g. 51.5074" style="width:9em" inputmode="decimal">
+        <input class="inp" id="adsbLon" placeholder="lon e.g. -0.1278" style="width:9em" inputmode="decimal"></label>
+      <button class="btn sm" id="adsbPosSet">Set</button>
+      <button class="btn sm" id="adsbPosGps" title="Use this device's location (the browser asks permission)">📍 Use my location</button>
+      <label>Units <select id="adsbUnits"><option value="av">ft · kt · NM</option><option value="met">m · km/h · km</option></select></label>
+      <label><input type="checkbox" id="adsbTiles"> Street map <span class="muted small">(needs internet)</span></label>
+      <label><input type="checkbox" id="adsbTrails" checked> Trails</label>
+      <label><input type="checkbox" id="adsbLabels" checked> Labels</label>
+      <label><input type="checkbox" id="adsbPosOnly"> Only with position</label>
+      <input class="inp" id="adsbFind" type="search" placeholder="Find callsign, hex, airline" style="width:14em">
+    </div>
+    <div class="adsb-wrap">
+      <div class="adsb-map" data-help="adsbmap">
+        <canvas id="adsbMap"></canvas>
+        <div class="adsb-maptools"><button class="btn sm" id="adsbFit" title="Zoom to show all aircraft">⌖ Fit</button>
+          <button class="btn sm" id="adsbZoomIn">+</button><button class="btn sm" id="adsbZoomOut">−</button></div>
+        <div class="adsb-maphint muted small">drag = pan · wheel = zoom · click an aircraft for details</div>
+        <div class="adsb-detail" id="adsbDetail" hidden></div>
+      </div>
+      <div class="tablewrap adsbtab" data-help="adsbtable">
+        <table class="grid" id="adsbTable">
+          <thead><tr><th data-k="flight">Callsign</th><th data-k="icao">Hex</th><th data-k="airline">Airline / country</th><th data-k="alt" id="thAlt">Alt</th><th data-k="gs" id="thGs">Speed</th><th data-k="trk">Hdg</th><th data-k="vr" id="thVr">V/S</th><th data-k="squawk">Sqk</th><th data-k="dist" id="thDist">Dist</th><th data-k="msgs">Msgs</th><th data-k="seen">Seen</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="muted small" id="adsbNote"></div>
+  </div>
+
   <!-- IMAGES -->
   <div class="tabpage" id="tab-img">
     <div class="row"><b>Weather fax &amp; satellite pictures</b><span class="grow"></span>
@@ -413,6 +454,12 @@
         </div>
         <label class="local-only"><input type="checkbox" id="reqLocal"> Ask for the password on this PC too</label>
         <label><input type="checkbox" id="myAudio" checked> Play audio on this computer</label>
+      </div>
+      <div class="card" data-help="adsbshare">
+        <h3>Share aircraft (ADS-B) with other programs</h3>
+        <label><input type="checkbox" id="adsbShare"> Send the ADS-B feed over the network</label>
+        <p class="small muted" id="adsbShareInfo">SBS/BaseStation text on port 30003 and raw AVR on port 30002 – for Virtual Radar Server, tar1090, PlanePlotter, FlightAware/FR24 feeders and similar. Windows may ask to allow AndySDR through the firewall. Keep it on your home network.</p>
+        <label><input type="checkbox" id="adsbLog" checked> Log aircraft positions to a CSV file each day</label>
       </div>
       <div class="card">
         <h3>Scanner settings</h3>

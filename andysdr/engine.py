@@ -9,6 +9,7 @@ import wave
 import numpy as np
 
 from . import devices
+from .adsb import ADSB_FREQ, Adsb
 from .autodetect import SignalClassifier
 from .config import data_dir
 from .decoders import DecoderManager
@@ -36,6 +37,8 @@ class Radio:
         self.spec = Spectrum(2048)
         self.decoders = DecoderManager(settings, self._emit)
         self.pager = PagerStore(settings, self._emit)
+        self.adsb = Adsb(settings, self._emit)
+        self.decoders.adsb = self.adsb
         self.decoders.on_pager = lambda line: self.pager.add_line(
             line, self.freq, self.channel[2].get("name", "") if self.channel else "")
         self.running = False
@@ -102,6 +105,7 @@ class Radio:
         if self.thread:
             self.thread.join(timeout=3)
         self.decoders.stop()
+        self.adsb.shutdown()
         from .decoders import stop_pulse
         stop_pulse()
         if self.dev:
@@ -158,6 +162,8 @@ class Radio:
             dev = devices.SimDevice()
             dev.open()
             self.dev = dev
+        if isinstance(self.dev, devices.SimDevice):
+            self.dev.ref_fn = self.adsb.tracker.ref
         self.rx = Receiver(self.dev.sample_rate)
         self.rx.deemph_us = self.s["deemphasis_us"]
         self.rx.set_mode(self.mode)
@@ -177,11 +183,15 @@ class Radio:
 
     # ------------------------------------------------------------------ tuning
     def _hw_center_for(self, f, fs):
+        if self.decoders.active == "adsb":
+            return int(f)                     # ADS-B uses the whole 2 MHz around 1090 MHz
         # keep the wanted signal away from the DC spike at the centre
         return int(f + fs * 0.25)
 
     def _tune(self, f, mode=None, force=False):
         f = int(f)
+        if self.decoders.active == "adsb" and abs(f - ADSB_FREQ) > 1000000:
+            self.decoders.stop()              # tuned away from 1090 MHz: the aircraft decoder is no use here
         if abs(f - self.freq) > 1000:
             self._auto_reset()
         fs = self.dev.sample_rate if self.dev else 2400000
@@ -192,7 +202,7 @@ class Radio:
         self.freq = f
         if self.dev:
             off = f - self.dev.center
-            if force or abs(off) > fs * 0.42 or abs(off) < 15000:
+            if force or abs(off) > fs * 0.42 or (abs(off) < 15000 and self.decoders.active != "adsb"):
                 self.dev.set_center(self._hw_center_for(f, fs))
                 self.discard = 2
                 self.spec_fresh = False
@@ -227,6 +237,8 @@ class Radio:
         self.call(do)
 
     def _auto_feed(self, out):
+        if self.decoders.active == "adsb":
+            return
         if not self.s.get("auto_identify", True) or self.job or self.scan["state"] not in ("manual", "hold"):
             return
         if not self.sq_open:
@@ -445,7 +457,42 @@ class Radio:
 
     def set_decoder(self, dec_id, sub="auto"):
         def do():
-            self.decoders.start(dec_id, sub)
+            if dec_id == "adsb":
+                self._begin_adsb()
+            else:
+                was_adsb = self.decoders.active == "adsb"
+                self.decoders.start(dec_id, sub)
+                if was_adsb:
+                    self._tune(self.freq, force=True)       # back to the normal off-centre tuning
+            self._push_state(True)
+        self.call(do)
+
+    # ------------------------------------------------------------------ ADS-B
+    def _begin_adsb(self):
+        """Tune to 1090 MHz, centre the hardware exactly on it and start the aircraft decoder."""
+        self._stop_scan()
+        self._auto_reset()
+        self.channel = None
+        if self.dev and self.dev.sample_rate < 2000000:
+            self.s["sample_rate"] = 2400000
+            self._open_device(self.dev.key)
+        if not self.decoders.start("adsb"):
+            return
+        self.freq = ADSB_FREQ
+        self.dev.set_center(ADSB_FREQ)
+        self.discard = 3
+        self.spec_fresh = False
+        self._emit("event", {"level": "info", "text": "ADS-B: tuned to 1090 MHz"})
+        self._emit("device", self.device_info())
+
+    def start_adsb(self):
+        self.call(lambda: (self._begin_adsb(), self._push_state(True)))
+
+    def stop_adsb(self):
+        def do():
+            if self.decoders.active == "adsb":
+                self.decoders.stop()
+                self._tune(self.freq, force=True)
             self._push_state(True)
         self.call(do)
 
@@ -464,7 +511,11 @@ class Radio:
         self.channel = (bank, ch, c)
         self._tune(c["freq"], c.get("mode"))
         dec = c.get("decoder", "")
-        if dec and dec != self.decoders.active and self.s.get("auto_decoder", True):
+        if dec == "adsb":
+            # only when the user recalled the channel – a scan must not be cancelled by a 1090 MHz memory
+            if self.s.get("auto_decoder", True) and self.scan["state"] == "manual" and self.decoders.active != "adsb":
+                self._begin_adsb()
+        elif dec and dec != self.decoders.active and self.s.get("auto_decoder", True):
             self.decoders.start(dec, "auto")
 
     def store(self, bank, ch=None, name=""):
@@ -793,7 +844,9 @@ class Radio:
                 last_pri = time.time()
                 self._priority_check(spec_db)
 
-            if produce:
+            if self.decoders.active == "adsb":
+                self.decoders.feed_iq(iq, fs)           # aircraft decoder works on the raw samples; no audio
+            elif produce:
                 try:
                     self._auto_feed(out)
                 except Exception:
