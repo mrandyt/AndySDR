@@ -85,6 +85,8 @@ function onJSON(m) {
     case "pager": addPager(d); break;
     case "pager_cfg": PAG.cfg = d; renderPager(); break;
     case "pager_all": PAG.msgs = d.messages || []; PAG.cfg = d; renderPager(); break;
+    case "update": onUpdate(d); break;
+    case "update_progress": UPD.progress = d.progress; renderUpdateBar(); break;
     case "event": toast(d.text, d.level); if (d.level === "error") decLine("! " + d.text); break;
     case "import_result":
       $("csvResult").textContent = `Imported ${d.added} channels` + (d.talkgroups ? `, ${d.talkgroups} talkgroups` : "") +
@@ -109,6 +111,8 @@ function onHello(h) {
   $("adsbExport").href = `/api/adsb.csv?token=${encodeURIComponent(token)}`;
   if (h.adsb) adsbHello(h.adsb);
   const st = h.settings || {};
+  $("updAuto").checked = st.update_check !== false; $("updDl").checked = !!st.update_auto_download;
+  if (h.update) onUpdate(h.update, true);
   $("setDelay").value = st.scan_delay; $("setDwell").value = st.scan_dwell;
   $("setDeemph").value = String(st.deemphasis_us || 50);
   $("reqLocal").checked = !!st.require_password_local;
@@ -1390,6 +1394,91 @@ function toast(text, level = "info") {
   $("toasts").appendChild(t); setTimeout(() => t.remove(), level === "error" ? 9000 : 4500);
 }
 
+/* ======================================================= updates */
+let UPD = { state: "idle", progress: 0 };
+const updDismissed = () => sessionStorage.getItem("andysdr_upd_later");
+function onUpdate(u, hello = false) {
+  const prev = UPD.state;
+  UPD = Object.assign({}, u);
+  $("updCur").textContent = "v" + u.current;
+  const line = $("updLine");
+  $("updShow").hidden = !["available", "downloading", "ready"].includes(u.state);
+  switch (u.state) {
+    case "checking": line.textContent = "– checking…"; break;
+    case "uptodate": line.textContent = "– you are up to date"; break;
+    case "available": line.textContent = `– version ${u.latest} is available` + (u.skipped ? " (skipped)" : ""); break;
+    case "downloading": line.textContent = `– downloading ${u.latest}…`; break;
+    case "ready": line.textContent = `– ${u.latest} downloaded, ready to install`; break;
+    case "installing": line.textContent = "– installing…"; break;
+    case "error": line.textContent = "– " + u.error; break;
+    default: line.textContent = "";
+  }
+  if (u.state === "uptodate" && u.manual && prev === "checking") toast("AndySDR is up to date (v" + u.current + ")");
+  if (u.state === "error" && u.manual && prev === "checking") toast("Update check failed: " + u.error, "error");
+  // Pop up for a new version unless it was skipped or "remind me later" was pressed in this session;
+  // pressing Check always shows it. A freshly finished download always asks about installing.
+  const later = updDismissed() === u.latest;
+  let show = false;
+  if (u.state === "available") show = (!u.skipped || u.manual) && (!later || u.manual);
+  else if (u.state === "ready") show = prev === "downloading" || !later;
+  else if (!$("updateModal").hidden) show = ["downloading", "installing", "error"].includes(u.state);
+  if (show) renderUpdateModal();
+  if (["uptodate", "idle", "checking"].includes(u.state)) $("updateModal").hidden = true;
+}
+function renderUpdateBar() {
+  $("updBar").style.width = Math.round((UPD.progress || 0) * 100) + "%";
+  if (UPD.state === "downloading") $("updMsg").textContent = `Downloading AndySDR ${UPD.latest}… ${Math.round((UPD.progress || 0) * 100)}%`;
+}
+function renderUpdateModal() {
+  const u = UPD, go = $("updGo");
+  $("updateModal").hidden = false;
+  const mb = u.size ? ` (${(u.size / 1048576).toFixed(0)} MB)` : "";
+  $("updNotes").textContent = u.notes || "";
+  $("updErr").textContent = u.state === "error" ? u.error : "";
+  $("updBarWrap").hidden = !["downloading", "ready"].includes(u.state);
+  $("updBar").style.width = Math.round((u.progress || 0) * 100) + "%";
+  $("updLater").hidden = $("updSkip").hidden = ["downloading", "installing"].includes(u.state);
+  $("updSkip").hidden = $("updSkip").hidden || u.state === "ready";
+  go.hidden = false; go.disabled = false;
+  const remote = !isLocal;
+  switch (u.state) {
+    case "available":
+      $("updTitle").textContent = "Update available";
+      if (u.can_install) {
+        $("updMsg").textContent = `AndySDR ${u.latest} is available – you have ${u.current}. Download${mb} and install it now?`;
+        go.textContent = "Download & install"; go.onclick = () => send({ cmd: "update_download" });
+      } else {
+        $("updMsg").textContent = `AndySDR ${u.latest} is available – you have ${u.current}.` +
+          (u.mode === "source" ? " This copy runs from source, so update it with git pull or download the new release." : " The download could not be found – open the release page.");
+        go.textContent = "Open release page"; go.onclick = () => { window.open(u.url, "_blank", "noopener"); };
+      }
+      break;
+    case "downloading":
+      $("updTitle").textContent = "Downloading update"; renderUpdateBar(); go.hidden = true; break;
+    case "ready":
+      $("updTitle").textContent = "Ready to install";
+      $("updMsg").textContent = `AndySDR ${u.latest} has been downloaded and checked. AndySDR will close, update itself and restart` +
+        (remote ? " on the radio PC (this screen reconnects in a few seconds)" : "") + ". Install now?";
+      go.textContent = "Install & restart"; go.onclick = () => { go.disabled = true; send({ cmd: "update_install" }); };
+      $("updLater").textContent = "Not now"; break;
+    case "installing":
+      $("updTitle").textContent = "Updating…"; $("updMsg").textContent = "AndySDR is closing to install the update and will restart by itself.";
+      $("updBarWrap").hidden = true; go.hidden = true; break;
+    case "error":
+      $("updTitle").textContent = "Update problem"; $("updMsg").textContent = "The update could not be completed.";
+      go.textContent = "Try again"; go.onclick = () => send({ cmd: "update_check" }); break;
+    default: break;
+  }
+  if (u.state !== "ready") $("updLater").textContent = "Remind me later";
+}
+$("updLater").onclick = () => { sessionStorage.setItem("andysdr_upd_later", UPD.latest || ""); $("updateModal").hidden = true; };
+$("updClose").onclick = () => { sessionStorage.setItem("andysdr_upd_later", UPD.latest || ""); $("updateModal").hidden = true; };
+$("updSkip").onclick = () => { send({ cmd: "update_skip" }); $("updateModal").hidden = true; toast(`Version ${UPD.latest} skipped. Check for updates now brings it back.`); };
+$("updCheck").onclick = () => send({ cmd: "update_check" });
+$("updShow").onclick = () => { renderUpdateModal(); };
+$("updAuto").onchange = () => send({ cmd: "settings", values: { update_check: $("updAuto").checked }, quiet: true });
+$("updDl").onchange = () => send({ cmd: "settings", values: { update_auto_download: $("updDl").checked }, quiet: true });
+
 /* ======================================================= auto-identify */
 const SIG_DIGITAL = /DMR|P25|NXDN|dPMR|Digital|Pager|APRS|DTMF|TETRA/;
 function renderSignal() {
@@ -1672,6 +1761,7 @@ const HELP = {
   adsb: ["ADS-B aircraft (1090 MHz)", "Tracks aircraft that broadcast ADS-B (nearly every airliner and many smaller aircraft). Press ▶ Start ADS-B: AndySDR tunes to 1090 MHz, centres the receiver exactly on it and decodes the aircraft messages itself – no other program is needed. The table shows callsign, hex address (ICAO), airline and country (from the callsign/address), altitude, speed, heading, climb rate, squawk, distance from you and how long ago it was heard; click a heading to sort. The map shows each aircraft as a plane pointing the way it is flying, coloured by height (orange = low, green = middle, blue = high) with a trail behind it. Squawks 7500, 7600 and 7700 flash red and pop up a warning. You need a receiver running at 2 MS/s or more (any SDRplay RSP, RTL-SDR, Airspy, HackRF) and an antenna that works at 1090 MHz – a short 6.9 cm whip or a proper 1090 MHz collinear, as high and clear of buildings as you can get it. Use the RSP's Antenna A/B (50 Ω) socket, not Hi-Z. Turn RF GAIN up fairly high; if you see lots of messages but few aircraft, turn it down a little. Press Stop (or tune somewhere else) to go back to normal scanning. With the Simulator receiver you get ten practice aircraft."],
   adsbopts: ["ADS-B options", "My position: type your latitude/longitude (decimal degrees, e.g. 51.5074 and -0.1278) or press 📍 Use my location. With it set the map shows range rings, the table shows each aircraft's distance, and positions come out faster and more reliably. Units: aviation (feet, knots, nautical miles) or metric. Street map downloads OpenStreetMap tiles from the internet (the radar-style map works offline). Trails and Labels switch the track lines and text on the map; 'Only with position' hides aircraft that have not sent a position yet; Find dims the others on the map."],
   adsbmap: ["ADS-B map", "Drag to move, mouse wheel or +/− to zoom, double-click to zoom in on a spot, ⌖ Fit to show everything. Click an aircraft for its details; click it again (or ✕) to let go. Rings are 'distance from you' (set My position first)."],
+  updates: ["Updates", "AndySDR looks for a newer version on its GitHub releases page when it starts and every 12 hours. When one is found a pop-up shows what is new and asks what to do: Download & install, Remind me later, or Skip this version. After the download (checked against GitHub's SHA-256) AndySDR asks again before it installs and restarts itself. 'Check for updates now' looks straight away, even for a version you skipped. Tick 'Download new versions in the background' to have the file ready so installing takes seconds. If AndySDR was installed with the Setup program the installer runs quietly in the background; a portable (unzipped) copy copies the new files over the old ones; a copy run from Python source just opens the releases page. Your settings, memories and pictures in %APPDATA%\\AndySDR are never touched. Updating restarts the radio PC's program, so remote screens reconnect by themselves a few seconds later."],
   adsbshare: ["Share aircraft feed", "Tick to let other programs on your network use AndySDR as an ADS-B receiver: SBS/BaseStation messages on TCP port 30003 and raw AVR (*8D…;) on port 30002. Point Virtual Radar Server, tar1090/readsb, PlanePlotter or a flight-tracking-site feeder at this PC and those ports. The second box turns the daily CSV position log on or off."],
   adsbtable: ["Aircraft list", "One row per aircraft heard in the last two minutes (faded = not heard for 30 s). Click a column title to sort, click a row to highlight it on the map. Callsign and airline come from the aircraft's own identification message, so a new aircraft may show only its hex address for a few seconds. Share the live feed with other programs (Virtual Radar Server, tar1090, PlanePlotter …) from REMOTE & SETTINGS; a dump1090-style aircraft.json is at /api/aircraft.json?token=<password>."],
   pager: ["Pager messages", "Every POCSAG and FLEX page decoded by the pager decoder appears here as a row, newest at the top: time, frequency, protocol and speed, capcode (the pager's address, with the POCSAG function number), your name for it, the type (Alpha text, Numeric or Tone only) and the message. Click ☆ to highlight a capcode – its rows are coloured and a notice pops up whenever it is paged. Click + name to give a capcode a name, click a capcode to show only that one, click a frequency to tune there. Search and the filters narrow the list. Export CSV saves the list; every message is also logged to a CSV file per day in %APPDATA%\\AndySDR\\pager. The same page repeated within a minute is shown once. The tab shows a count of new messages while you are on another tab."],
@@ -1693,7 +1783,7 @@ function openHelp() {
   <h3>KNOBS &amp; DISPLAY</h3>${ctl(["volume", "squelch", "gain", "power", "lcd"])}
   <h3>KEYPAD &amp; FUNCTION KEYS</h3>${ctl(["k_scan", "k_man", "k_srch", "k_pgm", "k_lo", "k_pri", "k_mode", "k_step", "k_bank", "k_dly", "k_rec", "k_dec", "k_dot", "k_e", "k_arrows", "k_clr"])}
   <p class="small">Keyboard: digits and <code>.</code> type, <code>Enter</code> tunes, <code>↑ ↓</code> step, <code>S</code> scan, <code>M</code> manual, <code>P</code> program, <code>L</code> lockout, <code>H</code> help, <code>Esc</code> clear.</p>
-  <h3>SCREENS</h3>${ctl(["scope", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "receiver", "remote", "theme", "conn"])}
+  <h3>SCREENS</h3>${ctl(["scope", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "updates", "receiver", "remote", "theme", "conn"])}
   <h3>DECODER PROGRAMS</h3>
   <p>AndySDR has WEFAX and SSTV built in (SSTV: Martin, Scottie, Robot and PD modes – ISS 145.800 NFM, 2 m 144.500 NFM, 20 m 14.230 USB). DSD-FME, multimon-ng and SatDump now come bundled in the <code>decoders</code> folder next to <code>AndySDR.exe</code>. If one shows ✖ in the DECODERS tab, press <b>⬇ Download missing decoders</b> and AndySDR fetches it from GitHub into <code>%APPDATA%\\AndySDR\\decoders</code>. You can also unzip your own copy into either folder (any sub-folder is fine – AndySDR finds the .exe):</p>
   <dl><dt>DSD-FME</dt><dd>github.com/lwvmobile/dsd-fme – DMR, P25 1/2, NXDN, dPMR, YSF, M17. AndySDR feeds it like SDR++'s network sink (TCP 127.0.0.1:7355, 48 kHz); DSD-FME plays decoded voice on your speakers itself (AndySDR starts the PulseAudio sound server that comes with it).</dd>

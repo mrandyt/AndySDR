@@ -6,7 +6,8 @@ import sys
 import threading
 
 APP_NAME = "AndySDR"
-VERSION = "1.4.0"
+VERSION = "1.5.0"
+GITHUB_REPO = "mrandyt/AndySDR"   # where updates are published (GitHub Releases)
 
 
 def app_dir():
@@ -81,6 +82,10 @@ DEFAULTS = {
     "adsb_share": False,          # re-broadcast as SBS (30003) and raw AVR (30002) for other programs
     "adsb_sbs_port": 30003,
     "adsb_raw_port": 30002,
+    "update_check": True,         # look for a newer AndySDR on GitHub (start-up + every 12 h) and ask before doing anything
+    "update_auto_download": False,  # download in the background, then ask before installing
+    "update_skip": "",            # version the user chose to skip
+    "update_last_check": 0,
 }
 
 

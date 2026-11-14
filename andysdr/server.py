@@ -17,6 +17,7 @@ import time
 import urllib.parse
 
 from .config import VERSION, data_dir, resource_dir
+from .updater import Updater
 
 log = logging.getLogger("andysdr.server")
 WS_GUID = b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -71,6 +72,7 @@ class Server:
         self.images = os.path.join(data_dir(), "images")
         self.fail_times = {}
         radio.add_listener(self._from_radio)
+        self.updater = Updater(settings, self._from_radio, shutdown=radio.stop)
 
     # ---------------------------------------------------------------- radio -> clients
     def _from_radio(self, kind, payload):
@@ -94,7 +96,7 @@ class Server:
                 payload = dict(payload, listeners=len(self.clients))
             frame = _ws_frame(json.dumps({"type": kind, "data": payload}).encode(), 1)
             for c in self.clients:
-                c.push(frame, droppable=(kind in ("state", "adsb")))
+                c.push(frame, droppable=(kind in ("state", "adsb", "update_progress")))
 
     # ---------------------------------------------------------------- HTTP
     async def handle(self, reader, writer):
@@ -273,9 +275,11 @@ class Server:
             "mesh": r.mesh.snapshot(), "mesh_history": r.mesh.history[-1500:],
             "pager": r.pager.snapshot(),
             "adsb": r.adsb.snapshot(),
+            "update": self.updater.status(),
             "settings": {k: self.s[k] for k in ("scan_delay", "scan_dwell", "search_threshold_db",
                                                  "server_port", "require_password_local",
-                                                 "deemphasis_us", "theme")},
+                                                 "deemphasis_us", "theme",
+                                                 "update_check", "update_auto_download")},
             "server": {"addresses": lan_addresses(), "port": self.s["server_port"],
                        "password": self.s["password"] if self._is_local(c.peer) else "",
                        "host": socket.gethostname()},
@@ -376,7 +380,7 @@ class Server:
             elif cmd == "settings":
                 allowed = {"scan_delay": float, "scan_dwell": float, "search_threshold_db": float,
                            "require_password_local": bool, "deemphasis_us": int, "theme": str,
-                           "password": str}
+                           "password": str, "update_check": bool, "update_auto_download": bool}
                 for k, v in m.get("values", {}).items():
                     if k in allowed:
                         if k == "password" and (not self._is_local(c.peer) or len(str(v)) < 4):
@@ -432,6 +436,17 @@ class Server:
                 r.adsb.set_share(bool(m.get("on")))
             elif cmd == "adsb_option":
                 r.adsb.set_option(str(m.get("key", "")), m.get("value"))
+            elif cmd == "update_check":
+                self.updater.check(manual=True)
+            elif cmd == "update_download":
+                self.updater.download()
+            elif cmd == "update_install":
+                self.updater.install()
+            elif cmd == "update_skip":
+                self.updater.skip()
+            elif cmd == "update_open":
+                if self._is_local(c.peer):
+                    self.updater.open_page()
             elif cmd == "auto_identify":
                 r.set_auto_identify(bool(m.get("on", True)))
             elif cmd == "schedule":
@@ -463,6 +478,7 @@ class Server:
         port = int(self.s["server_port"])
         srv = await asyncio.start_server(self.handle, host, port, limit=8 * 1024 * 1024)
         log.info("AndySDR server on http://%s:%d  (LAN: %s)", host, port, lan_addresses())
+        self.updater.start()
         async with srv:
             await srv.serve_forever()
 

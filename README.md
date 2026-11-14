@@ -5,7 +5,7 @@ spectrum/waterfall, 1000 memory channels, a band search that finds every live tr
 RadioReference UK CSV import, digital/analogue decoding, weather pictures, and a built-in
 network server so any other PC, laptop, tablet or phone in the house can use the radio.
 
-**Latest: 1.4.0** – new **ADS-B** tab: track aircraft on 1090 MHz with a live table and map, built in (no extra program). (1.3.1 added the PAGER MESSAGES tab, 1.3.0 MeshCore messaging.)
+**Latest: 1.5.0** – AndySDR now **updates itself**: it checks GitHub for new releases and pops up a prompt before downloading and installing. (1.4.0 added the ADS-B tab, 1.3.1 the PAGER MESSAGES tab, 1.3.0 MeshCore messaging.)
 
 ![logo](andysdr/web/logo.png)
 
@@ -27,6 +27,7 @@ network server so any other PC, laptop, tablet or phone in the house can use the
 | MeshCore messaging | **MESHCORE** tab: text chat over the MeshCore LoRa mesh through a MeshCore companion board (Heltec V3/V4, RAK4631, T-Deck, T-Beam, Xiao…) on USB, Wi-Fi or Bluetooth. Public and #hashtag channels, private channels, direct messages with delivery ticks, node list with last-heard and hops, adverts, UK/EU preset, unread badges, message history, and **Watch on SDR** to see the packets on the waterfall. Works from remote PCs and phones too. |
 | Pager messages | **PAGER MESSAGES** tab lists every POCSAG (512/1200/2400) and FLEX page as a table: time, frequency, protocol, capcode, your name for the capcode, type (text / numeric / tone only) and the message, newest first. Search, filter by protocol or type, highlight capcodes (with a pop-up notice when they are paged), export to CSV. Every page is also logged to a daily CSV file. Repeats within a minute are shown once. A badge on the tab counts new messages. Works the same from remote PCs, tablets and phones. |
 | Remote | Every copy of AndySDR is also a server (port 8045). Open `http://<pc-name-or-ip>:8045` in a browser on any device on the network, enter the password, and you get the full radio with audio and waterfall. |
+| Updates | **Self-update from GitHub Releases**: checks on start-up and every 12 h (or press *Check for updates now*), shows a pop-up with the release notes – **Download & install / Remind me later / Skip this version** – checks the download against GitHub's SHA-256, asks again before installing, then restarts itself. Works for the installed and the portable copy. |
 | Help | **? HELP** explains every control; *Explain mode* lets you click any knob or key for a description. Hover tooltips everywhere. |
 
 ## Getting the .exe
@@ -42,6 +43,26 @@ network server so any other PC, laptop, tablet or phone in the house can use the
 3. Run `dist\AndySDR\AndySDR.exe`.
 
 **Or run straight from source:** with Python 3.10+ installed: `pip install -r requirements.txt` then `python run_andysdr.py`.
+
+## Updating AndySDR
+
+AndySDR looks for a newer version on this project's GitHub Releases page a few seconds after it starts and then every
+12 hours. When there is one, a pop-up shows what is new:
+
+* **Download & install** – downloads the update (progress bar), checks its size and SHA-256 against what GitHub publishes,
+  then asks **Install & restart**. AndySDR closes, updates itself and starts again (with `--server` if it was running that way).
+* **Remind me later** – the pop-up returns next time AndySDR starts. **Skip this version** – not offered again until a newer one appears.
+* **REMOTE & SETTINGS › Updates** has **Check for updates now** (also brings back a skipped version), a switch to turn the automatic
+  check off, and *Download new versions in the background, then ask before installing*.
+
+How it installs: a copy installed with `AndySDR-Setup.exe` runs the new installer quietly (Windows may show its usual permission
+prompt if AndySDR is in *Program Files*); a portable (unzipped) copy has the new files copied over the old ones; a copy running from Python
+source just opens the release page. Your settings, memories and pictures in `%APPDATA%\AndySDR` are never touched. The pop-up also appears
+in a remote browser and the buttons work there too, but the update happens on the radio PC (the remote screen reconnects by itself).
+Downloads are kept in `%APPDATA%\AndySDR\updates` and only ever come from `github.com/mrandyt/AndySDR/releases`.
+
+**Publishing a new version (for you):** raise `VERSION` in `andysdr/config.py`, commit and push to `main`. GitHub builds the exe and
+publishes release `v<VERSION>` with `AndySDR-Setup.exe` and `AndySDR-windows.zip` - existing copies then offer it. Pre-releases and drafts are ignored.
 
 ## One-time setup for your receivers
 
@@ -180,10 +201,11 @@ andysdr/wefax.py       built-in weather fax decoder
 andysdr/pager.py       POCSAG/FLEX message parser, capcode names, daily pager logs
 andysdr/adsb.py        ADS-B / Mode S demodulator, aircraft tracker, SBS + raw feeds
 andysdr/adsb_sim.py    ADS-B message encoder + simulated air traffic (Simulator receiver, tests)
-tests/                 decoder and whole-engine self-tests
+tests/                 decoder, whole-engine and updater self-tests (python tests/test_updater.py)
 andysdr/memory.py      memory banks + RadioReference import
 andysdr/meshlink.py    MeshCore messaging through a companion board (USB / Wi-Fi / Bluetooth)
 andysdr/server.py      network server (HTTP + WebSocket, password protected)
+andysdr/updater.py     self-update: GitHub release check, download + SHA-256 check, install, restart
 andysdr/web/           the front panel (HTML/CSS/JS) and logo
 AndySDR.spec           PyInstaller recipe        build_windows.bat   local build
 installer.iss          Inno Setup installer      .github/workflows   cloud build

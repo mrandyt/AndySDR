@@ -455,6 +455,17 @@
         <label class="local-only"><input type="checkbox" id="reqLocal"> Ask for the password on this PC too</label>
         <label><input type="checkbox" id="myAudio" checked> Play audio on this computer</label>
       </div>
+      <div class="card" data-help="updates">
+        <h3>Updates</h3>
+        <p>AndySDR <b id="updCur" class="mono"></b> <span id="updLine" class="muted small"></span></p>
+        <div class="row wrapline">
+          <button class="btn" id="updCheck">Check for updates now</button>
+          <button class="btn primary" id="updShow" hidden>View update…</button>
+        </div>
+        <label><input type="checkbox" id="updAuto"> Look for updates automatically (on start-up and every 12 hours)</label>
+        <label><input type="checkbox" id="updDl"> Download new versions in the background, then ask before installing</label>
+        <p class="small muted">Updates come from this program's GitHub releases. Nothing is installed without your OK.</p>
+      </div>
       <div class="card" data-help="adsbshare">
         <h3>Share aircraft (ADS-B) with other programs</h3>
         <label><input type="checkbox" id="adsbShare"> Send the ADS-B feed over the network</label>
@@ -490,6 +501,29 @@
   </div>
 </div>
 <div class="explain-tip" id="explainTip" hidden></div>
+
+<!-- ====================== UPDATE ====================== -->
+<div class="modal" id="updateModal" hidden>
+  <div class="modal-box update">
+    <div class="modal-head">
+      <img src="logo.svg" alt="" style="height:30px">
+      <h2 id="updTitle">Update available</h2>
+      <span class="grow"></span>
+      <button class="btn" id="updClose" title="Close - you can reopen this from Remote &amp; Settings">✕</button>
+    </div>
+    <div class="modal-body">
+      <p id="updMsg"></p>
+      <pre class="upd-notes" id="updNotes"></pre>
+      <div class="upd-bar" id="updBarWrap" hidden><div id="updBar"></div></div>
+      <p class="err" id="updErr"></p>
+      <div class="row wrapline upd-btns">
+        <button class="btn primary" id="updGo"></button>
+        <button class="btn" id="updLater">Remind me later</button>
+        <button class="btn" id="updSkip">Skip this version</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- ====================== LOGIN ====================== -->
 <div class="modal" id="loginModal" hidden>

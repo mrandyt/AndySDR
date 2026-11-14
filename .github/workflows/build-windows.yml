@@ -45,6 +45,10 @@ jobs:
         continue-on-error: true
         run: python tests/test_adsb.py
 
+      - name: Updater self-test (informational)
+        continue-on-error: true
+        run: python tests/test_updater.py
+
       - name: Build AndySDR.exe
         run: |
           pyinstaller --noconfirm AndySDR.spec
@@ -98,6 +102,10 @@ jobs:
           if grep -q "MeshCore library: OK" "$LOG"; then echo "::notice::MeshCore library bundled"; else echo "::error::MeshCore library missing from the exe"; taskkill //IM AndySDR.exe //F || true; exit 1; fi
           taskkill //IM AndySDR.exe //F || true
 
+      - name: Read version
+        id: ver
+        run: echo "v=$(python -c "from andysdr.config import VERSION; print(VERSION)")" >> "$GITHUB_OUTPUT"
+
       - name: Zip
         shell: pwsh
         run: Compress-Archive -Path dist/AndySDR -DestinationPath AndySDR-windows.zip
@@ -107,7 +115,7 @@ jobs:
         shell: pwsh
         run: |
           choco install innosetup -y --no-progress
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DAppVer=${{ steps.ver.outputs.v }}" installer.iss
 
       - uses: actions/upload-artifact@v4
         with:
@@ -115,10 +123,6 @@ jobs:
           path: |
             AndySDR-windows.zip
             Output/AndySDR-Setup.exe
-
-      - name: Read version
-        id: ver
-        run: echo "v=$(python -c "from andysdr.config import VERSION; print(VERSION)")" >> "$GITHUB_OUTPUT"
 
       # Every build of main publishes (or refreshes) the GitHub Release for the program's version,
       # e.g. v1.2.0, with the zip and the installer attached.
@@ -137,6 +141,8 @@ jobs:
             * `AndySDR-windows.zip` – portable: unzip and run `AndySDR.exe`
 
             Decoders bundled in the `decoders` folder: DSD-FME (DMR, P25, NXDN, dPMR, YSF, M17), multimon-ng (POCSAG, FLEX, APRS, DTMF, ZVEI, EAS), SatDump (Meteor-M LRPT). WEFAX and SSTV are built in.
+            1.5.0: AndySDR can now update itself - it checks GitHub for new releases, shows a pop-up with what is new and, if you agree, downloads, checks and installs the update and restarts (REMOTE & SETTINGS › Updates).
+            1.4.0: ADS-B aircraft tracking tab (1090 MHz) with live table and map.
             1.3.1: new PAGER MESSAGES tab - POCSAG/FLEX pages in a searchable table (time, frequency, capcode, name, type, message), capcode names and highlights with pop-up notices, CSV export, daily logs in %APPDATA%\AndySDR\pager.
             1.3.0: MeshCore messaging tab – chat over the MeshCore LoRa mesh through a companion board on USB, Wi-Fi or Bluetooth.
             1.2.1: RTL-SDR dongles (Nooelec NESDR SMArt v5 etc.) now open directly through librtlsdr - fixes "SoapySDR::Device::make() no match". Smaller LCD on every scanner style.

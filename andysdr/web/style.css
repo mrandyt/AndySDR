@@ -481,3 +481,13 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
   #adsbTable th:nth-child(2), #adsbTable td:nth-child(2), #adsbTable th:nth-child(3), #adsbTable td:nth-child(3),
   #adsbTable th:nth-child(6), #adsbTable td:nth-child(6), #adsbTable th:nth-child(10), #adsbTable td:nth-child(10) { display: none; }
 }
+
+/* ---------- update pop-up ---------- */
+.modal-box.update { width: min(560px, 100%); }
+.upd-notes { max-height: 220px; overflow: auto; background: var(--page); border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px 12px; white-space: pre-wrap; font: 12px/1.45 var(--mono); color: var(--muted); margin: 8px 0; }
+.upd-notes:empty { display: none; }
+.upd-bar { height: 12px; background: var(--page); border: 1px solid var(--line); border-radius: 7px; overflow: hidden; margin: 10px 0; }
+.upd-bar > div { height: 100%; width: 0; background: var(--accent); transition: width .25s; }
+.upd-btns { margin-top: 12px; gap: 8px; }
+.upd-btns .btn[hidden] { display: none; }
