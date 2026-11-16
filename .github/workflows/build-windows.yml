@@ -144,7 +144,7 @@ jobs:
           cd /tmp/welle.io
           git rev-parse HEAD
           mkdir build && cd build
-          cmake .. -G Ninja -DBUILD_WELLE_IO=OFF -DBUILD_WELLE_CLI=ON -DRTLSDR=OFF -DSOAPYSDR=OFF -DAIRSPY=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          cmake .. -G Ninja -DBUILD_WELLE_IO=OFF -DBUILD_WELLE_CLI=ON -DRTLSDR=OFF -DSOAPYSDR=OFF -DAIRSPY=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_CXX_STANDARD_LIBRARIES="-lws2_32 -lmswsock"
           ninja welle-cli
           D="$GITHUB_WORKSPACE/dist/AndySDR/decoders/welle-cli"
           mkdir -p "$D"
