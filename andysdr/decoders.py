@@ -29,6 +29,9 @@ import numpy as np
 from scipy import signal
 
 from .config import app_dir, data_dir
+from .iqbridge import IqBridge
+from .ft8 import Ft8Decoder, match_freq
+from . import dab as dablib
 from .sstv import SstvDecoder
 from .wefax import WefaxDecoder
 
@@ -54,11 +57,23 @@ DECODERS = {
                "help": "Slow-scan TV: ISS 145.800 NFM, 2 m 144.500 NFM, 20 m 14.230 USB. Mode found from the VIS header."},
     "lrpt":   {"name": "Meteor-M LRPT satellite (SatDump)", "exe": "satdump",
                "help": "Records the pass, then SatDump makes the images. 137.9 MHz, DIG25 mode."},
+    "ft8":    {"name": "FT8 / FT4 weak-signal digital (ft8_lib)", "exe": "decode_ft8",
+               "help": "Decodes FT8 (15 s) or FT4 (7.5 s) in USB mode – tune the dial frequency (e.g. 14.074 MHz). Starts by itself on FT8/FT4 channels from the band plan."},
+    "dab":    {"name": "DAB / DAB+ digital radio (welle-cli)", "exe": "welle-cli",
+               "help": "UK Band III DAB radio. Choose the multiplex in the DAB tab; stations appear there with a player. Experimental."},
+    "goes":   {"name": "GOES HRIT weather satellite (SatDump)", "exe": "satdump",
+               "help": "1694.1 MHz GOES-East/West images and EMWIN. Needs a dish + L-band LNA; the receiver is shared with SatDump over a local rtl_tcp link."},
     "adsb":   {"name": "ADS-B aircraft 1090 MHz (built in)", "exe": None,
                "help": "Tunes to 1090 MHz and tracks aircraft (callsign, position, altitude, speed). See the ADS-B tab."},
     "tetra":  {"name": "TETRA baseband out (UDP)", "exe": None,
                "help": "Streams 48 kHz complex IQ to UDP 127.0.0.1:42000 for a TETRA decoder."},
 }
+
+
+def _free_port():
+    with socket.socket() as sk:
+        sk.bind(("127.0.0.1", 0))
+        return sk.getsockname()[1]
 
 
 def find_exe(base, overrides=None):
@@ -198,6 +213,14 @@ class DecoderManager:
         self.images_dir = os.path.join(data_dir(), "images")
         self.status = "off"
         self.on_pager = None       # set by the radio: on_pager(line) -> Pager Messages tab
+        self.ft8 = None
+        self.dab_port = 0
+        self.freq_fn = None        # set by the radio: () -> tuned frequency (Hz)
+        self.dial_fn = None        # set by the radio: () -> FT8 dial frequency of the tuned channel (Hz)
+        self.ft8_history = []
+        self.bridge = None         # IqBridge (rtl_tcp server) while GOES / DAB decoders run
+        self.rate_fn = lambda: 2400000   # set by the radio: current receiver sample rate
+        self._watch_stop = True
         self.adsb = None           # set by the radio: the ADS-B engine (takes IQ, not audio)
 
     # ------------------------------------------------------------------
@@ -241,6 +264,10 @@ class DecoderManager:
         self.emit(kind, {"t": time.strftime("%H:%M:%S"), "text": text, "decoder": self.active})
 
     # ------------------------------------------------------------------
+    def _ft8_msg(self, m):
+        self.ft8_history = (self.ft8_history + [m])[-300:]
+        self.emit("ft8", m)
+
     def _img_event(self, k, v):
         if k == "image":
             self.emit("image", {"file": v})
@@ -315,6 +342,43 @@ class DecoderManager:
                 self.log("Recording Meteor LRPT pass (240 kS/s IQ). Press the decoder OFF "
                          "when the pass ends to make the pictures." +
                          ("" if exe else " SatDump not found – recording only."))
+            elif dec_id == "ft8":
+                exe = find_exe("decode_ft8", ov)
+                if not exe:
+                    raise FileNotFoundError("decode_ft8.exe not found – see Help > Decoders")
+                proto = sub if sub in ("ft8", "ft4") else (self.freq_fn and (match_freq(self.freq_fn(), "USB") or ("ft8",))[0]) or "ft8"
+                self.sub = proto
+                self.ft8 = Ft8Decoder(exe, proto, on_message=self._ft8_msg, on_log=self.log, dial=self.dial_fn)
+                self.log(f"{proto.upper()} decoder running – decoding at the end of each {self.ft8.slot_len:g} s UTC slot. "
+                         "Keep the PC clock accurate (Windows: Settings > Time > Sync now).")
+            elif dec_id == "dab":
+                exe = find_exe("welle-cli", ov)
+                if not exe:
+                    raise FileNotFoundError("welle-cli.exe not found – see Help > Decoders")
+                ch = sub.upper() if sub and sub.upper() in dablib.CHANNELS else "12B"
+                self.sub = ch
+                self.bridge = IqBridge(out_rate=dablib.DAB_RATE)
+                port = self.bridge.start()
+                self.dab_port = _free_port()
+                args = [exe, "-c", ch, "-w", str(self.dab_port), "-F", f"rtl_tcp,127.0.0.1:{port}"]
+                self.proc = _popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+                _Reader(self.proc.stdout, self.log, lambda l: any(k in l for k in ("Ensemble", "ensemble", "rror", "Service", "Found", "Lock", "SNR"))).start()
+                self.log(f"DAB: welle-cli started on block {ch} ({dablib.CHANNELS[ch] / 1e6:.3f} MHz) – stations appear in the DAB tab")
+            elif dec_id == "goes":
+                exe = find_exe("satdump", ov)
+                if not exe:
+                    raise FileNotFoundError("satdump.exe not found – see Help > Decoders")
+                self.bridge = IqBridge(out_rate=None)
+                port = self.bridge.start()
+                out = os.path.join(self.images_dir, "goes_" + time.strftime("%Y%m%d_%H%M%S"))
+                fs = int(self.rate_fn())
+                self.bridge.out_rate = fs
+                args = [exe, "live", "goes_hrit", out, "--source", "rtltcp", "--ip_address", "127.0.0.1",
+                        "--port", str(port), "--samplerate", str(fs), "--frequency", "1694.1e6", "--gain", "30"]
+                self.proc = _popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+                _Reader(self.proc.stdout, self.log, lambda l: "(D)" not in l).start()
+                self._watch_images(out)
+                self.log("SatDump (GOES HRIT) started on 1694.1 MHz – images appear in Weather images as they complete")
             elif dec_id == "adsb":
                 if self.adsb is None:
                     raise RuntimeError("ADS-B engine not available")
@@ -403,6 +467,13 @@ class DecoderManager:
             self.udp = None
         if self.active == "adsb" and self.adsb:
             self.adsb.stop()
+        if self.bridge:
+            self.bridge.stop()
+            self.bridge = None
+        self._watch_stop = True
+        if self.ft8:
+            self.ft8.stop()
+            self.ft8 = None
         if self.active:
             self.log("Decoder stopped")
         self.active = None
@@ -429,10 +500,26 @@ class DecoderManager:
         threading.Thread(target=run, daemon=True).start()
 
     # ------------------------------------------------------------------
-    def feed_iq(self, iq, fs):
-        """Decoders that work on the raw IQ stream (ADS-B) instead of demodulated audio."""
+    def feed_iq(self, iq, fs, offset=0.0):
+        """Decoders that work on the raw IQ stream (ADS-B, GOES) instead of demodulated audio."""
         if self.active == "adsb" and self.adsb:
             self.adsb.feed(iq, fs)
+        elif self.active in ("goes", "dab") and self.bridge:
+            self.bridge.feed(iq, fs, offset)
+
+    def _watch_images(self, out):
+        """Report new PNGs a long-running SatDump process writes."""
+        self._watch_stop = False
+        seen = set()
+
+        def run():
+            while not self._watch_stop:
+                for f in glob.glob(os.path.join(out, "**", "*.png"), recursive=True):
+                    if f not in seen and time.time() - os.path.getmtime(f) > 5:
+                        seen.add(f)
+                        self.emit("image", {"file": os.path.relpath(f, self.images_dir).replace("\\", "/")})
+                time.sleep(10)
+        threading.Thread(target=run, name="goes-images", daemon=True).start()
 
     def feed(self, out):
         """Called by the radio engine for every 50 ms block."""
@@ -444,6 +531,8 @@ class DecoderManager:
                 self.wefax.process(out["audio_ungated"].astype(np.float64))
             elif a == "sstv" and self.sstv:
                 self.sstv.process(out["audio_ungated"])
+            elif a == "ft8" and self.ft8:
+                self.ft8.process(out["audio_ungated"])
             elif a == "dsd" and self.tcp:
                 d = out["disc"]
                 pcm = np.clip(d * 6000, -32767, 32767).astype("<i2").tobytes()

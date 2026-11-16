@@ -14,10 +14,12 @@ import secrets
 import threading
 import time
 
+from .satpass import SatPlanner
+
 log = logging.getLogger("andysdr.scheduler")
 
 ACTIONS = {
-    "wefax": "Weather fax (WEFAX)", "sstv": "SSTV pictures", "lrpt": "Meteor-M LRPT pass",
+    "wefax": "Weather fax (WEFAX)", "sstv": "SSTV pictures", "lrpt": "Meteor-M LRPT pass", "goes": "GOES HRIT (satellite)",
     "record": "Record audio", "listen": "Just tune & listen", "pager": "Pagers", "data": "APRS / data",
     "dsd": "Digital voice",
 }
@@ -34,6 +36,7 @@ PRESETS = [
     {"name": "80 m SSTV 3.735 MHz", "freq": 3735000, "mode": "LSB", "action": "sstv"},
     {"name": "Meteor-M LRPT 137.900 MHz", "freq": 137900000, "mode": "DIG25", "action": "lrpt"},
     {"name": "Meteor-M LRPT 137.100 MHz", "freq": 137100000, "mode": "DIG25", "action": "lrpt"},
+    {"name": "GOES HRIT 1694.1 MHz (needs dish + LNA)", "freq": 1694100000, "mode": "DIG25", "action": "goes"},
 ]
 
 
@@ -64,6 +67,8 @@ class Scheduler:
         self.done = set()            # occurrences already run ("id@YYYY-MM-DDTHH:MM")
         self.lock = threading.Lock()
         self.alive = True
+        self.sats = SatPlanner(settings, notify=lambda: self._emit())
+        self._tle_check = 0.0
         self.thread = threading.Thread(target=self._loop, name="scheduler", daemon=True)
 
     def start(self):
@@ -147,6 +152,15 @@ class Scheduler:
             if now >= self.running["until"]:
                 self.stop_job()
             return
+        if self._tle_check < time.time() - 1800:           # keep orbit data fresh for the satellites that are on
+            self._tle_check = time.time()
+            self.sats.refresh_tles()
+        due = self.sats.due(now.timestamp()) if now is not None else None
+        if due:
+            sid, p, key, job, until = due
+            self.sats.done.add(key)
+            self._begin(job, dt.datetime.fromtimestamp(until), key)
+            return
         for job in self.jobs():
             if not job.get("enabled", True):
                 continue
@@ -197,7 +211,8 @@ class Scheduler:
             r = {k: self.running[k] for k in ("id", "name", "action", "freq")}
             r["until"] = self.running["until"].strftime("%H:%M")
         return {"jobs": self.jobs(), "running": r, "next": self.next_runs(),
-                "presets": PRESETS, "actions": ACTIONS, "now": dt.datetime.now().strftime("%H:%M")}
+                "presets": PRESETS, "actions": ACTIONS, "now": dt.datetime.now().strftime("%H:%M"),
+                "sats": self.sats.status()}
 
     def _emit(self):
         self.radio._emit("schedule", self.status())

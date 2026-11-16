@@ -6,7 +6,7 @@ import sys
 import threading
 
 APP_NAME = "AndySDR"
-VERSION = "1.5.1"
+VERSION = "1.6.0"
 GITHUB_REPO = "mrandyt/AndySDR"   # where updates are published (GitHub Releases)
 
 
@@ -79,6 +79,7 @@ DEFAULTS = {
     "adsb_lat": None,             # receiver position (decimal degrees) - gives distance/bearing and faster fixes
     "adsb_lon": None,
     "adsb_log": True,             # one CSV line per aircraft every 30 s in %APPDATA%\\AndySDR\\adsb
+    "adsb_lookup": True,          # look up registration / type / owner / photo online (sends the hex code only)
     "adsb_share": False,          # re-broadcast as SBS (30003) and raw AVR (30002) for other programs
     "adsb_sbs_port": 30003,
     "adsb_raw_port": 30002,

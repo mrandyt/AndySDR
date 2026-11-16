@@ -8,7 +8,7 @@ import wave
 
 import numpy as np
 
-from . import devices
+from . import dab, devices, ft8
 from .adsb import ADSB_FREQ, Adsb
 from .autodetect import SignalClassifier
 from .config import data_dir
@@ -39,6 +39,9 @@ class Radio:
         self.pager = PagerStore(settings, self._emit)
         self.adsb = Adsb(settings, self._emit)
         self.decoders.adsb = self.adsb
+        self.decoders.freq_fn = lambda: self.freq
+        self.decoders.dial_fn = lambda: (ft8.match_freq(self.freq, self.mode) or (None, self.freq))[1]
+        self.decoders.rate_fn = lambda: self.dev.sample_rate if self.dev else 2400000
         self.decoders.on_pager = lambda line: self.pager.add_line(
             line, self.freq, self.channel[2].get("name", "") if self.channel else "")
         self.running = False
@@ -191,6 +194,8 @@ class Radio:
 
     def _tune(self, f, mode=None, force=False):
         f = int(f)
+        if self.decoders.active in ("dab", "goes") and abs(f - self.freq) > 1000000:
+            self.decoders.stop()              # moved off the DAB block / GOES channel
         if self.decoders.active == "adsb" and abs(f - ADSB_FREQ) > 1000000:
             self.decoders.stop()              # tuned away from 1090 MHz: the aircraft decoder is no use here
         if abs(f - self.freq) > 1000:
@@ -238,8 +243,25 @@ class Radio:
         self.call(do)
 
     def _auto_feed(self, out):
-        if self.decoders.active == "adsb":
+        if self.decoders.active in ("adsb", "ft8", "goes", "dab"):
             return
+        # band plan says FT8 / FT4 here and something is on the air: start that decoder
+        if (self.s.get("auto_identify", True) and self.decoders.active in (None, "") and not self.job
+                and self.sq_open and "ft8" not in self.auto_failed and self.scan["state"] in ("manual", "hold")):
+            m = ft8.match_freq(self.freq, self.mode)
+            if m:
+                ok = self.decoders.start("ft8", m[0])
+                if ok:
+                    self.auto_owned = True
+                    self._set_signal({"kind": m[0].upper(), "label": f"{m[0].upper()} channel (band plan) – decoding",
+                                      "decoder": "ft8", "stable": True, "conf": 1.0})
+                    self._emit("event", {"level": "info", "text": f"Auto: {m[0].upper()} channel {m[1] / 1e6:.4f} MHz – decoder started"})
+                    self._push_state(True)
+                else:
+                    self.auto_failed.add("ft8")
+                    self._emit("event", {"level": "warn", "text": "Auto: FT8 channel found, but its decoder program "
+                                                                  "(decode_ft8) is missing – see Help › Decoders"})
+                return
         if not self.s.get("auto_identify", True) or self.job or self.scan["state"] not in ("manual", "hold"):
             return
         if not self.sq_open:
@@ -349,7 +371,7 @@ class Radio:
             self.job = job
             self._tune(job["freq"], job.get("mode"), force=True)
             act = job.get("action")
-            if act in ("wefax", "sstv", "lrpt", "pager", "data", "dsd"):
+            if act in ("wefax", "sstv", "lrpt", "goes", "pager", "data", "dsd"):
                 self.decoders.start(act, "auto")
             elif act == "record" and not self.rec:
                 self.record(True)
@@ -360,7 +382,7 @@ class Radio:
         def do():
             job, prev = self.job, self.job_prev or {}
             self.job, self.job_prev = None, None
-            if job and job.get("action") in ("wefax", "sstv", "lrpt", "pager", "data", "dsd"):
+            if job and job.get("action") in ("wefax", "sstv", "lrpt", "goes", "pager", "data", "dsd"):
                 self.decoders.stop()
             if job and job.get("action") == "record" and self.rec and not prev.get("recording"):
                 self.rec.close()
@@ -460,6 +482,13 @@ class Radio:
         def do():
             if dec_id == "adsb":
                 self._begin_adsb()
+            elif dec_id in ("dab", "goes"):
+                f = dab.channel_freq(sub if sub and sub != "auto" else "12B") if dec_id == "dab" else 1694100000
+                if f:
+                    self._stop_scan()
+                    self.channel = None
+                    self._tune(f, "DIG25", force=True)
+                self.decoders.start(dec_id, (sub if sub and sub != "auto" else "12B") if dec_id == "dab" else sub)
             else:
                 was_adsb = self.decoders.active == "adsb"
                 self.decoders.start(dec_id, sub)
@@ -910,8 +939,8 @@ class Radio:
                 last_pri = time.time()
                 self._priority_check(spec_db)
 
-            if self.decoders.active == "adsb":
-                self.decoders.feed_iq(iq, fs)           # aircraft decoder works on the raw samples; no audio
+            if self.decoders.active in ("adsb", "goes", "dab"):
+                self.decoders.feed_iq(iq, fs, self.offset())    # these decoders work on the raw samples; no audio
             elif produce:
                 try:
                     self._auto_feed(out)

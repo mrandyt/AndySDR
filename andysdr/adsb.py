@@ -26,6 +26,7 @@ import time
 
 import numpy as np
 
+from .aircraftinfo import AircraftInfo
 from .config import data_dir
 
 log = logging.getLogger("andysdr.adsb")
@@ -422,6 +423,7 @@ class Tracker:
         self.recent = collections.deque()     # timestamps for msgs/s
         self.sinks = []                       # callables(kind, msg_bytes, aircraft, now)
         self.log_dir = os.path.join(data_dir(), "adsb")
+        self.info = None                      # AircraftInfo (registry lookup), set by Adsb
 
     # ---- reference position of the receiver
     def ref(self):
@@ -642,17 +644,26 @@ class Tracker:
 
     def snapshot(self, now, with_trail=False):
         with self.lock:
-            return [a.to_dict(now, with_trail) for a in sorted(self.ac.values(), key=lambda x: -x.seen)
-                    if now - a.seen <= KEEP_SECONDS]
+            out = [a.to_dict(now, with_trail) for a in sorted(self.ac.values(), key=lambda x: -x.seen)
+                   if now - a.seen <= KEEP_SECONDS]
+        if self.info:
+            for d in out:
+                if d["seen"] <= LIVE_SECONDS:
+                    self.info.peek(d["icao"])
+                d.update(self.info.public(d["icao"]))
+                d["route"] = self.info.cached_route(d["flight"])
+        return out
 
     def export_csv(self, now):
         buf = io.StringIO()
         w = csv.writer(buf)
         w.writerow(["icao", "callsign", "airline", "country", "lat", "lon", "alt_ft", "gs_kt", "track", "vrate_fpm",
-                    "squawk", "distance_nm", "bearing", "messages", "seen_s_ago", "rssi_dbfs"])
+                    "squawk", "distance_nm", "bearing", "messages", "seen_s_ago", "rssi_dbfs",
+                    "registration", "aircraft_type", "owner"])
         for d in self.snapshot(now):
             w.writerow([d["icao"], d["flight"], d["airline"], d["country"], d["lat"], d["lon"], d["alt"], d["gs"],
-                        d["trk"], d["vr"], d["squawk"], d["dist"], d["brg"], d["msgs"], d["seen"], d["rssi"]])
+                        d["trk"], d["vr"], d["squawk"], d["dist"], d["brg"], d["msgs"], d["seen"], d["rssi"],
+                        d.get("reg", ""), d.get("type", ""), d.get("owner", "")])
         return buf.getvalue()
 
     def aircraft_json(self, now):
@@ -757,6 +768,8 @@ class Adsb:
         self.active = False
         self.demod = Demod()
         self.tracker = Tracker(settings, emit)
+        self.info = AircraftInfo(settings, notify=self._info_changed)
+        self.tracker.info = self.info
         self.q = queue.Queue(maxsize=80)
         self.dropped = 0
         self.sbs = FeedServer(int(settings.get("adsb_sbs_port", 30003)), "sbs")
@@ -784,7 +797,22 @@ class Adsb:
             pass
         self.emit("adsb_cfg", self.config())
 
+    def _info_changed(self):
+        self._last_emit = 0.0                 # push the new registry data to the GUI on the next tick
+
+    def lookup(self, icao):
+        """GUI selected an aircraft: fetch its photo and route as well."""
+        icao = str(icao or "").upper()[:6]
+        if len(icao) != 6:
+            return
+        self.info.peek(icao)
+        self.info.want_photo(icao)
+        for d in self.tracker.snapshot(time.time()):
+            if d["icao"] == icao and d["flight"]:
+                self.info.route(d["flight"])
+
     def shutdown(self):
+        self.info.shutdown()
         self.active = False
         self.sbs.stop()
         self.raw.stop()
@@ -826,13 +854,17 @@ class Adsb:
             self.s["adsb_log"] = bool(value)
             self.s.save()
             self.emit("adsb_cfg", self.config())
+        elif key == "lookup":
+            self.s["adsb_lookup"] = bool(value)
+            self.s.save()
+            self.emit("adsb_cfg", self.config())
 
     def config(self):
         ref = self.tracker.ref()
         return {"active": self.active, "lat": ref[0] if ref else None, "lon": ref[1] if ref else None,
                 "share": bool(self.s.get("adsb_share")), "sbs_port": int(self.s.get("adsb_sbs_port", 30003)),
                 "raw_port": int(self.s.get("adsb_raw_port", 30002)), "log": bool(self.s.get("adsb_log", True)),
-                "log_dir": self.tracker.log_dir}
+                "lookup": bool(self.s.get("adsb_lookup", True)), "log_dir": self.tracker.log_dir}
 
     def snapshot(self):
         now = time.time()

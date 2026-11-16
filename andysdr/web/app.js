@@ -10,6 +10,7 @@ const THEME_TEXT = {
   pro2045: ["1000 CHANNEL · PROGRAMMABLE", "SDR SCANNER"],
   ubcd260: ["DIGITAL BASE/MOBILE · DMR · P25 · NXDN", "SDR DIGITAL SCANNER"],
   trx2: ["DIGITAL TRUNKING · DMR · NXDN · P25", "SDR SCANNER-RECEIVER"],
+  sdrpp: ["RADIO", ""],
 };
 const UK_PRESETS = [
   ["Airband", 118, 137, 8330, "AM"], ["2m Amateur", 144, 146, 12500, "NFM"],
@@ -74,6 +75,7 @@ function onJSON(m) {
     case "decoder": decLine(d.text, d.t); break;
     case "decoders": decoders = d; renderDecoders(); break;
     case "image": addImage(d.file); break;
+    case "ft8": onFt8(d); break;
     case "signal": S.signal = d; renderSignal(); break;
     case "schedule": SCH = d; renderSchedule(); break;
     case "images": renderImages(d); break;
@@ -111,6 +113,7 @@ function onHello(h) {
   $("pagExport").href = `/api/pager.csv?token=${encodeURIComponent(token)}`;
   $("adsbExport").href = `/api/adsb.csv?token=${encodeURIComponent(token)}`;
   if (h.adsb) adsbHello(h.adsb);
+  FT8.msgs = h.ft8 || []; renderFt8();
   const st = h.settings || {};
   $("updAuto").checked = st.update_check !== false; $("updDl").checked = !!st.update_auto_download;
   if (h.update) onUpdate(h.update, true);
@@ -795,6 +798,8 @@ function showTab(name) {
   if (name === "dec") send({ cmd: "decoders" });
   if (name === "bp") renderBandPlan();
   if (name === "sch") send({ cmd: "schedule" });
+  if (name === "dab") dabPoll();
+  if (name === "ft8") { FT8.unseen = 0; $("ft8Badge").hidden = true; renderFt8(); }
   if (name === "mesh") { meshRead(meshConv); renderMesh(); setTimeout(() => $("meshMsgs").scrollTop = 1e9, 0); }
   if (name === "pag") { PAG.unseen = 0; pagBadge(); }
   if (name === "adsb") setTimeout(() => { adsbBadge(); renderAdsbTable(); adsbStat(); adsDraw(); }, 0);
@@ -1004,6 +1009,8 @@ const ADS_EMER = { "7500": "hijack", "7600": "radio failure", "7700": "emergency
 const adsLS = (k, d) => { try { const v = localStorage.getItem("andysdr_adsb_" + k); return v === null ? d : v; } catch (e) { return d; } };
 const adsSetLS = (k, v) => { try { localStorage.setItem("andysdr_adsb_" + k, v); } catch (e) { /* private mode */ } };
 const adsMet = () => $("adsbUnits").value === "met";
+const adsMapStyle = () => $("adsbTiles").value || "bright";
+const adsLight = () => { const m = adsMapStyle(); return m === "bright" || m === "plain"; };
 const adsRunning = () => S.decoder === "adsb";
 const adsTabOpen = () => $("tab-adsb").classList.contains("active");
 const adsAlt = (a) => (a == null ? null : adsMet() ? Math.round(a * 0.3048) : a);
@@ -1022,13 +1029,14 @@ function adsbHello(a) {
     const v = adsLS(k, null);
     if (v !== null) { if ($(el).type === "checkbox") $(el).checked = v === "1"; else $(el).value = v; }
   });
+  if (!$("adsbTiles").value) $("adsbTiles").value = "bright";      // older saved "street map on/off" values
   adsbCfg(); adsbUnitsHdr();
 }
 function adsbCfg() {
   const c = ADS.cfg || {};
   if (document.activeElement !== $("adsbLat")) $("adsbLat").value = c.lat != null ? c.lat : "";
   if (document.activeElement !== $("adsbLon")) $("adsbLon").value = c.lon != null ? c.lon : "";
-  $("adsbShare").checked = !!c.share; $("adsbLog").checked = c.log !== false;
+  $("adsbShare").checked = !!c.share; $("adsbLog").checked = c.log !== false; $("adsbLookup").checked = c.lookup !== false;
   $("adsbShareInfo").textContent = `SBS/BaseStation text on port ${c.sbs_port || 30003} and raw AVR on port ${c.raw_port || 30002} – for Virtual Radar Server, tar1090, PlanePlotter, FlightAware/FR24 feeders and similar. Windows may ask to allow AndySDR through the firewall. Keep it on your home network.`;
   $("adsbNote").innerHTML = (c.lat == null ? "Set your position (above) to see distance and bearing and to get the range rings on the map. " : "") +
     (isLocal && c.log && c.log_dir ? `Positions are logged to ${esc(c.log_dir)} (one CSV per day).` : "");
@@ -1077,9 +1085,9 @@ function renderAdsbTable() {
   if (!adsTabOpen()) return;
   const q = $("adsbFind").value.trim().toLowerCase(), posOnly = $("adsbPosOnly").checked;
   const { k, d } = ADS.sort;
-  const val = (a) => (k === "airline" ? (a.airline || a.country || "") : k === "flight" ? a.flight || "~" : a[k]);
+  const val = (a) => (k === "airline" ? (a.airline || a.owner || a.country || "") : k === "flight" ? a.flight || "~" : a[k]);
   const rows = ADS.list.filter((a) => a.seen <= 120 && (!posOnly || a.lat != null) &&
-    (!q || `${a.icao} ${a.flight} ${a.airline} ${a.country} ${a.squawk}`.toLowerCase().includes(q)));
+    (!q || `${a.icao} ${a.flight} ${a.airline} ${a.country} ${a.squawk} ${a.reg || ""} ${a.type || ""} ${a.tcode || ""} ${a.owner || ""}`.toLowerCase().includes(q)));
   rows.sort((a, b) => {
     const x = val(a), y = val(b);
     if (x == null || x === "") return 1; if (y == null || y === "") return -1;
@@ -1089,13 +1097,14 @@ function renderAdsbTable() {
   $("adsbTable").querySelector("tbody").innerHTML = rows.map((a) => {
     const em = ADS_EMER[a.squawk];
     return `<tr data-id="${a.icao}" class="${ADS.sel === a.icao ? "sel " : ""}${a.seen > 30 ? "stale " : ""}${em ? "emerg" : ""}">
-      <td class="cs">${esc(a.flight || "—")}</td><td class="mono">${a.icao}</td>
-      <td title="${esc(a.country)}">${a.airline ? esc(a.airline) : `<span class="muted">${esc(a.country)}</span>`}</td>
+      <td class="cs">${esc(a.flight || "—")}</td><td class="mono">${esc(a.reg || "–")}</td><td class="mono">${a.icao}</td>
+      <td class="mono" title="${esc(a.type || "")}">${esc(a.tcode || "–")}</td>
+      <td title="${esc(a.owner || a.country)}">${a.airline ? esc(a.airline) : a.owner ? esc(a.owner) : `<span class="muted">${esc(a.country)}</span>`}</td>
       <td class="num">${a.ground ? "GND" : adsN(adsAlt(a.alt))}</td><td class="num">${adsN(adsSpd(a.gs))}</td>
       <td class="num">${a.trk == null ? "–" : Math.round(a.trk) + "°"}</td><td class="num">${adsN(adsVs(a.vr))}</td>
       <td class="mono">${esc(a.squawk || "–")}</td><td class="num">${adsN(adsDist(a.dist))}</td>
       <td class="num">${a.msgs}</td><td class="num">${a.seen < 1 ? "now" : Math.round(a.seen) + "s"}</td></tr>`;
-  }).join("") || `<tr><td colspan="11" class="muted">${adsRunning() ? "Listening for aircraft … (they can take a few seconds to appear; a 1090 MHz antenna with a clear view of the sky helps a lot)" : "No aircraft yet. Press ▶ Start ADS-B (1090 MHz)."}</td></tr>`;
+  }).join("") || `<tr><td colspan="13" class="muted">${adsRunning() ? "Listening for aircraft … (they can take a few seconds to appear; a 1090 MHz antenna with a clear view of the sky helps a lot)" : "No aircraft yet. Press ▶ Start ADS-B (1090 MHz)."}</td></tr>`;
   adsDetail();
 }
 function adsDetail() {
@@ -1104,7 +1113,10 @@ function adsDetail() {
   const m = adsMet();
   el.hidden = false;
   el.innerHTML = `<button class="x" id="adsbDetX" title="Close">✕</button><b class="big">${esc(a.flight || a.icao)}</b><br>
-    ${a.airline ? esc(a.airline) + "<br>" : ""}Hex ${a.icao} · ${esc(a.country || "country unknown")}${a.cat ? " · cat " + esc(a.cat) : ""}<br>
+    ${a.photo ? `<a href="${esc(a.photo_link || a.photo)}" target="_blank" rel="noopener"><img class="adsb-photo" src="${esc(a.photo)}" alt="${esc(a.reg || a.icao)}"></a><div class="muted small">Photo: ${esc(a.photographer || "planespotters.net")} · planespotters.net</div>` : ""}
+    ${a.reg ? `<b>${esc(a.reg)}</b> · ` : ""}${a.type ? esc(a.type) + (a.tcode ? ` (${esc(a.tcode)})` : "") + "<br>" : a.reg ? "<br>" : ""}
+    ${a.owner ? "Owner: " + esc(a.owner) + "<br>" : ""}${a.airline ? esc(a.airline) + "<br>" : ""}${a.route ? "Route: " + esc(a.route) + "<br>" : ""}Hex ${a.icao} · ${esc(a.country || "country unknown")}${a.cat ? " · cat " + esc(a.cat) : ""}<br>
+    ${a.reg ? `<a target="_blank" rel="noopener" href="https://www.flightradar24.com/data/aircraft/${encodeURIComponent(a.reg.toLowerCase())}">FR24 history</a> · ` : ""}<a target="_blank" rel="noopener" href="https://www.planespotters.net/hex/${a.icao}">Planespotters</a><br>
     Altitude: ${a.ground ? "on the ground" : a.alt == null ? "–" : adsAlt(a.alt).toLocaleString() + (m ? " m" : " ft")}<br>
     Speed: ${a.gs == null ? "–" : adsSpd(a.gs) + (m ? " km/h" : " kt")} · Heading: ${a.trk == null ? "–" : Math.round(a.trk) + "°"}<br>
     Climb: ${a.vr == null ? "–" : adsVs(a.vr) + (m ? " m/s" : " ft/min")}<br>
@@ -1122,6 +1134,7 @@ $("adsbTable").querySelector("thead").addEventListener("click", (e) => {
 $("adsbTable").querySelector("tbody").addEventListener("click", (e) => {
   const tr = e.target.closest("tr[data-id]"); if (!tr) return;
   ADS.sel = ADS.sel === tr.dataset.id ? null : tr.dataset.id;
+  if (ADS.sel) send({ cmd: "adsb_lookup", icao: ADS.sel });
   const a = ADS.list.find((x) => x.icao === ADS.sel);
   if (a && a.lat != null) { ADS.view.lat = a.lat; ADS.view.lon = a.lon; ADS.view.user = true; }
   renderAdsbTable(); adsDraw();
@@ -1148,6 +1161,7 @@ $("adsbPosGps").onclick = () => {
 }));
 $("adsbFind").oninput = renderAdsbTable;
 $("adsbShare").onchange = () => send({ cmd: "adsb_share", on: $("adsbShare").checked });
+$("adsbLookup").onchange = () => send({ cmd: "adsb_option", key: "lookup", value: $("adsbLookup").checked });
 $("adsbLog").onchange = () => send({ cmd: "adsb_option", key: "log", value: $("adsbLog").checked });
 $("adsbFit").onclick = () => { ADS.view.user = false; ADS.view.fitN = 0; adsFit(); adsDraw(); };
 $("adsbZoomIn").onclick = () => adsZoom(0.5);
@@ -1190,11 +1204,11 @@ function adsZoom(dz, px, py) {
   v.lon = lon - (px - w / 2) / (256 * 2 ** v.z) * 360; v.lat = adsLat(adsMy(lat, v.z) - (py - h / 2), v.z);
   adsDraw();
 }
-function adsAltColor(a, alpha = 1) {
+function adsAltColor(a, alpha = 1, light = false) {
   if (a.ground) return `hsla(0,0%,60%,${alpha})`;
   if (a.alt == null) return `hsla(0,0%,75%,${alpha})`;
   const hue = 18 + Math.min(Math.max(a.alt, 0), 40000) / 40000 * 222;     // orange (low) -> green -> blue (high)
-  return `hsla(${hue},95%,58%,${alpha})`;
+  return `hsla(${hue},95%,${light ? 42 : 58}%,${alpha})`;
 }
 const ADS_PLANE = [[0, -10], [1.6, -3], [9, 2], [9, 4], [1.6, 2.5], [1.2, 7], [3.5, 9], [3.5, 10.5], [0, 9.5], [-3.5, 10.5], [-3.5, 9], [-1.2, 7], [-1.6, 2.5], [-9, 4], [-9, 2], [-1.6, -3]];
 function adsDraw() { if (!ADS.raf) ADS.raf = requestAnimationFrame(adsRender); }
@@ -1203,14 +1217,21 @@ function adsRender() {
   if (!adsTabOpen()) return;
   const [ctx, w, h, dpr] = adsSize(), v = ADS.view, z = v.z;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.fillStyle = "#0b0e12"; ctx.fillRect(0, 0, w, h);
+  const light = adsLight(), mapStyle = adsMapStyle();
+  ctx.fillStyle = light ? "#dfe8ee" : "#1c2530"; ctx.fillRect(0, 0, w, h);
   const cx = adsMx(v.lon, z), cy = adsMy(v.lat, z), ox = cx - w / 2, oy = cy - h / 2;
   const P = (lat, lon) => [adsMx(lon, z) - ox, adsMy(lat, z) - oy];
+  if (mapStyle === "plain" || mapStyle === "plaindark") {           // offline: faint lat/lon grid
+    ctx.strokeStyle = light ? "rgba(60,90,120,.18)" : "rgba(150,180,210,.12)"; ctx.lineWidth = 1;
+    const gs = z >= 9 ? 0.25 : z >= 7 ? 1 : z >= 5 ? 2 : 5;
+    for (let lo = Math.floor(adsLon(ox, z) / gs) * gs; lo <= adsLon(ox + w, z); lo += gs) { const x = adsMx(lo, z) - ox; ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+    for (let la = Math.floor(adsLat(oy + h, z) / gs) * gs; la <= adsLat(oy, z); la += gs) { const y = adsMy(la, z) - oy; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+  }
   // street map tiles (optional)
-  if ($("adsbTiles").checked) {
+  if (mapStyle === "bright" || mapStyle === "dark") {
     const zi = Math.max(3, Math.min(12, Math.round(z))), n = 2 ** zi, ts = 256 * 2 ** (z - zi);
     ctx.save();
-    if ("filter" in ctx) ctx.filter = "invert(1) hue-rotate(180deg) brightness(.75) saturate(.6)";
+    if (!light && "filter" in ctx) ctx.filter = "invert(1) hue-rotate(180deg) brightness(.95) saturate(.6)";
     for (let tx = Math.floor(ox / ts); tx <= Math.floor((ox + w) / ts); tx++) {
       for (let ty = Math.max(0, Math.floor(oy / ts)); ty <= Math.min(n - 1, Math.floor((oy + h) / ts)); ty++) {
         const key = `${zi}/${((tx % n) + n) % n}/${ty}`;
@@ -1240,12 +1261,12 @@ function adsRender() {
     const far = Math.hypot(Math.max(rx, w - rx), Math.max(ry, h - ry));
     for (let k = 1; k * step * unitPx < far + 20 && k < 40; k++) {
       const r = k * step * unitPx;
-      ctx.strokeStyle = "rgba(120,170,220,.28)"; ctx.beginPath(); ctx.arc(rx, ry, r, 0, 7); ctx.stroke();
-      ctx.fillStyle = "rgba(150,190,230,.7)"; ctx.fillText(`${k * step} ${met ? "km" : "NM"}`, rx + 4, ry - r + 11);
+      ctx.strokeStyle = light ? "rgba(30,80,140,.45)" : "rgba(120,170,220,.35)"; ctx.beginPath(); ctx.arc(rx, ry, r, 0, 7); ctx.stroke();
+      ctx.fillStyle = light ? "rgba(20,60,110,.9)" : "rgba(170,205,240,.85)"; ctx.fillText(`${k * step} ${met ? "km" : "NM"}`, rx + 4, ry - r + 11);
     }
-    ctx.strokeStyle = "rgba(120,170,220,.35)"; ctx.beginPath(); ctx.moveTo(rx - 9999, ry); ctx.lineTo(rx + 9999, ry); ctx.moveTo(rx, ry - 9999); ctx.lineTo(rx, ry + 9999); ctx.stroke();
+    ctx.strokeStyle = light ? "rgba(30,80,140,.4)" : "rgba(120,170,220,.4)"; ctx.beginPath(); ctx.moveTo(rx - 9999, ry); ctx.lineTo(rx + 9999, ry); ctx.moveTo(rx, ry - 9999); ctx.lineTo(rx, ry + 9999); ctx.stroke();
     ctx.fillStyle = "#4ddb7a"; ctx.beginPath(); ctx.arc(rx, ry, 4, 0, 7); ctx.fill();
-    ctx.strokeStyle = "#0b0e12"; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.strokeStyle = light ? "#fff" : "#0b0e12"; ctx.lineWidth = 1.5; ctx.stroke();
   }
   // trails + aircraft
   const showTrails = $("adsbTrails").checked, showLbl = $("adsbLabels").checked, now = performance.now();
@@ -1258,7 +1279,7 @@ function adsRender() {
       const tr = ADS.trails.get(a.icao); if (!tr || tr.length < 2) continue;
       for (let i = 1; i < tr.length; i++) {
         const [x0, y0] = P(tr[i - 1][0], tr[i - 1][1]), [x1, y1] = P(tr[i][0], tr[i][1]);
-        ctx.strokeStyle = adsAltColor({ alt: tr[i][2], ground: a.ground }, 0.15 + 0.55 * (i / tr.length));
+        ctx.strokeStyle = adsAltColor({ alt: tr[i][2], ground: a.ground }, (light ? 0.3 : 0.15) + 0.6 * (i / tr.length), light);
         ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
       }
     }
@@ -1277,18 +1298,18 @@ function adsRender() {
     if (a.trk != null) ctx.rotate((a.trk * Math.PI) / 180);
     ctx.beginPath();
     if (a.ground || a.trk == null) { ctx.arc(0, 0, 4.5, 0, 7); } else { ADS_PLANE.forEach(([px, py], i) => (i ? ctx.lineTo(px * 0.85, py * 0.85) : ctx.moveTo(px * 0.85, py * 0.85))); ctx.closePath(); }
-    ctx.fillStyle = adsAltColor(a); ctx.fill(); ctx.strokeStyle = "rgba(0,0,0,.8)"; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = adsAltColor(a, 1, light); ctx.fill(); ctx.strokeStyle = light ? "rgba(0,0,0,.85)" : "rgba(255,255,255,.55)"; ctx.lineWidth = 1; ctx.stroke();
     ctx.restore();
     if (showLbl && !dim) {
       const t1 = a.flight || a.icao, t2 = a.ground ? "GND" : a.alt != null ? (met ? Math.round(a.alt * 0.3048) + "m" : "FL" + String(Math.round(a.alt / 100)).padStart(3, "0")) : "";
-      ctx.globalAlpha = fade; ctx.lineWidth = 3; ctx.strokeStyle = "rgba(0,0,0,.8)"; ctx.fillStyle = "#e8edf3";
+      ctx.globalAlpha = fade; ctx.lineWidth = 3; ctx.strokeStyle = light ? "rgba(255,255,255,.9)" : "rgba(0,0,0,.8)"; ctx.fillStyle = light ? "#10202e" : "#e8edf3";
       ctx.strokeText(t1, x + 12, y - 1); ctx.fillText(t1, x + 12, y - 1);
-      ctx.fillStyle = "#9fb0c3"; ctx.strokeText(t2, x + 12, y + 10); ctx.fillText(t2, x + 12, y + 10);
+      ctx.fillStyle = light ? "#34506a" : "#9fb0c3"; ctx.strokeText(t2, x + 12, y + 10); ctx.fillText(t2, x + 12, y + 10);
       ctx.globalAlpha = 1;
     }
   }
   if (!draw.length) {
-    ctx.fillStyle = "#6f7c8c"; ctx.font = "13px sans-serif"; ctx.textAlign = "center";
+    ctx.fillStyle = light ? "#4a5a6a" : "#9fb0c3"; ctx.font = "13px sans-serif"; ctx.textAlign = "center";
     ctx.fillText(adsRunning() ? "Waiting for aircraft with a position …" : "Press ▶ Start ADS-B (1090 MHz)", w / 2, h / 2);
   }
   if (ADS.list.some((a) => ADS_EMER[a.squawk] && a.seen <= 90)) setTimeout(adsDraw, 120);   // keep the emergency ring pulsing
@@ -1311,7 +1332,7 @@ function adsRender() {
       const r = c.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
       let best = null, bd = 16;
       for (const [hx, hy, id] of ADS.hit) { const dd = Math.hypot(hx - x, hy - y); if (dd < bd) { bd = dd; best = id; } }
-      ADS.sel = best === ADS.sel ? null : best; renderAdsbTable(); adsDraw();
+      ADS.sel = best === ADS.sel ? null : best; if (ADS.sel) send({ cmd: "adsb_lookup", icao: ADS.sel }); renderAdsbTable(); adsDraw();
     }
     drag = null;
   });
@@ -1418,12 +1439,14 @@ const Q_BANDS = [
 const Q_DECS = [
   ["DMR", "dsd", "dmr"], ["P25", "dsd", "p25p1"], ["NXDN", "dsd", "nxdn48"], ["dPMR", "dsd", "dpmr"], ["M17", "dsd", "m17"],
   ["TETRA", "tetra", ""], ["PAGER", "pager", ""], ["APRS", "data", ""], ["WEFAX", "wefax", ""], ["SSTV", "sstv", ""],
-  ["LRPT", "lrpt", ""], ["ADS-B", "adsb", ""],
+  ["LRPT", "lrpt", ""], ["GOES", "goes", ""], ["DAB", "dab", "12B"], ["ADS-B", "adsb", ""], ["FT8", "ft8", "ft8"], ["FT4", "ft8", "ft4"],
 ];
 const Q_DEC_TIPS = { dmr: "DMR digital voice", p25p1: "P25 Phase 1 digital voice", nxdn48: "NXDN 4800 digital voice", dpmr: "dPMR digital voice",
   m17: "M17 digital voice", tetra: "TETRA baseband out over UDP", pager: "POCSAG / FLEX pagers – messages appear in PAGER MESSAGES",
   data: "APRS, DTMF, ZVEI, EAS", wefax: "Weather fax charts (USB mode)", sstv: "SSTV pictures", lrpt: "Meteor-M satellite pictures",
-  adsb: "Aircraft tracking on 1090 MHz – opens the ADS-B tab data" };
+  adsb: "Aircraft tracking on 1090 MHz – opens the ADS-B tab data", goes: "GOES-East/West HRIT images on 1694.1 MHz (needs a dish and LNA)",
+  "12B": "DAB digital radio (BBC National multiplex) – stations in the DAB tab",
+  ft8: "FT8 weak-signal digital (USB, 15 s slots) – messages appear in the FT8 tab", ft4: "FT4 (USB, 7.5 s slots)" };
 let sqPrev = -60;
 
 function buildQuick() {
@@ -1626,6 +1649,7 @@ $("schDays").innerHTML = DAYS.map((d, i) => `<label class="day"><input type="che
 function renderSchedule() {
   if (!SCH) return;
   $("schNow").textContent = SCH.now;
+  renderSats();
   if (!$("schAction").options.length) {
     $("schAction").innerHTML = Object.entries(SCH.actions).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
     $("schPreset").insertAdjacentHTML("beforeend", SCH.presets.map((p, i) => `<option value="${i}">${esc(p.name)}</option>`).join(""));
@@ -1650,6 +1674,107 @@ function renderSchedule() {
     tr.querySelector("[data-act=edit]").onclick = () => fillSchForm(j);
   });
 }
+/* ======================================================= DAB */
+const DAB_CH = {"5A":174.928,"5B":176.640,"5C":178.352,"5D":180.064,"6A":181.936,"6B":183.648,"6C":185.360,"6D":187.072,"7A":188.928,"7B":190.640,"7C":192.352,"7D":194.064,"8A":195.936,"8B":197.648,"8C":199.360,"8D":201.072,"9A":202.928,"9B":204.640,"9C":206.352,"9D":208.064,"10A":209.936,"10B":211.648,"10C":213.360,"10D":215.072,"11A":216.928,"11B":218.640,"11C":220.352,"11D":222.064,"12A":223.936,"12B":225.648,"12C":227.360,"12D":229.072,"13A":230.784,"13B":232.496,"13C":234.208,"13D":235.776,"13E":237.488,"13F":239.200};
+const DAB_UK = { "12B": "BBC National DAB", "11D": "Digital One", "11B": "Sound Digital" };
+$("dabCh").innerHTML = Object.entries(DAB_CH).map(([k, f]) => `<option value="${k}" ${k === "12B" ? "selected" : ""}>${k} – ${f.toFixed(3)} MHz${DAB_UK[k] ? " · " + DAB_UK[k] : ""}</option>`).join("");
+let dabPlaying = null, dabTimer = null;
+const dabRunning = () => S && S.decoder === "dab";
+async function dabPoll() {
+  clearTimeout(dabTimer);
+  if (!$("tab-dab").classList.contains("active")) return;
+  $("dabStat").textContent = dabRunning() ? `running · block ${S.decoder_sub}` : "stopped";
+  if (dabRunning()) {
+    try {
+      const r = await fetch(`/api/dab/mux.json?token=${encodeURIComponent(token)}`);
+      if (r.ok) {
+        const d = await r.json(), ens = (d.ensemble && (d.ensemble.label && d.ensemble.label.label || d.ensemble.label)) || "";
+        const sv = (d.services || []).map((x) => ({ sid: x.sid, name: (x.label && x.label.label) || x.label || x.sid, dls: (x.dls && x.dls.label) || x.dls || "" })).filter((x) => x.sid).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+        $("dabStat").textContent = `running · block ${S.decoder_sub}${ens ? " · " + String(ens).trim() : ""} · ${sv.length} stations`;
+        $("dabTable").querySelector("tbody").innerHTML = sv.map((x) => `<tr data-sid="${esc(x.sid)}" class="${dabPlaying && dabPlaying.sid === x.sid ? "sel" : ""}"><td class="cs">${esc(String(x.name).trim())}</td><td class="muted">${esc(String(x.dls).trim())}</td></tr>`).join("") ||
+          '<tr><td colspan="2" class="muted">Searching for the multiplex … stations appear when the ensemble has been decoded (10–30 s).</td></tr>';
+        if (dabPlaying) { const cur = sv.find((x) => x.sid === dabPlaying.sid); if (cur) $("dabDls").textContent = String(cur.dls).trim(); }
+      }
+    } catch (e) { /* server busy */ }
+  } else {
+    $("dabTable").querySelector("tbody").innerHTML = '<tr><td colspan="2" class="muted">DAB is not running. Pick a multiplex and press ▶ Start DAB.</td></tr>';
+  }
+  dabTimer = setTimeout(dabPoll, 3000);
+}
+$("dabStart").onclick = () => { send({ cmd: "decoder", id: "dab", sub: $("dabCh").value }); dabPlaying = null; $("dabAudio").removeAttribute("src"); setTimeout(dabPoll, 1500); };
+$("dabStop").onclick = () => { send({ cmd: "decoder", id: "", sub: "auto" }); $("dabAudio").pause(); $("dabAudio").removeAttribute("src"); dabPlaying = null; $("dabNow").textContent = "Nothing playing"; setTimeout(dabPoll, 800); };
+$("dabTable").querySelector("tbody").addEventListener("click", (e) => {
+  const tr = e.target.closest("tr[data-sid]"); if (!tr) return;
+  dabPlaying = { sid: tr.dataset.sid, name: tr.querySelector(".cs").textContent };
+  $("dabNow").textContent = "▶ " + dabPlaying.name;
+  const a = $("dabAudio"); a.src = `/api/dab/mp3/${encodeURIComponent(dabPlaying.sid)}?token=${encodeURIComponent(token)}`; a.play().catch(() => {});
+  dabPoll();
+});
+
+/* ======================================================= FT8 / FT4 */
+const FT8 = { msgs: [], unseen: 0 };
+const FT8_BANDS = [["160 m", 1840000], ["80 m", 3573000], ["60 m", 5357000], ["40 m", 7074000], ["30 m", 10136000], ["20 m", 14074000], ["17 m", 18100000],
+  ["15 m", 21074000], ["12 m", 24915000], ["10 m", 28074000], ["6 m", 50313000], ["4 m", 70154000], ["2 m", 144174000]];
+$("ft8Band").insertAdjacentHTML("beforeend", FT8_BANDS.map((b, i) => `<option value="${b[1]}">${b[0]} – ${(b[1] / 1e6).toFixed(3)} MHz</option>`).join(""));
+function onFt8(m) {
+  FT8.msgs.push(m); if (FT8.msgs.length > 300) FT8.msgs.shift();
+  if (!$("tab-ft8").classList.contains("active")) { FT8.unseen++; const b = $("ft8Badge"); b.hidden = false; b.textContent = FT8.unseen; }
+  renderFt8();
+}
+function renderFt8() {
+  const run = S && S.decoder === "ft8";
+  $("ft8Stat").textContent = run ? `running · ${(S.decoder_sub || "ft8").toUpperCase()} · ${FT8.msgs.length} messages` : `stopped · ${FT8.msgs.length} messages kept`;
+  if (!$("tab-ft8").classList.contains("active")) return;
+  const cq = $("ft8Cq").checked;
+  $("ft8Table").querySelector("tbody").innerHTML = FT8.msgs.filter((m) => !cq || m.cq).slice().reverse().map((m) =>
+    `<tr class="${m.cq ? "cq" : ""}"><td class="mono">${esc(m.utc || m.slot)}</td><td>${esc(m.proto || "FT8")}</td><td class="num">${m.score}</td><td class="num">${m.dt}</td>
+     <td class="num">${m.hz}</td><td class="mono">${m.rf ? (m.rf / 1e6).toFixed(4) : "–"}</td><td>${esc(m.text)}</td><td class="mono">${esc(m.call)}</td><td class="mono">${esc(m.grid)}</td></tr>`).join("") ||
+    `<tr><td colspan="9" class="muted">${run ? "Waiting for the end of the current time slot …" : "Not running. Pick a band and press ▶ FT8, or just tune a dial frequency such as 14.074 MHz."}</td></tr>`;
+}
+$("ft8Cq").onchange = renderFt8;
+$("ft8Clear").onclick = () => { FT8.msgs = []; renderFt8(); };
+$("ft8Stop").onclick = () => send({ cmd: "decoder", id: "", sub: "auto" });
+const ft8Go = (sub) => { const f = +$("ft8Band").value; if (f) send({ cmd: "tune", freq: sub === "ft4" ? (FT4_FOR[f] || f) : f, mode: "USB" }); setTimeout(() => send({ cmd: "decoder", id: "ft8", sub }), 400); };
+const FT4_FOR = { 3573000: 3575000, 7074000: 7047500, 10136000: 10140000, 14074000: 14080000, 18100000: 18104000, 21074000: 21140000, 24915000: 24919000, 28074000: 28180000, 50313000: 50318000, 144174000: 144170000 };
+$("ft8Start").onclick = () => ft8Go("ft8");
+$("ft8Start4").onclick = () => ft8Go("ft4");
+
+/* ---- satellite auto-capture */
+const fmtLocal = (t) => new Date(t * 1000).toLocaleString([], { weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+const azName = (a) => ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(a / 45) % 8];
+function renderSats() {
+  const st = SCH && SCH.sats; if (!st) return;
+  const busy = (id) => document.activeElement === $(id);
+  if (!busy("satLat") && !busy("satLon")) { $("satLat").value = st.observer ? st.observer[0] : ""; $("satLon").value = st.observer ? st.observer[1] : ""; }
+  $("satMsg").textContent = !st.have_sgp4 ? "Orbit maths library missing – reinstall AndySDR." : !st.observer ? "Enter your position (or use my location) to see passes." : st.busy ? "Downloading orbit data …" : st.error || "";
+  if ([...document.querySelectorAll("#satTable input")].some((e) => e === document.activeElement)) return;
+  $("satTable").querySelector("tbody").innerHTML = st.sats.map((x) => {
+    const fr = x.freqs.length > 1 ? `<select data-k="freq">${x.freqs.map((f) => `<option value="${f}" ${f === x.freq ? "selected" : ""}>${(f / 1e6).toFixed(3)} MHz</option>`).join("")}</select>` : `${(x.freqs[0] / 1e6).toFixed(3)} MHz`;
+    let note = esc(x.note);
+    if (x.kind === "geo" && st.observer && x.el != null) note = (x.visible ? `<b style="color:var(--ok,#4ddb7a)">Above your horizon (${x.el}°).</b> ` : x.above_horizon ? `<b>Only ${x.el}° up – too low to track.</b> ` : `<b style="color:var(--warn,#ffb020)">Below your horizon from here (${x.el}°) – nothing to receive.</b> `) + note;
+    const geoNoDates = x.kind === "geo";
+    return `<tr data-id="${x.id}"><td><input type="checkbox" data-k="enabled" ${x.enabled ? "checked" : ""}></td><td>${esc(x.name)}</td><td>${fr}</td>
+      <td><input class="inp" data-k="min_el" type="number" min="0" max="80" value="${x.min_el}" style="width:4.5em">°</td>
+      <td>${geoNoDates ? '<span class="muted">–</span>' : `<input class="inp" data-k="from" type="date" value="${esc(x.from)}"> – <input class="inp" data-k="to" type="date" value="${esc(x.to)}">`}</td>
+      <td class="muted">${x.tle_age_h == null ? "not downloaded" : x.tle_age_h + " h old"}</td><td class="small">${note}</td></tr>`;
+  }).join("");
+  $("satTable").querySelectorAll("tr[data-id] [data-k]").forEach((el) => {
+    el.onchange = () => {
+      const k = el.dataset.k, id = el.closest("tr").dataset.id;
+      send({ cmd: "sat_cfg", id, [k]: el.type === "checkbox" ? el.checked : el.value });
+    };
+  });
+  $("satPasses").querySelector("tbody").innerHTML = st.passes.map((p) => `<tr><td>${esc(p.name)}</td><td>${p.geo ? "now (continuous)" : fmtLocal(p.aos)}</td><td>${fmtLocal(p.los)}</td>
+    <td>${p.geo ? p.max_el + "°" : p.max_el + "°"}</td><td>${p.geo ? "–" : azName(p.az)}</td><td>${(p.freq / 1e6).toFixed(3)}</td></tr>`).join("") ||
+    `<tr><td colspan="6" class="muted">${st.observer ? "Tick a satellite above – its passes for the next 48 hours appear here." : "Set your position first."}</td></tr>`;
+}
+$("satPosSet").onclick = () => send({ cmd: "sat_observer", lat: $("satLat").value.trim().replace(",", "."), lon: $("satLon").value.trim().replace(",", ".") });
+$("satPosGps").onclick = () => {
+  if (!navigator.geolocation) { toast("This browser has no location service", "warn"); return; }
+  navigator.geolocation.getCurrentPosition((p) => send({ cmd: "sat_observer", lat: p.coords.latitude.toFixed(5), lon: p.coords.longitude.toFixed(5), alt: Math.round(p.coords.altitude || 30) }),
+    () => toast("Could not get your location – type it in instead", "warn"), { timeout: 10000 });
+};
+$("satRefresh").onclick = () => send({ cmd: "sat_refresh" });
 function fillSchForm(j) {
   schEdit = j ? j.id : null;
   $("schName").value = j ? j.name : ""; $("schFreq").value = j ? (j.freq / 1e6).toString() : "";
@@ -1842,7 +1967,7 @@ setInterval(() => { if (MESH && meshTabOpen()) renderMeshList(); }, 30000);
 /* ======================================================= help */
 const HELP = {
   conn: ["Connection light", "Green CONNECTED means this screen is talking to the AndySDR receiver (on this PC or across the network). If it shows OFFLINE, AndySDR is not running or the network is down – it reconnects by itself."],
-  theme: ["Style", "Changes the faceplate look: PRO-2045 style (amber LCD, silver band), UBCD260DN style (black base/mobile with white-blue display) or TRX-2 style (rugged gunmetal with green-grey display). Controls work the same in every style; each computer remembers its own choice."],
+  theme: ["Style", "Changes the look: PRO-2045 style (amber LCD, silver band), UBCD260DN style (black base/mobile with white-blue display), TRX-2 style (rugged gunmetal with green-grey display) or SDR++ style (flat dark panels, side bar of controls on the left and a big spectrum and waterfall). Controls work the same in every style; each computer remembers its own choice."],
   help: ["HELP", "Opens this guide. Tick 'Explain mode' and then click any knob, key or panel to get a description of just that control. Press Esc to leave Explain mode."],
   volume: ["VOLUME knob", "Loudness on THIS computer only (each remote listener has their own). Drag up/down, use the mouse wheel, or click it and use the arrow keys. Double-click resets to 70%."],
   squelch: ["SQUELCH knob", "Mutes the hiss when nobody is transmitting. Turn it up until the noise just disappears – the little raised bar on the S-meter shows where it is set. OPEN (fully left) = always hear everything. Scanning and searching need squelch set above the noise so they know when a channel is quiet."],
@@ -1872,6 +1997,9 @@ const HELP = {
   decoders: ["Decoders", "Pick what to decode on the current frequency. Digital voice uses DSD-FME (choose DMR, P25, NXDN, dPMR, YSF, M17 or Auto); pagers use multimon-ng (POCSAG & FLEX); WEFAX, SSTV and ADS-B aircraft tracking (1090 MHz, see the ADS-B tab) are built in; Meteor-M LRPT records the satellite pass and hands it to SatDump. Decoded text appears in the log and on the LCD bottom line; pager messages are also listed in the PAGER MESSAGES tab. Memory channels can start their decoder automatically."],
   receiver: ["Receiver", "Choose which SDR to use: every SoapySDR device (RTL-SDR/Nooelec, SDRplay RSP1A/RSP2/RSP2pro/RSPdx/RSPduo, Airspy, HackRF, LimeSDR, Pluto…), rtl_tcp servers on other machines, or the Simulator for practice. Sample rate sets how wide the waterfall is. Antenna picks the input (RSP2: Antenna A, B or Hi-Z). Device switches (bias-T, notch filters, direct sampling) appear underneath automatically."],
   autoid: ["Auto ID (automatic signal identification)", "When ticked, AndySDR analyses whatever you are listening to and shows what it is next to the VFO: DMR (it spots the 30 ms TDMA bursts), P25, NXDN, dPMR, pagers (POCSAG/FLEX), APRS, DTMF, SSTV, WEFAX, TETRA or analogue voice (with any CTCSS tone). It then switches to the right mode and starts the matching decoder by itself, and stops it again when the channel goes back to voice. SSTV pictures are caught from their very first line. A decoder you pick yourself, or one stored on a memory channel, is never overridden. Untick to turn it off."],
+  dabtab: ["DAB radio", "UK digital radio (DAB/DAB+, Band III 174–240 MHz). Choose a multiplex (BBC National is 12B, Digital One 11D, Sound Digital 11B), press ▶ Start DAB, wait 10–30 seconds for the station list, then click a station to listen. It needs a receiver running at 2.4 MS/s or more and a Band III antenna; the sound plays on the screen you are using, including a remote PC. Experimental."],
+  ft8tab: ["FT8 / FT4", "Weak-signal amateur digital modes. Pick a band and press ▶ FT8 (or ▶ FT4): AndySDR tunes USB to the dial frequency and decodes every 15 s UTC slot (FT4: 7.5 s). It also starts by itself when you tune or scan onto an FT8/FT4 channel from the band plan and something is on the air. The PC clock must be accurate. CQ only hides everything except stations calling CQ. From/Grid are read from the message."],
+  satauto: ["Satellite auto-capture", "Tick a satellite and AndySDR predicts every pass over your position (set it with My position or 📍), tunes at acquisition of signal, runs the right decoder and stops when the satellite sets – then puts the radio back as it was. ISS SSTV listens on 145.800 MHz FM (limit it to the ARISS event dates with the date boxes); Meteor-M N2-3 and N2-4 are LRPT on 137.900 MHz (switch to 137.100 if the satellite moves); GOES-19/18 are 1694.1 MHz HRIT from geostationary orbit – AndySDR says honestly when the satellite is below your horizon. Min elevation hides low, weak passes. Orbit data (TLEs) is downloaded from CelesTrak and refreshed automatically. A capture you add by hand always takes priority."],
   sched: ["Scheduler", "Captures that run by themselves at set times – ideal for weather fax charts, ISS SSTV events and Meteor-M satellite passes. Pick a station from Quick pick (or type a frequency), choose what to do (WEFAX, SSTV, LRPT, record…), the start time on this PC's clock and how long, and either tick days of the week or pick a single date. At the start time AndySDR stops scanning, tunes, runs the decoder; at the end it saves the pictures and puts the radio back exactly as it was. ▶ Now runs one straight away. AndySDR must be running (it can run as a server in the background)."],
   bppick: ["Plan › Band › Section", "Drill down through the UK band plan: pick a Plan (amateur, aviation, marine, PMR…), then a Band in it, then a Section (sub-band or key frequency). Tune goes there in the right mode and step; Search section loads it into the Live Activity search; 'Add key frequencies to bank' stores every key frequency in that band (e.g. marine Ch 16/70/AIS, airband 121.5/123.1) into the memory bank you choose. Clicking a coloured strip on the spectrum or a band name in the list also selects it here. Tap the coloured plan buttons underneath to show or hide each plan on the spectrum."],
   bandplan: ["Band plan size", "Shows the UK band plan as coloured strips across the top of the spectrum and in the band map above it. Off hides it; Small shows main allocations only; Medium adds sub-bands (e.g. 2 m FM simplex) and markers for key frequencies (Ch 16, 121.5, APRS…); Large makes the strips bigger and names the key frequencies. Each computer remembers its own choice."],
@@ -1912,7 +2040,7 @@ function openHelp() {
   <h3>QUICK BUTTONS (under the display)</h3>${ctl(["qmode", "qband", "qdec", "qlock", "qtog"])}
   <h3>KEYPAD &amp; FUNCTION KEYS</h3>${ctl(["k_scan", "k_man", "k_srch", "k_pgm", "k_lo", "k_pri", "k_mode", "k_step", "k_bank", "k_dly", "k_rec", "k_dec", "k_dot", "k_e", "k_arrows", "k_clr"])}
   <p class="small">Keyboard: digits and <code>.</code> type, <code>Enter</code> tunes, <code>↑ ↓</code> step, <code>S</code> scan, <code>M</code> manual, <code>P</code> program, <code>L</code> lockout, <code>I</code> skip 10 min, <code>H</code> help, <code>Esc</code> clear.</p>
-  <h3>SCREENS</h3>${ctl(["scope", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "updates", "receiver", "remote", "theme", "conn"])}
+  <h3>SCREENS</h3>${ctl(["scope", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "satauto", "dabtab", "ft8tab", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "updates", "receiver", "remote", "theme", "conn"])}
   <h3>DECODER PROGRAMS</h3>
   <p>AndySDR has WEFAX and SSTV built in (SSTV: Martin, Scottie, Robot and PD modes – ISS 145.800 NFM, 2 m 144.500 NFM, 20 m 14.230 USB). DSD-FME, multimon-ng and SatDump now come bundled in the <code>decoders</code> folder next to <code>AndySDR.exe</code>. If one shows ✖ in the DECODERS tab, press <b>⬇ Download missing decoders</b> and AndySDR fetches it from GitHub into <code>%APPDATA%\\AndySDR\\decoders</code>. You can also unzip your own copy into either folder (any sub-folder is fine – AndySDR finds the .exe):</p>
   <dl><dt>DSD-FME</dt><dd>github.com/lwvmobile/dsd-fme – DMR, P25 1/2, NXDN, dPMR, YSF, M17. AndySDR feeds it like SDR++'s network sink (TCP 127.0.0.1:7355, 48 kHz); DSD-FME plays decoded voice on your speakers itself (AndySDR starts the PulseAudio sound server that comes with it).</dd>

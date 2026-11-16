@@ -11,6 +11,7 @@ import json
 import logging
 import mimetypes
 import os
+import re
 import socket
 import struct
 import time
@@ -150,12 +151,54 @@ class Server:
             data = json.dumps(self.radio.adsb.tracker.aircraft_json(time.time())).encode()
             await self._send(writer, 200, data, "application/json")
             return
+        if path == "/api/dab/mux.json":
+            await self._dab_proxy(writer, "/mux.json", False)
+            return
+        if path.startswith("/api/dab/mp3/"):
+            await self._dab_proxy(writer, "/mp3/" + path[len("/api/dab/mp3/"):], True)
+            return
         if path.startswith("/images/"):
             await self._file(writer, self.images, path[len("/images/"):])
             return
         if path in ("/", ""):
             path = "/index.html"
         await self._file(writer, self.web, path.lstrip("/"))
+
+    async def _dab_proxy(self, writer, upstream, stream):
+        """Relay welle-cli's /mux.json or an MP3 stream, so remote screens can use DAB behind our password check."""
+        port = self.radio.decoders.dab_port if self.radio.decoders.active == "dab" else 0
+        if not port or not re.fullmatch(r"/(mux\.json|mp3/[0-9A-Za-z_.x-]{1,40})", upstream):
+            await self._send(writer, 404, b"DAB is not running", "text/plain")
+            return
+        try:
+            ur, uw = await asyncio.wait_for(asyncio.open_connection("127.0.0.1", port), 5)
+            uw.write(f"GET {upstream} HTTP/1.0\r\nHost: localhost\r\n\r\n".encode())
+            await uw.drain()
+            head = await asyncio.wait_for(ur.readuntil(b"\r\n\r\n"), 10)
+            status = head.split(b"\r\n", 1)[0].decode("latin-1")
+            if " 200" not in status:
+                await self._send(writer, 404, b"Station not available yet", "text/plain")
+                uw.close()
+                return
+            if not stream:
+                body = await asyncio.wait_for(ur.read(), 10)
+                await self._send(writer, 200, body, "application/json")
+                uw.close()
+                return
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: audio/mpeg\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n")
+            while True:
+                chunk = await asyncio.wait_for(ur.read(4096), 30)
+                if not chunk:
+                    break
+                writer.write(chunk)
+                await writer.drain()
+        except Exception:                       # client left, welle-cli stopped ...
+            pass
+        finally:
+            try:
+                writer.close()
+            except Exception:
+                pass
 
     async def _file(self, writer, root, rel):
         full = os.path.realpath(os.path.join(root, rel))
@@ -275,6 +318,7 @@ class Server:
             "mesh": r.mesh.snapshot(), "mesh_history": r.mesh.history[-1500:],
             "pager": r.pager.snapshot(),
             "adsb": r.adsb.snapshot(),
+            "ft8": r.decoders.ft8_history[-300:],
             "update": self.updater.status(),
             "settings": {k: self.s[k] for k in ("scan_delay", "scan_dwell", "search_threshold_db",
                                                  "server_port", "require_password_local",
@@ -436,6 +480,8 @@ class Server:
                 r.adsb.clear()
             elif cmd == "adsb_pos":
                 r.adsb.set_position(m.get("lat"), m.get("lon"))
+            elif cmd == "adsb_lookup":
+                r.adsb.lookup(m.get("icao"))
             elif cmd == "adsb_share":
                 r.adsb.set_share(bool(m.get("on")))
             elif cmd == "adsb_option":
@@ -459,6 +505,25 @@ class Server:
                 r.scheduler.save_job(m["job"])
             elif cmd == "schedule_delete":
                 r.scheduler.delete_job(str(m["id"]))
+            elif cmd == "sat_cfg":
+                kw = {k: m[k] for k in ("enabled", "freq", "min_el", "from", "to") if k in m}
+                if "freq" in kw:
+                    kw["freq"] = int(kw["freq"])
+                if "min_el" in kw:
+                    kw["min_el"] = max(0.0, min(80.0, float(kw["min_el"])))
+                if "enabled" in kw:
+                    kw["enabled"] = bool(kw["enabled"])
+                r.scheduler.sats.set_cfg(str(m.get("id")), **kw)
+                r.scheduler.sats.refresh_tles()
+                r.scheduler._emit()
+            elif cmd == "sat_observer":
+                if r.scheduler.sats.set_observer(m.get("lat"), m.get("lon"), m.get("alt")):
+                    r.scheduler.sats.refresh_tles()
+                else:
+                    r._emit("event", {"level": "warn", "text": "Satellites: latitude / longitude not understood"})
+                r.scheduler._emit()
+            elif cmd == "sat_refresh":
+                r.scheduler.sats.refresh_tles(force=True)
             elif cmd == "schedule_run":
                 r.scheduler.run_now(str(m["id"]))
             elif cmd == "schedule_stop":

@@ -35,7 +35,7 @@ jobs:
           for m in soapysdr-module-rtlsdr soapysdr-module-airspy soapysdr-module-airspyhf soapysdr-module-hackrf soapysdr-module-remote soapysdr-module-lms7 soapysdr-module-plutosdr; do
             conda install -y "$m" || echo "skipped $m"
           done
-          python -m pip install pywebview pyinstaller meshcore pyserial bleak
+          python -m pip install pywebview pyinstaller meshcore pyserial bleak sgp4
           python -c "import meshcore, serial, bleak; print(\"MeshCore library\", meshcore.__name__, \"OK\")"
           python -c "import SoapySDR; print('SoapySDR', SoapySDR.getAPIVersion(), SoapySDR.listModules())"
           # RTL-SDR (Nooelec etc.) support is essential - fail the build if its driver module is missing
@@ -52,6 +52,13 @@ jobs:
       - name: Lockout self-test (informational)
         continue-on-error: true
         run: python tests/test_lockout.py
+
+      - name: New-feature self-tests (informational)
+        continue-on-error: true
+        shell: bash
+        run: |
+          python -m pip install sgp4
+          for t in test_aircraftinfo test_satpass test_satsched test_ft8 test_dab; do python tests/$t.py || echo "::warning::$t failed"; done
 
       - name: Build AndySDR.exe
         run: |
@@ -87,6 +94,65 @@ jobs:
           done
           du -sh "$D"
           exit $missing
+
+      - name: Build FT8/FT4 decoder (ft8_lib, MIT)
+        continue-on-error: true            # a build problem must not block the release; the app then says decode_ft8 is missing
+        shell: bash
+        run: |
+          D=dist/AndySDR/decoders/ft8_lib
+          mkdir -p "$D"
+          git clone --depth 1 https://github.com/kgoba/ft8_lib.git /tmp/ft8_lib
+          cd /tmp/ft8_lib
+          git rev-parse HEAD
+          gcc -O3 -DHAVE_STPCPY -D_POSIX_C_SOURCE=200809L -I. -static -o decode_ft8.exe demo/decode_ft8.c ft8/*.c common/wave.c common/monitor.c common/audio.c fft/*.c -lm
+          cp decode_ft8.exe "$OLDPWD/$D/"
+          cp LICENSE "$OLDPWD/$D/LICENSE.txt"
+          echo "ft8_lib $(git rev-parse HEAD) https://github.com/kgoba/ft8_lib (MIT)" > "$OLDPWD/$D/ANDYSDR_SOURCE.txt"
+          cd "$OLDPWD"
+          ls -l "$D"
+          # decode an empty slot to prove it starts (prints nothing, exits 0)
+          python - <<'PY'
+          import wave, subprocess
+          w = wave.open("/tmp/silence.wav", "wb"); w.setnchannels(1); w.setsampwidth(2); w.setframerate(12000); w.writeframes(b"\0\0" * 12000 * 15); w.close()
+          r = subprocess.run(["dist/AndySDR/decoders/ft8_lib/decode_ft8.exe", "/tmp/silence.wav"], capture_output=True, timeout=60)
+          print("decode_ft8 exit", r.returncode)
+          PY
+
+      - name: Build DAB decoder (welle-cli from source, experimental)
+        continue-on-error: true            # welle.io stopped publishing a Windows welle-cli; if this fails the DAB tab says the decoder is missing
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            git
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-fftw
+            mingw-w64-x86_64-faad2
+            mingw-w64-x86_64-mpg123
+            mingw-w64-x86_64-lame
+            mingw-w64-x86_64-libusb
+            mingw-w64-x86_64-pkg-config
+      - name: Compile and bundle welle-cli
+        continue-on-error: true
+        shell: msys2 {0}
+        run: |
+          git clone --depth 1 https://github.com/AlbrechtL/welle.io.git /tmp/welle.io
+          cd /tmp/welle.io
+          git rev-parse HEAD
+          mkdir build && cd build
+          cmake .. -G Ninja -DBUILD_WELLE_IO=OFF -DBUILD_WELLE_CLI=ON -DRTLSDR=OFF -DSOAPYSDR=OFF -DAIRSPY=OFF -DCMAKE_BUILD_TYPE=Release
+          ninja welle-cli
+          D="$GITHUB_WORKSPACE/dist/AndySDR/decoders/welle-cli"
+          mkdir -p "$D"
+          cp welle-cli.exe "$D/"
+          # copy the MinGW DLLs it needs next to it
+          ldd welle-cli.exe | awk '/mingw64/ {print $3}' | xargs -I{} cp {} "$D/"
+          cp ../LICENSE "$D/LICENSE.txt" 2>/dev/null || true
+          echo "welle.io $(cd .. && git rev-parse HEAD) https://github.com/AlbrechtL/welle.io (GPL-2.0)" > "$D/ANDYSDR_SOURCE.txt"
+          ls -l "$D"
 
       - name: Visual C++ runtime for the installer
         continue-on-error: true
@@ -145,6 +211,7 @@ jobs:
             * `AndySDR-windows.zip` – portable: unzip and run `AndySDR.exe`
 
             Decoders bundled in the `decoders` folder: DSD-FME (DMR, P25, NXDN, dPMR, YSF, M17), multimon-ng (POCSAG, FLEX, APRS, DTMF, ZVEI, EAS), SatDump (Meteor-M LRPT). WEFAX and SSTV are built in.
+            1.6.0: SDR++ style theme; satellite auto-capture (ISS SSTV, Meteor-M N2-3/N2-4 LRPT, GOES HRIT) from live pass predictions; aircraft registry/type/owner/photo lookup and a bright map in the ADS-B tab; FT8/FT4 decoder that starts itself on band-plan channels; experimental DAB radio tab. NOAA APT removed from the docs (retired).
             1.5.1: fuller front panel - status strip (clocks, receiver, span, filter, scan state, decoder) across the top, RX/SCAN/DEC/REC/LINK lights, and quick buttons under the display for mode, UK bands, decoders and audio. New SKIP buttons ignore a scanned channel or searched frequency for 10 minutes, 1 hour or the day (UNSKIP undoes it; key I). Band plan is bigger: Medium and Large enlarged with bigger text, new Extra large size.
             1.5.0: AndySDR can now update itself - it checks GitHub for new releases, shows a pop-up with what is new and, if you agree, downloads, checks and installs the update and restarts (REMOTE & SETTINGS › Updates).
             1.4.0: ADS-B aircraft tracking tab (1090 MHz) with live table and map.

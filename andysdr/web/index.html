@@ -26,6 +26,7 @@
         <option value="pro2045">PRO-2045 style</option>
         <option value="ubcd260">UBCD260DN style</option>
         <option value="trx2">TRX-2 style</option>
+        <option value="sdrpp">SDR++ style</option>
       </select>
     </label>
     <button id="helpBtn" class="help-btn" data-help="help">? HELP</button>
@@ -177,6 +178,8 @@
     <button class="tab" data-tab="dec">DECODERS</button>
     <button class="tab" data-tab="pag">PAGER MESSAGES <span class="tab-badge" id="pagBadge" hidden>0</span></button>
     <button class="tab" data-tab="adsb">ADS-B <span class="tab-badge" id="adsbBadge" hidden>0</span></button>
+    <button class="tab" data-tab="dab">DAB RADIO</button>
+    <button class="tab" data-tab="ft8">FT8 / FT4 <span class="tab-badge" id="ft8Badge" hidden>0</span></button>
     <button class="tab" data-tab="img">WEATHER IMAGES</button>
     <button class="tab" data-tab="bp">UK BAND PLAN</button>
     <button class="tab" data-tab="sch">SCHEDULER</button>
@@ -348,7 +351,7 @@
       <button class="btn sm" id="adsbPosSet">Set</button>
       <button class="btn sm" id="adsbPosGps" title="Use this device's location (the browser asks permission)">📍 Use my location</button>
       <label>Units <select id="adsbUnits"><option value="av">ft · kt · NM</option><option value="met">m · km/h · km</option></select></label>
-      <label><input type="checkbox" id="adsbTiles"> Street map <span class="muted small">(needs internet)</span></label>
+      <label>Map <select id="adsbTiles"><option value="bright">Bright street map (internet)</option><option value="dark">Dark street map (internet)</option><option value="plain">Plain bright (offline)</option><option value="plaindark">Plain dark (offline)</option></select></label>
       <label><input type="checkbox" id="adsbTrails" checked> Trails</label>
       <label><input type="checkbox" id="adsbLabels" checked> Labels</label>
       <label><input type="checkbox" id="adsbPosOnly"> Only with position</label>
@@ -364,12 +367,56 @@
       </div>
       <div class="tablewrap adsbtab" data-help="adsbtable">
         <table class="grid" id="adsbTable">
-          <thead><tr><th data-k="flight">Callsign</th><th data-k="icao">Hex</th><th data-k="airline">Airline / country</th><th data-k="alt" id="thAlt">Alt</th><th data-k="gs" id="thGs">Speed</th><th data-k="trk">Hdg</th><th data-k="vr" id="thVr">V/S</th><th data-k="squawk">Sqk</th><th data-k="dist" id="thDist">Dist</th><th data-k="msgs">Msgs</th><th data-k="seen">Seen</th></tr></thead>
+          <thead><tr><th data-k="flight">Callsign</th><th data-k="reg">Reg</th><th data-k="icao">Hex</th><th data-k="tcode">Type</th><th data-k="airline">Airline / owner</th><th data-k="alt" id="thAlt">Alt</th><th data-k="gs" id="thGs">Speed</th><th data-k="trk">Hdg</th><th data-k="vr" id="thVr">V/S</th><th data-k="squawk">Sqk</th><th data-k="dist" id="thDist">Dist</th><th data-k="msgs">Msgs</th><th data-k="seen">Seen</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
     </div>
     <div class="muted small" id="adsbNote"></div>
+  </div>
+
+  <!-- DAB -->
+  <div class="tabpage" id="tab-dab">
+    <div class="row wrapline" data-help="dabtab">
+      <b>DAB / DAB+ digital radio</b>
+      <span class="muted small" id="dabStat">stopped</span>
+      <span class="grow"></span>
+      <label>Multiplex <select id="dabCh"></select></label>
+      <button class="btn primary" id="dabStart">▶ Start DAB</button>
+      <button class="btn danger" id="dabStop">■ Stop</button>
+    </div>
+    <div class="dab-wrap">
+      <div class="tablewrap dab-list"><table class="grid" id="dabTable"><thead><tr><th>Station</th><th>Now playing</th></tr></thead><tbody></tbody></table></div>
+      <div class="dab-player card">
+        <div class="big" id="dabNow">Nothing playing</div>
+        <div class="muted small" id="dabDls"></div>
+        <audio id="dabAudio" controls preload="none" style="width:100%;margin-top:8px"></audio>
+        <div class="muted small" style="margin-top:6px">The sound plays on <i>this</i> screen (also over the network). Normal radio audio is muted while DAB runs.</div>
+      </div>
+    </div>
+    <p class="muted small">Needs a receiver that can run at 2.4 MS/s or more (RSP2pro, RTL-SDR) and a Band III (174–240 MHz) antenna. UK national multiplexes: BBC National 12B, Digital One 11D, Sound Digital 11B; local multiplexes differ by area (try 10B–10D, 11A, 12A, 12C, 12D). Experimental: the DAB decoder (welle-cli) is built from source with the release.</p>
+  </div>
+
+  <!-- FT8 / FT4 -->
+  <div class="tabpage" id="tab-ft8">
+    <div class="row wrapline" data-help="ft8tab">
+      <b>FT8 / FT4 weak-signal digital</b>
+      <span class="muted small" id="ft8Stat">stopped</span>
+      <span class="grow"></span>
+      <label>Band <select id="ft8Band"><option value="">– jump to a dial frequency –</option></select></label>
+      <button class="btn" id="ft8Start" title="Tune USB to the chosen dial frequency and start the FT8 decoder">▶ FT8</button>
+      <button class="btn" id="ft8Start4" title="Start FT4 (7.5 s slots)">▶ FT4</button>
+      <button class="btn danger" id="ft8Stop">■ Stop</button>
+      <label><input type="checkbox" id="ft8Cq"> CQ only</label>
+      <button class="btn" id="ft8Clear">Clear</button>
+    </div>
+    <div class="tablewrap" style="max-height:520px">
+      <table class="grid" id="ft8Table">
+        <thead><tr><th>UTC</th><th>Mode</th><th>Sync</th><th>DT</th><th>Audio Hz</th><th>RF MHz</th><th>Message</th><th>From</th><th>Grid</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="muted small">FT8 and FT4 are decoded in USB mode from the 12 kHz audio, once per 15 s (FT4: 7.5 s) UTC time slot, so the PC clock must be right. "Sync" is the decoder's candidate score, not a calibrated SNR. Tune a band-plan dial frequency (e.g. 14.074 MHz) and AndySDR starts the decoder by itself when something is on the air.</p>
   </div>
 
   <!-- IMAGES -->
@@ -421,6 +468,23 @@
       <span class="grow"></span>
       <span id="schRunning" class="sig-chip" hidden></span>
       <button class="btn danger" id="schStop" hidden>■ Stop capture</button>
+    </div>
+    <div class="card sat-card" data-help="satauto">
+      <div class="row wrapline"><b>🛰 Satellite auto-capture</b>
+        <span class="muted small">Switch a satellite on and AndySDR works out every pass over your location, tunes in and starts the decoder by itself.</span></div>
+      <div class="row wrapline">
+        <label>My position <input class="inp" id="satLat" placeholder="lat e.g. 51.5074" style="width:9em" inputmode="decimal">
+          <input class="inp" id="satLon" placeholder="lon e.g. -0.1278" style="width:9em" inputmode="decimal"></label>
+        <button class="btn sm" id="satPosSet">Set</button>
+        <button class="btn sm" id="satPosGps" title="Use this device's location (the browser asks permission)">📍 Use my location</button>
+        <button class="btn sm" id="satRefresh" title="Download fresh orbit data (TLEs) from CelesTrak">⟳ Update orbits</button>
+        <span class="muted small" id="satMsg"></span>
+      </div>
+      <div class="tablewrap"><table class="grid" id="satTable">
+        <thead><tr><th>On</th><th>Satellite</th><th>Frequency</th><th>Min elev.</th><th>Only between dates</th><th>Orbit data</th><th>Notes</th></tr></thead><tbody></tbody></table></div>
+      <div class="row"><b>Next passes</b></div>
+      <div class="tablewrap"><table class="grid" id="satPasses">
+        <thead><tr><th>Satellite</th><th>Starts</th><th>Ends</th><th>Peak</th><th>Rises at</th><th>Freq</th></tr></thead><tbody></tbody></table></div>
     </div>
     <div class="sch-form" data-help="sched">
       <label>Quick pick <select id="schPreset"><option value="">– choose a station –</option></select></label>
@@ -496,6 +560,7 @@
         <label><input type="checkbox" id="adsbShare"> Send the ADS-B feed over the network</label>
         <p class="small muted" id="adsbShareInfo">SBS/BaseStation text on port 30003 and raw AVR on port 30002 – for Virtual Radar Server, tar1090, PlanePlotter, FlightAware/FR24 feeders and similar. Windows may ask to allow AndySDR through the firewall. Keep it on your home network.</p>
         <label><input type="checkbox" id="adsbLog" checked> Log aircraft positions to a CSV file each day</label>
+        <label title="Sends only the aircraft hex code to hexdb.io (registry) and planespotters.net (photo)"><input type="checkbox" id="adsbLookup" checked> Look up registration, type, owner and photo online</label>
       </div>
       <div class="card">
         <h3>Scanner settings</h3>
