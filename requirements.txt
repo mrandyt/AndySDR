@@ -7,3 +7,4 @@ sgp4>=2.22         # satellite pass prediction (ISS SSTV, Meteor-M, GOES)
 # Optional: SoapySDR for RTL-SDR / Airspy / HackRF etc. - install with conda-forge:
 #   conda install -c conda-forge soapysdr soapysdr-module-rtlsdr
 # SDRplay receivers only need SDRplay's API installer from sdrplay.com.
+certifi

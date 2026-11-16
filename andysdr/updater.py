@@ -22,6 +22,8 @@ import subprocess
 import sys
 import threading
 import time
+import ssl
+import urllib.error
 import urllib.request
 import webbrowser
 import zipfile
@@ -173,7 +175,7 @@ class Updater:
 
     def _get_json(self, url):
         req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/vnd.github+json"})
-        with urllib.request.urlopen(req, timeout=20) as r:
+        with _urlopen(req, timeout=20) as r:
             return json.loads(r.read().decode("utf-8"))
 
     def _parse_release(self, d):
@@ -223,7 +225,7 @@ class Updater:
             req = urllib.request.Request(rel["asset_url"], headers={"User-Agent": UA})
             h = hashlib.sha256()
             got = 0
-            with urllib.request.urlopen(req, timeout=30) as r, open(part, "wb") as out:
+            with _urlopen(req, timeout=30) as r, open(part, "wb") as out:
                 total = int(r.headers.get("Content-Length") or rel["size"] or 0)
                 while True:
                     chunk = r.read(256 * 1024)
@@ -351,12 +353,45 @@ def _safe_extract(zpath, dest):
         z.extractall(dest)
 
 
+def _certifi_context():
+    """A TLS context using the CA list that ships with the 'certifi' package (None if it isn't there)."""
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        return None
+
+
+def _urlopen(req, timeout):
+    """urllib.request.urlopen, but if the PC's own certificate store cannot verify GitHub (seen with some
+    frozen builds, antivirus or old Windows root stores) retry once with the bundled CA list."""
+    try:
+        return urllib.request.urlopen(req, timeout=timeout)
+    except urllib.error.URLError as e:
+        if "CERTIFICATE_VERIFY" in str(e) or isinstance(getattr(e, "reason", None), ssl.SSLCertVerificationError):
+            ctx = _certifi_context()
+            if ctx is not None:
+                log.info("system certificates failed - retrying with the bundled CA list")
+                return urllib.request.urlopen(req, timeout=timeout, context=ctx)
+        raise
+
+
 def _friendly(e):
     s = str(e)
-    if "403" in s or "rate limit" in s.lower():
+    low = s.lower()
+    if "403" in s or "rate limit" in low:
         return "GitHub is limiting requests right now - try again in a few minutes."
     if "404" in s:
         return "No published release was found on GitHub yet."
-    if "urlopen error" in s or "timed out" in s.lower() or "getaddrinfo" in s:
-        return "Could not reach GitHub - check the internet connection."
+    if "certificate" in low or "ssl" in low:
+        return ("Could not make a secure connection to GitHub (certificate problem). Check the PC's date and time, "
+                "and whether antivirus / a proxy is inspecting HTTPS. Detail: " + s[:160])
+    if "getaddrinfo" in low or "name or service" in low or "11001" in s:
+        return "Could not look up github.com (DNS) - check the internet connection or DNS settings."
+    if "timed out" in low:
+        return "GitHub did not answer in time - check the internet connection, firewall or proxy."
+    if "10061" in s or "refused" in low or "10013" in s or "forbidden by its access" in low:
+        return "Could not reach GitHub - check the internet connection; it may be refused or blocked by a firewall, security software or proxy. Detail: " + s[:160]
+    if "urlopen error" in s or "remote end closed" in low or "reset" in low:
+        return "Could not reach GitHub - check the internet connection. Detail: " + s[:160]
     return s[:300]

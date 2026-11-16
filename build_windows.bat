@@ -27,7 +27,7 @@ for %%M in (soapysdr-module-rtlsdr soapysdr-module-airspy soapysdr-module-airspy
 )
 
 echo === Installing window + packager ...
-python -m pip install --upgrade pywebview pyinstaller meshcore pyserial bleak sgp4
+python -m pip install --upgrade pywebview pyinstaller meshcore pyserial bleak sgp4 certifi
 if errorlevel 1 goto :fail
 
 echo === Building AndySDR.exe ...

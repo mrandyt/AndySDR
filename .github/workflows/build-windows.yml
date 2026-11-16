@@ -35,7 +35,7 @@ jobs:
           for m in soapysdr-module-rtlsdr soapysdr-module-airspy soapysdr-module-airspyhf soapysdr-module-hackrf soapysdr-module-remote soapysdr-module-lms7 soapysdr-module-plutosdr; do
             conda install -y "$m" || echo "skipped $m"
           done
-          python -m pip install pywebview pyinstaller meshcore pyserial bleak sgp4
+          python -m pip install pywebview pyinstaller meshcore pyserial bleak sgp4 certifi
           python -c "import meshcore, serial, bleak; print(\"MeshCore library\", meshcore.__name__, \"OK\")"
           python -c "import SoapySDR; print('SoapySDR', SoapySDR.getAPIVersion(), SoapySDR.listModules())"
           # RTL-SDR (Nooelec etc.) support is essential - fail the build if its driver module is missing
@@ -212,6 +212,8 @@ jobs:
             * `AndySDR-windows.zip` – portable: unzip and run `AndySDR.exe`
 
             Decoders bundled in the `decoders` folder: DSD-FME (DMR, P25, NXDN, dPMR, YSF, M17), multimon-ng (POCSAG, FLEX, APRS, DTMF, ZVEI, EAS), SatDump (Meteor-M LRPT). WEFAX and SSTV are built in.
+            1.6.1: update check no longer fails on PCs whose certificate store can't verify GitHub (falls back to a bundled CA list), and
+            the error message now says why it failed (certificate, DNS, timeout, firewall).
             1.6.0: SDR++ style theme; satellite auto-capture (ISS SSTV, Meteor-M N2-3/N2-4 LRPT, GOES HRIT) from live pass predictions; aircraft registry/type/owner/photo lookup and a bright map in the ADS-B tab; FT8/FT4 decoder that starts itself on band-plan channels; experimental DAB radio tab. NOAA APT removed from the docs (retired).
             1.5.1: fuller front panel - status strip (clocks, receiver, span, filter, scan state, decoder) across the top, RX/SCAN/DEC/REC/LINK lights, and quick buttons under the display for mode, UK bands, decoders and audio. New SKIP buttons ignore a scanned channel or searched frequency for 10 minutes, 1 hour or the day (UNSKIP undoes it; key I). Band plan is bigger: Medium and Large enlarged with bigger text, new Extra large size.
             1.5.0: AndySDR can now update itself - it checks GitHub for new releases, shows a pop-up with what is new and, if you agree, downloads, checks and installs the update and restarts (REMOTE & SETTINGS › Updates).
