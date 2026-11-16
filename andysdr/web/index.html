@@ -37,6 +37,16 @@
 <section class="radio" id="radio">
   <div class="radio-top">
     <div class="model-badge"><img src="logo.svg" alt=""><span>AndySDR</span><em id="modelTag">1000 CHANNEL · TRUNK-READY</em></div>
+    <div class="top-status" data-help="topstatus">
+      <span class="tchip clock"><small>LOCAL</small><b id="tLocal">--:--:--</b></span>
+      <span class="tchip clock"><small>UTC</small><b id="tUtc">--:--:--</b></span>
+      <span class="tchip"><small>RX</small><b id="tRx">–</b></span>
+      <span class="tchip"><small>SPAN</small><b id="tSpan">–</b></span>
+      <span class="tchip"><small>FILTER</small><b id="tBw">–</b></span>
+      <span class="tchip"><small>STATE</small><b id="tState">MANUAL</b></span>
+      <span class="tchip"><small>DECODER</small><b id="tDec">OFF</b></span>
+      <span class="tchip"><small>LINKS</small><b id="tLinks">0</b></span>
+    </div>
     <div class="model-sub" id="modelSub">PROGRAMMABLE SDR SCANNER</div>
   </div>
 
@@ -59,6 +69,13 @@
         </div>
       </div>
       <button class="key key-power" id="pwrBtn" data-help="power"><span class="led" id="pwrLed"></span>AUDIO ON/OFF</button>
+      <div class="leds" data-help="leds">
+        <div class="ledbox"><span class="led green" id="ledRx"></span>RX</div>
+        <div class="ledbox"><span class="led amber" id="ledScan"></span>SCAN</div>
+        <div class="ledbox"><span class="led blue" id="ledDec"></span>DEC</div>
+        <div class="ledbox"><span class="led red" id="ledRec"></span>REC</div>
+        <div class="ledbox"><span class="led green" id="ledLink"></span>LINK</div>
+      </div>
     </div>
 
     <!-- centre: LCD -->
@@ -84,6 +101,14 @@
           <span>S</span><div class="smeter" id="smeter"></div><span id="lcdDb">-120</span>
         </div>
         <div class="lcd-decode" id="lcdDecode"></div>
+      </div>
+      <!-- quick-access buttons (built in app.js) -->
+      <div class="quick" id="quick">
+        <div class="q-group" data-help="qmode"><span class="q-lab">MODE</span><div class="q-row" id="qMode"></div></div>
+        <div class="q-group" data-help="qband"><span class="q-lab">BAND</span><div class="q-row" id="qBand"></div></div>
+        <div class="q-group" data-help="qdec"><span class="q-lab">DECODE</span><div class="q-row" id="qDec"></div></div>
+        <div class="q-group" data-help="qlock"><span class="q-lab">SKIP</span><div class="q-row" id="qLock"></div></div>
+        <div class="q-group" data-help="qtog"><span class="q-lab">AUDIO</span><div class="q-row" id="qTog"></div></div>
       </div>
     </div>
 
@@ -128,7 +153,7 @@
     <label class="mini">Range <input type="range" id="scopeLo" min="-140" max="-40" value="-115"></label>
     <label class="mini">Top <input type="range" id="scopeHi" min="-80" max="0" value="-25"></label>
     <label class="mini keep" data-help="bandplan">Band plan <select id="bpSize">
-      <option value="0">Off</option><option value="1">Small</option><option value="2" selected>Medium</option><option value="3">Large</option>
+      <option value="0">Off</option><option value="1">Small</option><option value="2" selected>Medium</option><option value="3">Large</option><option value="4">Extra large</option>
     </select></label>
   </div>
   <div class="vfo-bar" data-help="vfo">
@@ -479,7 +504,7 @@
         <label>FM de-emphasis <select id="setDeemph"><option value="50">50 µs (UK/Europe)</option><option value="75">75 µs (USA)</option></select></label>
         <button class="btn primary" id="saveSettings">Save settings</button>
         <h3>Keyboard</h3>
-        <p class="small muted">Digits &amp; <b>.</b> type a frequency, <b>Enter</b> tunes, <b>↑ ↓</b> step, <b>S</b> scan, <b>M</b> manual, <b>H</b> help, <b>Esc</b> clear.</p>
+        <p class="small muted">Digits &amp; <b>.</b> type a frequency, <b>Enter</b> tunes, <b>↑ ↓</b> step, <b>S</b> scan, <b>M</b> manual, <b>I</b> skip for 10 min, <b>H</b> help, <b>Esc</b> clear.</p>
       </div>
     </div>
   </div>

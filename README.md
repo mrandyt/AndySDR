@@ -5,7 +5,7 @@ spectrum/waterfall, 1000 memory channels, a band search that finds every live tr
 RadioReference UK CSV import, digital/analogue decoding, weather pictures, and a built-in
 network server so any other PC, laptop, tablet or phone in the house can use the radio.
 
-**Latest: 1.5.0** – AndySDR now **updates itself**: it checks GitHub for new releases and pops up a prompt before downloading and installing. (1.4.0 added the ADS-B tab, 1.3.1 the PAGER MESSAGES tab, 1.3.0 MeshCore messaging.)
+**Latest: 1.5.1** – fuller front panel (status strip, indicator lights, one-click mode / band / decoder buttons), **SKIP** buttons to temporarily ignore a scanned channel, and a bigger band plan with a new *Extra large* size. (1.5.0 made AndySDR update itself from GitHub; 1.4.0 added the ADS-B tab, 1.3.1 the PAGER MESSAGES tab, 1.3.0 MeshCore messaging.)
 
 ![logo](andysdr/web/logo.png)
 
@@ -13,12 +13,12 @@ network server so any other PC, laptop, tablet or phone in the house can use the
 
 | Area | Details |
 |---|---|
-| Front panel | Three switchable styles: **PRO-2045 style** (amber 7-segment LCD), **UBCD260DN style** (black base/mobile, white-blue dot-matrix), **TRX-2 style** (rugged gunmetal, grey-green dot-matrix). VOLUME, SQUELCH and RF GAIN knobs (drag, mouse wheel, arrow keys, double-click to reset), full keypad, SCAN / MAN / SRCH / PGM / L/O / PRI / MODE / STEP / BANK / DLY / REC / DEC keys, S-meter with squelch marker, status flags. |
+| Front panel | **Status strip** across the top of the radio (local + UTC clocks, receiver, span, filter, scan state, decoder, connected screens), **RX / SCAN / DEC / REC / LINK lights**, and **quick buttons under the display**: one-click MODE, UK BAND jumps (air, marine, PMR, 2 m, 70 cm, CB, FM, pager, weather sats), DECODE (DMR, P25, NXDN, dPMR, M17, TETRA, pager, APRS, WEFAX, SSTV, LRPT, ADS-B, Auto ID), **SKIP / LOCK OUT / UNSKIP**, AGC, MUTE, MONITOR and STEP −/+. Three switchable styles: **PRO-2045 style** (amber 7-segment LCD), **UBCD260DN style** (black base/mobile, white-blue dot-matrix), **TRX-2 style** (rugged gunmetal, grey-green dot-matrix). VOLUME, SQUELCH and RF GAIN knobs (drag, mouse wheel, arrow keys, double-click to reset), full keypad, SCAN / MAN / SRCH / PGM / L/O / PRI / MODE / STEP / BANK / DLY / REC / DEC keys, S-meter with squelch marker, status flags. |
 | Receivers | **SDRplay RSP1, RSP1A, RSP1B, RSP2, RSP2pro, RSPduo, RSPdx, RSPdx-R2 through SDRplay's own API** (antenna A/B/Hi-Z, bias-T, FM/DAB notch, LNA+IF gain, AGC). RTL-SDR (Nooelec etc.), Airspy, HackRF, LimeSDR, PlutoSDR and others via SoapySDR. rtl_tcp network dongles. Built-in **Simulator** for practice. |
 | Modes | NFM, FM, AM, WFM (50 µs UK de-emphasis), USB, LSB, CW, DIG (12.5 kHz digital), DIG25 (25 kHz digital). |
-| Scanning | Memory scan across selected banks with lockouts, resume delay, priority channel. Uses the spectrum to skip silent channels instantly. |
+| Scanning | Memory scan across selected banks with lockouts, resume delay, priority channel. **SKIP 10 MIN / 1 HOUR / TODAY** temporarily ignores the channel the scanner is stopped on (or a frequency found by search) – it is scanned again when the time is up or you press **UNSKIP**; keyboard **I** = skip 10 min. **LOCK OUT** (the L/O key) is the permanent version. Uses the spectrum to skip silent channels instantly. |
 | Search | Sweeps any range (UK quick ranges included) and logs every live signal with hit count and strength; *stop on signal* or *sweep & log only*. Search lockouts. |
-| UK band plan | Every UK allocation, amateur sub-band and key frequency from 9 kHz to 6.5 GHz (Ofcom UK FAT + RSGB band plans), drawn in colour across the top of the spectrum. Size selectable: Off / Small / Medium / Large. A full-range **band map** shows the whole spectrum with a red **VFO needle** and the part the waterfall is showing; the **VFO bar** names the band you are in and offers the usual mode/step. **UK BAND PLAN** tab: drill down **Plan › Band › Section** (e.g. Marine › Marine VHF › Ch 16), Tune or Search any section, add a band's key frequencies to a memory bank in one go, and show/hide each plan on the spectrum. |
+| UK band plan | Every UK allocation, amateur sub-band and key frequency from 9 kHz to 6.5 GHz (Ofcom UK FAT + RSGB band plans), drawn in colour across the top of the spectrum. Size selectable: Off / Small / Medium / Large / Extra large (Large and Extra large use big, easy-to-read text). A full-range **band map** shows the whole spectrum with a red **VFO needle** and the part the waterfall is showing; the **VFO bar** names the band you are in and offers the usual mode/step. **UK BAND PLAN** tab: drill down **Plan › Band › Section** (e.g. Marine › Marine VHF › Ch 16), Tune or Search any section, add a band's key frequencies to a memory bank in one go, and show/hide each plan on the spectrum. |
 | Auto ID | **Automatic signal identification**: AndySDR analyses whatever you're tuned to and works out what it is – DMR (spots the 30 ms TDMA bursts), P25, NXDN, dPMR, POCSAG/FLEX pagers, APRS, DTMF, SSTV, WEFAX, TETRA or analogue voice (with CTCSS tone) – then switches mode and starts the right decoder by itself. SSTV pictures are caught from their header. A decoder you choose yourself always wins. |
 | Scheduler | Timed captures for **WEFAX charts, SSTV (ISS events), Meteor-M passes** or plain recordings: pick a station, start time, length, days of the week or a single date. AndySDR tunes, decodes, then puts the radio back how it was. Quick picks for Northwood WEFAX, ISS/2 m/HF SSTV and Meteor-M. |
 | Memory | 10 banks × 100 channels. RadioReference CSV / copied-table import (UK or any country), talkgroup lists, export to CSV. |
@@ -201,7 +201,7 @@ andysdr/wefax.py       built-in weather fax decoder
 andysdr/pager.py       POCSAG/FLEX message parser, capcode names, daily pager logs
 andysdr/adsb.py        ADS-B / Mode S demodulator, aircraft tracker, SBS + raw feeds
 andysdr/adsb_sim.py    ADS-B message encoder + simulated air traffic (Simulator receiver, tests)
-tests/                 decoder, whole-engine and updater self-tests (python tests/test_updater.py)
+tests/                 decoder, whole-engine, updater and lockout self-tests (python tests/test_updater.py, test_lockout.py)
 andysdr/memory.py      memory banks + RadioReference import
 andysdr/meshlink.py    MeshCore messaging through a companion board (USB / Wi-Fi / Bluetooth)
 andysdr/server.py      network server (HTTP + WebSocket, password protected)

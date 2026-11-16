@@ -48,6 +48,7 @@ class Radio:
         self.scan = {"state": "manual"}   # manual | scan | search | hold
         self.activity = {}                # search hits
         self.search_lockouts = set()
+        self.temp_lock = {}               # ("m", bank, ch) or ("f", Hz) -> (expires_at, label)  -  temporary "skip for a while"
         self.discard = 0
         self.last_spec = None
         self.spec_fresh = False
@@ -551,6 +552,67 @@ class Radio:
             self._push_state(True)
         self.call(do)
 
+    # ------------------------------------------------------------------ temporary lockout (skip for a while)
+    def _temp_locked(self, key, now):
+        v = self.temp_lock.get(key)
+        if v is None:
+            return False
+        if v[0] <= now:
+            del self.temp_lock[key]
+            return False
+        return True
+
+    def _temp_locked_freq(self, f, now, tol):
+        for k in list(self.temp_lock):
+            if k[0] == "f" and abs(k[1] - f) <= tol and self._temp_locked(k, now):
+                return True
+        return False
+
+    def lockout_temp(self, minutes=30):
+        """SKIP button: ignore what the scanner is stopped on (or the current channel/frequency) for a while.
+        minutes = 0 means until AndySDR is closed or the skips are cleared."""
+        def do():
+            now = time.time()
+            exp = now + float(minutes) * 60 if minutes and float(minutes) > 0 else float("inf")
+            sc = self.scan
+            on_search = sc["state"] == "search" or (sc["state"] == "hold" and sc.get("prev") == "search")
+            if self.channel and not on_search:
+                b, ch, c = self.channel
+                key, label = ("m", b, ch), (c.get("name") or f"{self.freq / 1e6:.4f} MHz")
+            else:
+                key, label = ("f", int(self.freq)), f"{self.freq / 1e6:.4f} MHz"
+            self.temp_lock[key] = (exp, label)
+            when = "this session" if exp == float("inf") else f"{int(float(minutes))} min"
+            self._emit("event", {"level": "info", "text": f"Skipping {label} for {when}"})
+            if sc["state"] == "hold":                  # carry straight on to the next channel / frequency
+                sc["state"] = sc.get("prev", "scan")
+                sc["phase"] = "hop" if sc["state"] == "search" else "next"
+            self._push_state(True)
+        self.call(do)
+
+    def lockout_clear(self):
+        def do():
+            n = len(self.temp_lock) + len(self.search_lockouts)
+            self.temp_lock.clear()
+            self.search_lockouts.clear()
+            self._emit("event", {"level": "info", "text": f"Cleared {n} skipped channel(s) – scanning them again" if n else "Nothing was being skipped"})
+            self._push_state(True)
+        self.call(do)
+
+    def lockout_info(self):
+        now = time.time()
+        for k in list(self.temp_lock):
+            self._temp_locked(k, now)                  # drop the expired ones
+        items = []
+        for k, (exp, label) in self.temp_lock.items():
+            left = "session" if exp == float("inf") else f"{max(1, int((exp - now) / 60 + 0.5))} min"
+            items.append(f"{label} ({left})")
+        items += [f"{f / 1e6:.4f} MHz (search)" for f in sorted(self.search_lockouts)]
+        cur = False
+        if self.channel:
+            cur = ("m", self.channel[0], self.channel[1]) in self.temp_lock
+        return {"count": len(items), "list": items[:25], "current": cur}
+
     def set_priority(self, bank=None, ch=None):
         def do():
             self.priority = None if bank is None else (int(bank), int(ch))
@@ -665,6 +727,8 @@ class Radio:
         for _ in range(min(len(lst), 64)):
             sc["idx"] = (sc["idx"] + sc.get("dir", 1)) % len(lst)
             b, ch, c = lst[sc["idx"]]
+            if self.temp_lock and self._temp_locked(("m", b, ch), now):
+                continue          # skipped for a while (SKIP button)
             off = c["freq"] - self.dev.center
             in_span = abs(off) < fs * 0.42 and abs(off) > 15000
             if in_span and self.spec_fresh and spec_db is not None:
@@ -719,7 +783,8 @@ class Radio:
             hits = []
             for f, lvl in peaks:
                 f = int(round(f / step) * step)
-                if sc["lo"] <= f <= sc["hi"] and f not in self.search_lockouts:
+                if sc["lo"] <= f <= sc["hi"] and f not in self.search_lockouts and \
+                        not (self.temp_lock and self._temp_locked_freq(f, now, max(2500, step // 2))):
                     hits.append((f, lvl))
                     self._log_hit(f, lvl, "")
             if hits and self.s["search_mode"] == "stop":
@@ -770,6 +835,7 @@ class Radio:
                        "step": self.s["search_step"], "mode": self.s["search_mode"],
                        "threshold": self.s["search_threshold_db"]},
             "priority": self.priority,
+            "lockouts": self.lockout_info(),
             "auto_identify": bool(self.s.get("auto_identify", True)),
             "auto_owned": self.auto_owned,
             "signal": self.signal,

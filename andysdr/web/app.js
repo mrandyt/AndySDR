@@ -48,6 +48,7 @@ function connect() {
 }
 function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
 function setConn(on) {
+  if ($("ledLink")) $("ledLink").classList.toggle("on", on);
   $("conn").textContent = on ? "CONNECTED" : "OFFLINE";
   $("conn").className = "pill " + (on ? "pill-on" : "pill-off");
 }
@@ -214,6 +215,7 @@ function renderState() {
   if (!knobs.gain.dragging) knobs.gain.set(S.gain, false);
   knobs.gain.render();
   $("agcChk").checked = !!S.agc;
+  renderQuick(); renderTop();
   document.querySelectorAll("[data-k=scan]").forEach((b) => b.classList.toggle("on", S.scan === "scan"));
   document.querySelectorAll("[data-k=srch]").forEach((b) => b.classList.toggle("on", S.scan === "search"));
   document.querySelectorAll("[data-k=rec]").forEach((b) => b.classList.toggle("on", S.recording));
@@ -332,6 +334,7 @@ document.addEventListener("keydown", (e) => {
   const map = { Enter: "e", ArrowUp: "up", ArrowDown: "down", Backspace: "clr", ".": ".", s: "scan", m: "man", p: "pgm", l: "lo" };
   if (/^[0-9]$/.test(e.key)) key(e.key);
   else if (e.key === "h" || e.key === "?") openHelp();
+  else if (e.key === "i") send({ cmd: "lockout_temp", minutes: 10 });
   else if (map[e.key]) { key(map[e.key]); e.preventDefault(); }
 });
 
@@ -347,7 +350,8 @@ const player = {
     this.on = true;
   },
   stop() { if (this.ctx) this.ctx.close(); this.ctx = null; this.on = false; },
-  setVolume(v) { this.vol = v; if (this.gain) this.gain.gain.value = v * v * 1.6; },
+  muted: false,
+  setVolume(v) { this.vol = v; if (this.gain) this.gain.gain.value = this.muted ? 0 : v * v * 1.6; },
   avail() { return (this.w - this.r + this.ring.length) % this.ring.length; },
   push(pcm) {
     if (!this.on) return;
@@ -502,8 +506,11 @@ for (const c of [specC, wfC]) {
 }
 
 /* ======================================================= UK band plan + VFO */
-const BP_STRIP = [0, 12, 30, 44];          // band strip height on the spectrum (CSS px) for Off/Small/Medium/Large
-const BP_MAP = [0, 22, 30, 42];            // overview band map height
+const BP_STRIP = [0, 14, 38, 66, 100];     // band strip height on the spectrum (CSS px) for Off/Small/Medium/Large/Extra large
+const BP_FONT = [0, 10, 13, 17, 23];       // band names on the strip (CSS px)
+const BP_LABEL = [0, 0, 0, 12, 16];        // key-frequency labels under the strip (0 = none)
+const BP_MAP = [0, 22, 34, 56, 76];        // overview band map height
+const BP_MAPFONT = [0, 9.5, 10.5, 13, 16]; // overview band map text
 const MAP_LO = 9e3, MAP_HI = 6.5e9;        // overview covers 9 kHz – 6.5 GHz on a log scale
 let bpSize = +(localStorage.getItem("andysdr_bpsize") ?? 2);
 let bpHidden = new Set();
@@ -526,7 +533,7 @@ function drawBandStrip(ctx, f0, span, W, dpr) {
   const H = BP_STRIP[bpSize] * dpr, rows = bpSize === 1 ? 1 : 2, rh = H / rows, f1 = f0 + span;
   const X = (f) => (f - f0) / span * W;
   ctx.fillStyle = "rgba(7,9,11,0.82)"; ctx.fillRect(0, 0, W, H);
-  ctx.font = `${(bpSize === 3 ? 11 : 10) * dpr}px Segoe UI, Arial, sans-serif`; ctx.textBaseline = "middle";
+  ctx.font = `600 ${BP_FONT[bpSize] * dpr}px Segoe UI, Arial, sans-serif`; ctx.textBaseline = "middle";
   for (const b of BANDPLAN) {
     if (b.point || b.stop < f0 || b.start > f1 || bpHidden.has(b.cat)) continue;
     const r = Math.min(b.level, rows - 1); if (b.level >= rows) { if (rows === 1) continue; }
@@ -543,10 +550,11 @@ function drawBandStrip(ctx, f0, span, W, dpr) {
       if (!b.point || b.start < f0 || b.start > f1 || bpHidden.has(b.cat)) continue;
       const x = X(b.start);
       ctx.fillStyle = bpColor(b, 1);
-      ctx.beginPath(); ctx.moveTo(x, H - 1); ctx.lineTo(x - 4 * dpr, H - 7 * dpr); ctx.lineTo(x + 4 * dpr, H - 7 * dpr); ctx.fill();
-      if (bpSize === 3) {
-        ctx.save(); ctx.font = `${9 * dpr}px Segoe UI, Arial, sans-serif`; ctx.fillStyle = "rgba(255,255,255,.75)";
-        ctx.textBaseline = "top"; ctx.fillText(b.name.split(" – ")[0].slice(0, 22), x + 5 * dpr, H + 2 * dpr); ctx.restore();
+      const mk = Math.max(4, BP_FONT[bpSize] * 0.4) * dpr;
+      ctx.beginPath(); ctx.moveTo(x, H - 1); ctx.lineTo(x - mk, H - 1 - mk * 1.5); ctx.lineTo(x + mk, H - 1 - mk * 1.5); ctx.fill();
+      if (BP_LABEL[bpSize]) {
+        ctx.save(); ctx.font = `600 ${BP_LABEL[bpSize] * dpr}px Segoe UI, Arial, sans-serif`; ctx.fillStyle = "rgba(255,255,255,.75)";
+        ctx.textBaseline = "top"; ctx.shadowColor = "#000"; ctx.shadowBlur = 4 * dpr; ctx.fillText(b.name.split(" – ")[0].slice(0, 36), x + 5 * dpr, H + 2 * dpr); ctx.restore();
       }
     }
   }
@@ -557,7 +565,7 @@ function drawVfoFlag(ctx, xf, top, W, freq, dpr) {
   const t = "VFO " + fmtMHz(freq, 5);
   ctx.font = `bold ${10.5 * dpr}px Consolas, monospace`;
   const w = ctx.measureText(t).width + 10 * dpr, h = 16 * dpr;
-  const x = Math.min(W - w, Math.max(0, xf - w / 2)), y = top + 3 * dpr + (bpSize === 3 ? 12 * dpr : 0);
+  const x = Math.min(W - w, Math.max(0, xf - w / 2)), y = top + 3 * dpr + (BP_LABEL[bpSize] ? (BP_LABEL[bpSize] + 5) * dpr : 0);
   ctx.fillStyle = "#ff4040"; ctx.fillRect(x, y, w, h);
   ctx.fillStyle = "#fff"; ctx.textBaseline = "middle"; ctx.fillText(t, x + 5 * dpr, y + h / 2); ctx.textBaseline = "alphabetic";
 }
@@ -567,7 +575,7 @@ function drawBandMap() {
   if (!bpSize) return;
   const dpr = window.devicePixelRatio || 1, W = bandmapC.width, H = bandmapC.height;
   if (!W || !H) return;
-  const ctx = bmctx, barTop = 2 * dpr, barH = H - 14 * dpr;
+  const ctx = bmctx, mf = BP_MAPFONT[bpSize], barTop = 2 * dpr, barH = H - (mf + 5) * dpr;
   ctx.fillStyle = "#07090b"; ctx.fillRect(0, 0, W, H);
   for (const b of BANDPLAN) {
     if (b.point || b.level || bpHidden.has(b.cat)) continue;
@@ -578,7 +586,7 @@ function drawBandMap() {
     if (b.point || !b.level || bpHidden.has(b.cat)) continue;
     ctx.fillStyle = bpColor(b, 1); ctx.fillRect(mapX(b.start, W), barTop, Math.max(1, mapX(b.stop, W) - mapX(b.start, W)), 3 * dpr);
   }
-  ctx.font = `${9.5 * dpr}px Consolas, monospace`; ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.strokeStyle = "rgba(255,255,255,.25)";
+  ctx.font = `${mf * dpr}px Consolas, monospace`; ctx.fillStyle = "rgba(255,255,255,.7)"; ctx.strokeStyle = "rgba(255,255,255,.25)";
   for (const [f, l] of [[1e4, "10k"], [1e5, "100k"], [1e6, "1M"], [3e6, "3M"], [1e7, "10M"], [3e7, "30M"], [1e8, "100M"], [3e8, "300M"], [1e9, "1G"], [3e9, "3G"]]) {
     const x = mapX(f, W);
     ctx.beginPath(); ctx.moveTo(x, barTop + barH); ctx.lineTo(x, barTop + barH + 3 * dpr); ctx.stroke();
@@ -595,10 +603,10 @@ function drawBandMap() {
     ctx.fillStyle = "#ff4040"; ctx.fillRect(x - dpr, 0, 2 * dpr, barTop + barH);
     ctx.beginPath(); ctx.moveTo(x, barTop + barH - 2 * dpr); ctx.lineTo(x - 5 * dpr, H - 2 * dpr); ctx.lineTo(x + 5 * dpr, H - 2 * dpr); ctx.fill();
     const t = fmtMHz(f, 4) + " MHz";
-    ctx.font = `bold ${10 * dpr}px Consolas, monospace`;
-    const tw = ctx.measureText(t).width + 8 * dpr, tx = Math.min(W - tw, Math.max(0, x + 8 * dpr));
-    ctx.fillStyle = "rgba(255,64,64,.92)"; ctx.fillRect(tx, H - 13 * dpr, tw, 12 * dpr);
-    ctx.fillStyle = "#fff"; ctx.textBaseline = "middle"; ctx.fillText(t, tx + 4 * dpr, H - 7 * dpr); ctx.textBaseline = "alphabetic";
+    ctx.font = `bold ${(mf + 0.5) * dpr}px Consolas, monospace`;
+    const tw = ctx.measureText(t).width + 8 * dpr, th = (mf + 3) * dpr, tx = Math.min(W - tw, Math.max(0, x + 8 * dpr));
+    ctx.fillStyle = "rgba(255,64,64,.92)"; ctx.fillRect(tx, H - th - dpr, tw, th);
+    ctx.fillStyle = "#fff"; ctx.textBaseline = "middle"; ctx.fillText(t, tx + 4 * dpr, H - th / 2 - dpr); ctx.textBaseline = "alphabetic";
   }
 }
 function mapBandAt(e) {
@@ -633,7 +641,7 @@ function searchBand(b) {
   showTab("act"); toast(`${b.name} loaded into Search – press ▶ Search`);
 }
 function setBpSize(n, save = true) {
-  bpSize = Math.max(0, Math.min(3, n | 0));
+  bpSize = Math.max(0, Math.min(4, n | 0));
   $("bpSize").value = String(bpSize);
   bandmapC.style.display = bpSize ? "" : "none";
   bandmapC.style.height = BP_MAP[bpSize] + "px";
@@ -1394,6 +1402,119 @@ function toast(text, level = "info") {
   $("toasts").appendChild(t); setTimeout(() => t.remove(), level === "error" ? 9000 : 4500);
 }
 
+/* ======================================================= quick buttons, status strip, LEDs */
+const Q_BANDS = [
+  // label, tune Hz, mode, step, range MHz [lo, hi], tooltip
+  ["AIR", 121500000, "AM", 8330, [118, 137], "UK airband (118–137 MHz, AM). Jumps to 121.500 MHz, the emergency channel."],
+  ["MARINE", 156800000, "NFM", 25000, [156, 162.025], "Marine VHF. Jumps to channel 16 (156.800 MHz), the calling and distress channel."],
+  ["PMR", 446006250, "NFM", 6250, [446, 446.2], "PMR446 licence-free handhelds. Jumps to channel 1 (446.00625 MHz)."],
+  ["2M", 145500000, "NFM", 12500, [144, 146], "2 m amateur band. Jumps to the 145.500 MHz FM calling channel."],
+  ["70CM", 433500000, "NFM", 12500, [430, 440], "70 cm amateur band. Jumps to 433.500 MHz."],
+  ["CB", 27601250, "NFM", 10000, [27.6, 27.992], "UK CB (27/81 set, 40 channels). Jumps to channel 1 (27.60125 MHz)."],
+  ["FM BC", 100000000, "WFM", 100000, [87.5, 108], "FM broadcast radio. Jumps to 100.0 MHz in wide FM."],
+  ["PAGER", 153000000, "DIG", 12500, [153, 154], "UK pager band (153.0–153.5 MHz busiest). Jumps to the bottom of it – then use SRCH or ▲ to find the active channel."],
+  ["SATS", 137900000, "DIG25", 25000, [137, 138], "Weather satellites (Meteor-M LRPT on 137.9 MHz). Start the LRPT decoder when a satellite is overhead."],
+];
+const Q_DECS = [
+  ["DMR", "dsd", "dmr"], ["P25", "dsd", "p25p1"], ["NXDN", "dsd", "nxdn48"], ["dPMR", "dsd", "dpmr"], ["M17", "dsd", "m17"],
+  ["TETRA", "tetra", ""], ["PAGER", "pager", ""], ["APRS", "data", ""], ["WEFAX", "wefax", ""], ["SSTV", "sstv", ""],
+  ["LRPT", "lrpt", ""], ["ADS-B", "adsb", ""],
+];
+const Q_DEC_TIPS = { dmr: "DMR digital voice", p25p1: "P25 Phase 1 digital voice", nxdn48: "NXDN 4800 digital voice", dpmr: "dPMR digital voice",
+  m17: "M17 digital voice", tetra: "TETRA baseband out over UDP", pager: "POCSAG / FLEX pagers – messages appear in PAGER MESSAGES",
+  data: "APRS, DTMF, ZVEI, EAS", wefax: "Weather fax charts (USB mode)", sstv: "SSTV pictures", lrpt: "Meteor-M satellite pictures",
+  adsb: "Aircraft tracking on 1090 MHz – opens the ADS-B tab data" };
+let sqPrev = -60;
+
+function buildQuick() {
+  $("qMode").innerHTML = MODES.map((m) => `<button class="key q" data-m="${m}" title="Switch to ${m}">${m}</button>`).join("");
+  $("qBand").innerHTML = Q_BANDS.map((b, i) => `<button class="key q" data-b="${i}" title="${b[5]}">${b[0]}</button>`).join("");
+  $("qDec").innerHTML = `<button class="key q" data-d="autoid" title="Automatic signal identification (Auto ID): AndySDR picks the mode and decoder for you">AUTO</button>` +
+    Q_DECS.map((d, i) => `<button class="key q" data-d="${i}" title="${Q_DEC_TIPS[d[2] || d[1]]}">${d[0]}</button>`).join("") +
+    `<button class="key q danger" data-d="off" title="Stop the running decoder">OFF</button>`;
+  $("qLock").innerHTML = [
+    "SKIP 10 MIN|t10|Ignore the channel you are stopped on (or the current one) for 10 minutes, then scan it again. Works while scanning and searching.",
+    "SKIP 1 HOUR|t60|Ignore it for an hour.", "SKIP TODAY|t0|Ignore it until AndySDR is closed or you press UNSKIP.",
+    "LOCK OUT|perm|Permanent lockout (same as the L/O key): a memory channel stays locked out until you untick L/O in the MEMORY tab; a searched frequency is ignored until UNSKIP.",
+    "UNSKIP|clr|Stop ignoring everything you skipped or locked out while searching."]
+    .map((x) => { const [l, k, t] = x.split("|"); return `<button class="key q ${k === "clr" ? "" : "danger"}" data-l="${k}" title="${t}">${l}</button>`; }).join("");
+  $("qTog").innerHTML = ["AGC|agc|Automatic gain control on/off (turns RF GAIN to automatic)", "MUTE|mute|Silence the sound on this screen without changing the volume knob",
+    "MONITOR|mon|Hold the squelch open to listen to the hiss/background – press again to go back to your squelch setting",
+    "STEP −|stepdn|Smaller tuning step", "STEP +|stepup|Larger tuning step"]
+    .map((x) => { const [l, k, t] = x.split("|"); return `<button class="key q" data-t="${k}" title="${t}">${l}</button>`; }).join("");
+  $("quick").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b || explainOn) return;
+    if (b.dataset.m) send({ cmd: "mode", mode: b.dataset.m });
+    else if (b.dataset.b !== undefined) { const q = Q_BANDS[+b.dataset.b]; send({ cmd: "tune", freq: q[1], mode: q[2] }); send({ cmd: "stepsize", hz: q[3] }); }
+    else if (b.dataset.d === "autoid") send({ cmd: "auto_identify", on: !(S.auto_identify !== false) });
+    else if (b.dataset.d === "off") send({ cmd: "decoder", id: "" });
+    else if (b.dataset.d !== undefined) { const d = Q_DECS[+b.dataset.d]; send({ cmd: "decoder", id: d[1], sub: d[2] || "auto" }); }
+    else if (b.dataset.l) {
+      const k = b.dataset.l;
+      if (k === "perm") send({ cmd: "lockout" });
+      else if (k === "clr") send({ cmd: "lockout_clear" });
+      else send({ cmd: "lockout_temp", minutes: +k.slice(1) });
+    }
+    else if (b.dataset.t === "agc") send({ cmd: "agc", on: !S.agc });
+    else if (b.dataset.t === "mute") { player.muted = !player.muted; player.setVolume(player.vol); renderQuick(); }
+    else if (b.dataset.t === "mon") {
+      if (S.squelch > -119) { sqPrev = S.squelch; send({ cmd: "squelch", value: -120 }); } else send({ cmd: "squelch", value: sqPrev });
+    }
+    else if (b.dataset.t === "stepdn" || b.dataset.t === "stepup") {
+      const i = STEPS.indexOf(S.step), j = Math.max(0, Math.min(STEPS.length - 1, (i < 0 ? STEPS.findIndex((x) => x >= S.step) : i) + (b.dataset.t === "stepup" ? 1 : -1)));
+      send({ cmd: "stepsize", hz: STEPS[j] });
+    }
+  });
+}
+function renderQuick() {
+  if (!$("qMode").firstChild) return;
+  const f = (S.freq || 0) / 1e6;
+  $("qMode").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.m === S.mode));
+  $("qBand").querySelectorAll("button").forEach((b) => { const r = Q_BANDS[+b.dataset.b][4]; b.classList.toggle("on", f >= r[0] && f <= r[1]); });
+  $("qDec").querySelectorAll("button").forEach((b) => {
+    const d = b.dataset.d;
+    if (d === "autoid") b.classList.toggle("on", S.auto_identify !== false);
+    else if (d === "off") b.classList.toggle("on", !S.decoder);
+    else { const q = Q_DECS[+d]; b.classList.toggle("on", S.decoder === q[1] && (q[1] !== "dsd" || S.decoder_sub === q[2]));
+      const info = decoders.find((x) => x.id === q[1]); b.classList.toggle("na", !!info && !info.ready); }
+  });
+  const lo = S.lockouts || { count: 0, list: [] };
+  $("qLock").querySelectorAll("button").forEach((b) => {
+    if (b.dataset.l === "clr") { b.textContent = lo.count ? `UNSKIP (${lo.count})` : "UNSKIP"; b.title = lo.count ? "Ignored now – click to scan them again:\n" + lo.list.join("\n") : "Nothing is being skipped"; b.classList.toggle("on", lo.count > 0); }
+    else if (b.dataset.l.startsWith("t")) b.classList.toggle("on", !!lo.current);
+  });
+  $("qTog").querySelectorAll("button").forEach((b) => {
+    const t = b.dataset.t;
+    if (t === "agc") b.classList.toggle("on", !!S.agc);
+    else if (t === "mute") b.classList.toggle("on", player.muted);
+    else if (t === "mon") b.classList.toggle("on", S.squelch <= -119);
+  });
+}
+function renderTop() {
+  const set = (id, v) => { const e = $(id); if (e.textContent !== v) e.textContent = v; };
+  set("tRx", S.device ? S.device.replace(/^SDRplay\s*/i, "").slice(0, 26) : "–");
+  set("tSpan", S.fs ? (S.fs / 1e6).toFixed(2) + " MS/s" : "–");
+  const bw = MODE_BW[S.mode]; set("tBw", bw ? (bw >= 1000 ? (bw / 1000).toString().replace(/\.0$/, "") + " kHz" : bw + " Hz") + " " + S.mode : "–");
+  const st = { scan: "SCANNING", search: "SEARCHING", hold: "HOLD", manual: "MANUAL" }[S.scan] || String(S.scan || "").toUpperCase();
+  set("tState", S.job ? "JOB: " + (S.job.name || "").slice(0, 14).toUpperCase() : st);
+  const dec = S.decoder ? ((decoders.find((x) => x.id === S.decoder) || {}).name || S.decoder).replace(/\s*\(.*$/, "").slice(0, 18) : "OFF";
+  set("tDec", dec.toUpperCase());
+  set("tLinks", String(S.listeners || 1));
+  $("tState").parentElement.classList.toggle("hot", S.scan === "scan" || S.scan === "search" || S.scan === "hold");
+  $("tDec").parentElement.classList.toggle("hot", !!S.decoder);
+  $("ledRx").classList.toggle("on", !!S.sq_open);
+  $("ledScan").classList.toggle("on", S.scan === "scan" || S.scan === "search" || S.scan === "hold");
+  $("ledScan").classList.toggle("blink", S.scan === "scan" || S.scan === "search");
+  $("ledDec").classList.toggle("on", !!S.decoder);
+  $("ledRec").classList.toggle("on", !!S.recording);
+}
+function renderClock() {
+  const d = new Date(), p = (n) => String(n).padStart(2, "0");
+  $("tLocal").textContent = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  $("tUtc").textContent = `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
+}
+buildQuick(); renderClock(); setInterval(renderClock, 1000);
+
 /* ======================================================= updates */
 let UPD = { state: "idle", progress: 0 };
 const updDismissed = () => sessionStorage.getItem("andysdr_upd_later");
@@ -1761,6 +1882,13 @@ const HELP = {
   adsb: ["ADS-B aircraft (1090 MHz)", "Tracks aircraft that broadcast ADS-B (nearly every airliner and many smaller aircraft). Press ▶ Start ADS-B: AndySDR tunes to 1090 MHz, centres the receiver exactly on it and decodes the aircraft messages itself – no other program is needed. The table shows callsign, hex address (ICAO), airline and country (from the callsign/address), altitude, speed, heading, climb rate, squawk, distance from you and how long ago it was heard; click a heading to sort. The map shows each aircraft as a plane pointing the way it is flying, coloured by height (orange = low, green = middle, blue = high) with a trail behind it. Squawks 7500, 7600 and 7700 flash red and pop up a warning. You need a receiver running at 2 MS/s or more (any SDRplay RSP, RTL-SDR, Airspy, HackRF) and an antenna that works at 1090 MHz – a short 6.9 cm whip or a proper 1090 MHz collinear, as high and clear of buildings as you can get it. Use the RSP's Antenna A/B (50 Ω) socket, not Hi-Z. Turn RF GAIN up fairly high; if you see lots of messages but few aircraft, turn it down a little. Press Stop (or tune somewhere else) to go back to normal scanning. With the Simulator receiver you get ten practice aircraft."],
   adsbopts: ["ADS-B options", "My position: type your latitude/longitude (decimal degrees, e.g. 51.5074 and -0.1278) or press 📍 Use my location. With it set the map shows range rings, the table shows each aircraft's distance, and positions come out faster and more reliably. Units: aviation (feet, knots, nautical miles) or metric. Street map downloads OpenStreetMap tiles from the internet (the radar-style map works offline). Trails and Labels switch the track lines and text on the map; 'Only with position' hides aircraft that have not sent a position yet; Find dims the others on the map."],
   adsbmap: ["ADS-B map", "Drag to move, mouse wheel or +/− to zoom, double-click to zoom in on a spot, ⌖ Fit to show everything. Click an aircraft for its details; click it again (or ✕) to let go. Rings are 'distance from you' (set My position first)."],
+  topstatus: ["Status strip", "A live read-out across the top of the radio: LOCAL and UTC clocks (UTC is what weather-fax and satellite schedules use), the receiver in use (RX), the width of spectrum it is receiving (SPAN), the audio filter width for the current mode (FILTER), what the scanner is doing (STATE – turns amber while scanning, searching or holding), the running decoder, and how many screens are connected (LINKS)."],
+  leds: ["Indicator lights", "RX (green) – a signal is open on the squelch and you are hearing it. SCAN (amber) – scanning or searching; it flashes while sweeping and stays lit when stopped on a signal. DEC (blue) – a decoder is running. REC (red) – recording to a WAV file. LINK (green) – this screen is connected to the radio."],
+  qmode: ["Mode buttons", "One click to choose how the signal is demodulated – no need to press MODE repeatedly. NFM/FM for most two-way radio, AM for airband, WFM for FM broadcast, USB/LSB for HF voice and weather fax, CW for Morse, DIG and DIG25 for digital signals (DIG25 is the wider one for TETRA and satellites). The current mode is lit."],
+  qband: ["Band buttons", "Jump straight to a popular UK band with the right mode and tuning step already set: AIR (121.500 MHz), MARINE (channel 16), PMR446, 2M, 70CM, CB, FM BC, PAGER and weather SATS. Then step with ▲ ▼, press SCAN, or use SRCH to find what is active. The button for the band you are in stays lit."],
+  qdec: ["Decoder buttons", "Start a decoder with one click: DMR, P25, NXDN, dPMR, M17 (digital voice), TETRA (baseband out), PAGER (POCSAG/FLEX), APRS (also DTMF/ZVEI/EAS), WEFAX, SSTV, LRPT (Meteor-M) and ADS-B (aircraft). AUTO (Auto ID) lets AndySDR identify signals and pick the decoder itself. OFF stops the decoder. A dimmed button means its program is not installed yet – see the DECODERS tab."],
+  qlock: ["Skip / lock out", "Stops the scanner dwelling on something you don't want to hear. While it is stopped on a transmission (or searching) press SKIP 10 MIN, SKIP 1 HOUR or SKIP TODAY and it carries straight on; the channel is scanned again when the time is up (or when AndySDR is restarted). LOCK OUT is the permanent version (the L/O key): a memory channel stays locked out until you untick L/O in the MEMORY tab. UNSKIP clears all temporary skips and search lockouts at once – the number shows how many are being ignored and hovering lists them. Keyboard: I = skip for 10 minutes."],
+  qtog: ["Audio & step buttons", "AGC – automatic RF gain. MUTE – silences this screen without touching the VOLUME knob. MONITOR – holds the squelch open so you can hear the background noise and set up the antenna or gain; press again to return to your squelch setting. STEP − / STEP + – smaller or larger tuning step (shown on the LCD)."],
   updates: ["Updates", "AndySDR looks for a newer version on its GitHub releases page when it starts and every 12 hours. When one is found a pop-up shows what is new and asks what to do: Download & install, Remind me later, or Skip this version. After the download (checked against GitHub's SHA-256) AndySDR asks again before it installs and restarts itself. 'Check for updates now' looks straight away, even for a version you skipped. Tick 'Download new versions in the background' to have the file ready so installing takes seconds. If AndySDR was installed with the Setup program the installer runs quietly in the background; a portable (unzipped) copy copies the new files over the old ones; a copy run from Python source just opens the releases page. Your settings, memories and pictures in %APPDATA%\\AndySDR are never touched. Updating restarts the radio PC's program, so remote screens reconnect by themselves a few seconds later."],
   adsbshare: ["Share aircraft feed", "Tick to let other programs on your network use AndySDR as an ADS-B receiver: SBS/BaseStation messages on TCP port 30003 and raw AVR (*8D…;) on port 30002. Point Virtual Radar Server, tar1090/readsb, PlanePlotter or a flight-tracking-site feeder at this PC and those ports. The second box turns the daily CSV position log on or off."],
   adsbtable: ["Aircraft list", "One row per aircraft heard in the last two minutes (faded = not heard for 30 s). Click a column title to sort, click a row to highlight it on the map. Callsign and airline come from the aircraft's own identification message, so a new aircraft may show only its hex address for a few seconds. Share the live feed with other programs (Virtual Radar Server, tar1090, PlanePlotter …) from REMOTE & SETTINGS; a dump1090-style aircraft.json is at /api/aircraft.json?token=<password>."],
@@ -1780,9 +1908,10 @@ function openHelp() {
     <li>Store channels with <b>PGM</b> or import from RadioReference in the <b>MEMORY</b> tab, then press <b>SCAN</b>.</li>
     <li>Press <b>SRCH</b> to hunt for live transmissions across a band.</li>
   </ol>
-  <h3>KNOBS &amp; DISPLAY</h3>${ctl(["volume", "squelch", "gain", "power", "lcd"])}
+  <h3>KNOBS &amp; DISPLAY</h3>${ctl(["volume", "squelch", "gain", "power", "leds", "lcd", "topstatus"])}
+  <h3>QUICK BUTTONS (under the display)</h3>${ctl(["qmode", "qband", "qdec", "qlock", "qtog"])}
   <h3>KEYPAD &amp; FUNCTION KEYS</h3>${ctl(["k_scan", "k_man", "k_srch", "k_pgm", "k_lo", "k_pri", "k_mode", "k_step", "k_bank", "k_dly", "k_rec", "k_dec", "k_dot", "k_e", "k_arrows", "k_clr"])}
-  <p class="small">Keyboard: digits and <code>.</code> type, <code>Enter</code> tunes, <code>↑ ↓</code> step, <code>S</code> scan, <code>M</code> manual, <code>P</code> program, <code>L</code> lockout, <code>H</code> help, <code>Esc</code> clear.</p>
+  <p class="small">Keyboard: digits and <code>.</code> type, <code>Enter</code> tunes, <code>↑ ↓</code> step, <code>S</code> scan, <code>M</code> manual, <code>P</code> program, <code>L</code> lockout, <code>I</code> skip 10 min, <code>H</code> help, <code>Esc</code> clear.</p>
   <h3>SCREENS</h3>${ctl(["scope", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "updates", "receiver", "remote", "theme", "conn"])}
   <h3>DECODER PROGRAMS</h3>
   <p>AndySDR has WEFAX and SSTV built in (SSTV: Martin, Scottie, Robot and PD modes – ISS 145.800 NFM, 2 m 144.500 NFM, 20 m 14.230 USB). DSD-FME, multimon-ng and SatDump now come bundled in the <code>decoders</code> folder next to <code>AndySDR.exe</code>. If one shows ✖ in the DECODERS tab, press <b>⬇ Download missing decoders</b> and AndySDR fetches it from GitHub into <code>%APPDATA%\\AndySDR\\decoders</code>. You can also unzip your own copy into either folder (any sub-folder is fine – AndySDR finds the .exe):</p>

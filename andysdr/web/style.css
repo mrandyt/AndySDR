@@ -130,7 +130,7 @@ button, select, input { font-family: inherit; font-size: 13px; }
 .arrows { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 7px; }
 
 /* ---------- LCD ---------- */
-.radio-center { display: flex; }
+.radio-center { display: flex; flex-direction: column; gap: 12px; }
 .lcd { flex: 1; background: var(--lcd); border: 8px solid var(--lcd-frame); border-radius: 8px; color: var(--lcd-on); padding: 10px 16px; display: flex; flex-direction: column; gap: 6px; box-shadow: inset 0 0 22px rgba(0,0,0,.25), 0 0 0 2px rgba(255,255,255,.05); position: relative; min-height: 250px; }
 .lcd::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(160deg, rgba(255,255,255,.18), transparent 40%); border-radius: 2px; }
 .lcd-row { display: flex; gap: 10px; align-items: center; }
@@ -219,7 +219,7 @@ button, select, input { font-family: inherit; font-size: 13px; }
 .vfo-band { font-size: 13px; }
 .vfo-hint { display: flex; gap: 6px; align-items: center; }
 .bp-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
-#bandmap { width: 100%; height: 30px; display: block; cursor: pointer; border-radius: 6px; background: #07090b; margin-bottom: 4px; }
+#bandmap { width: 100%; height: 34px; display: block; cursor: pointer; border-radius: 6px; background: #07090b; margin-bottom: 4px; }
 .sig-chip { border-radius: 5px; padding: 2px 8px; font-size: 12.5px; font-weight: 600; white-space: nowrap; border: 1px solid; }
 .sig-chip.dig { color: #7ff0a6; border-color: #2d8a52; background: rgba(40,160,90,.14); }
 .sig-chip.pic { color: #c9a8ff; border-color: #7a52c9; background: rgba(140,90,255,.14); }
@@ -365,7 +365,8 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 
 /* ---------- compact LCD (about half the previous size, every style) ---------- */
 .radio-center { align-items: center; justify-content: center; }
-.lcd, [data-theme] .lcd { flex: 0 1 620px; max-width: 620px; min-height: 0; padding: 6px 10px; gap: 3px; border-width: 5px; }
+.lcd, [data-theme] .lcd { flex: 0 0 auto; width: 100%; max-width: 620px; min-height: 0; padding: 6px 10px; gap: 3px; border-width: 5px; }
+.quick { width: 100%; max-width: 620px; }
 .lcd-flags span { font-size: 8px; padding: 0 3px; letter-spacing: .5px; }
 .lcd-banks { font-size: 9px; gap: 3px; }
 .lcd-banks span { width: 12px; }
@@ -382,7 +383,7 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 .smeter i.sq { box-shadow: 0 -3px 0 0 var(--lcd-on); }
 .lcd-decode, [data-theme] .lcd-decode { font-size: 10px; min-height: 12px; }
 [data-theme="ubcd260"] .lcd-freq-txt, [data-theme="trx2"] .lcd-freq-txt { font-size: 31px; letter-spacing: 1px; }
-@media (max-width: 1150px) { .lcd, [data-theme] .lcd { flex-basis: 100%; } }
+@media (max-width: 1150px) { .lcd, [data-theme] .lcd, .quick { max-width: none; } }
 @media (max-width: 600px) { .lcd-freq-txt { font-size: 28px !important; } .lcd-freq .seg { height: 36px; } }
 
 /* ---------- MeshCore messaging ---------- */
@@ -491,3 +492,42 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 .upd-bar > div { height: 100%; width: 0; background: var(--accent); transition: width .25s; }
 .upd-btns { margin-top: 12px; gap: 8px; }
 .upd-btns .btn[hidden] { display: none; }
+
+/* ---------- top status strip (in the model band) ---------- */
+.radio-top { gap: 16px; }
+.top-status { flex: 1; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; min-width: 0; }
+.tchip { display: inline-flex; align-items: baseline; gap: 6px; padding: 2px 9px; border-radius: 5px; background: rgba(0,0,0,.14);
+  border: 1px solid rgba(0,0,0,.28); box-shadow: inset 0 1px 2px rgba(0,0,0,.18); color: var(--top-ink); white-space: nowrap; max-width: 230px; }
+.tchip small { font-size: 8.5px; letter-spacing: 1.5px; color: var(--top-ink2); font-weight: 700; }
+.tchip b { font-family: var(--mono); font-size: 12px; letter-spacing: .5px; overflow: hidden; text-overflow: ellipsis; }
+.tchip.hot { background: rgba(0,0,0,.3); } .tchip.hot b { color: var(--accent); }
+@media (max-width: 1150px) { .top-status .tchip:nth-child(n+5) { display: none; } }
+@media (max-width: 760px) { .top-status { display: none; } }
+
+/* ---------- indicator LEDs (left column) ---------- */
+.leds { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; padding: 7px 6px 5px; border-radius: 6px; background: rgba(0,0,0,.28);
+  box-shadow: inset 0 2px 5px rgba(0,0,0,.55); }
+.ledbox { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 8.5px; letter-spacing: 1px; color: var(--muted); font-weight: 700; }
+.led.amber.on { background: #ffb000; box-shadow: 0 0 8px #ffb000; }
+.led.blue.on { background: #3aa3ff; box-shadow: 0 0 8px #3aa3ff; }
+.led.red.on { background: #ff3b3b; box-shadow: 0 0 8px #ff3b3b; }
+.led.amber { background: #3a2a05; } .led.blue { background: #0a2236; } .led.red { background: #3b0d0d; }
+.led.blink.on { animation: ledblink 1s steps(2, start) infinite; }
+@keyframes ledblink { 50% { opacity: .25; } }
+[data-theme="ubcd260"] .leds, [data-theme="trx2"] .leds { order: 4; min-width: 190px; }
+
+/* ---------- quick-access buttons (under the LCD) ---------- */
+.quick { display: flex; flex-direction: column; gap: 7px; padding: 10px 12px; border-radius: 8px; background: rgba(0,0,0,.22);
+  box-shadow: inset 0 2px 6px rgba(0,0,0,.5); }
+.q-group { display: grid; grid-template-columns: 52px 1fr; gap: 8px; align-items: center; }
+.q-lab { font-size: 9.5px; letter-spacing: 1.6px; color: var(--muted); font-weight: 700; }
+.q-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(54px, 1fr)); gap: 6px; }
+.key.q { padding: 6px 2px; font-size: 11px; letter-spacing: .5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.key.q.na { opacity: .45; }
+.key.q.on { background: var(--key-hot); color: var(--key-hot-ink); outline: none; }
+.key.q.danger.on { background: linear-gradient(180deg, #d84040, #a52424); color: #fff; }
+[data-theme="trx2"] .key.q { border-radius: 999px; }
+@media (max-width: 600px) { .key.q { white-space: normal; line-height: 1.1; padding: 6px 1px; } .q-group { grid-template-columns: 1fr; gap: 3px; } .q-row { grid-template-columns: repeat(auto-fit, minmax(46px, 1fr)); } }
+
+.key.q.danger { color: #ffb3a8; }
+.key.q.danger:hover { background: linear-gradient(180deg, #b23a3a, #8a2323); color: #fff; }

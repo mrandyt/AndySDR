@@ -329,6 +329,10 @@ class Server:
                 r.store(int(m["bank"]), m.get("ch"), m.get("name", ""))
             elif cmd == "lockout":
                 r.lockout()
+            elif cmd == "lockout_temp":
+                r.lockout_temp(float(m.get("minutes", 30)))
+            elif cmd == "lockout_clear":
+                r.lockout_clear()
             elif cmd == "priority":
                 r.set_priority(m.get("bank"), m.get("ch"))
             elif cmd == "record":
