@@ -113,9 +113,9 @@ jobs:
           # decode an empty slot to prove it starts (prints nothing, exits 0)
           python - <<'PY'
           import wave, subprocess
-          w = wave.open("/tmp/silence.wav", "wb"); w.setnchannels(1); w.setsampwidth(2); w.setframerate(12000); w.writeframes(b"\0\0" * 12000 * 15); w.close()
-          r = subprocess.run(["dist/AndySDR/decoders/ft8_lib/decode_ft8.exe", "/tmp/silence.wav"], capture_output=True, timeout=60)
-          print("decode_ft8 exit", r.returncode)
+          w = wave.open("silence.wav", "wb"); w.setnchannels(1); w.setsampwidth(2); w.setframerate(12000); w.writeframes(b"\0\0" * 12000 * 15); w.close()
+          r = subprocess.run(["dist/AndySDR/decoders/ft8_lib/decode_ft8.exe", "silence.wav"], capture_output=True, timeout=60)
+          print("decode_ft8 exit", r.returncode, r.stdout[:200], r.stderr[:300])
           PY
 
       - name: Build DAB decoder (welle-cli from source, experimental)
@@ -135,6 +135,7 @@ jobs:
             mingw-w64-x86_64-lame
             mingw-w64-x86_64-libusb
             mingw-w64-x86_64-pkg-config
+            vim
       - name: Compile and bundle welle-cli
         continue-on-error: true
         shell: msys2 {0}

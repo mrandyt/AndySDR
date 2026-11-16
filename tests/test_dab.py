@@ -1,6 +1,10 @@
 """DAB plumbing end to end with a stand-in welle-cli: channel table, mux.json parsing, IQ bridge feed at 2.048 MS/s,
 password-protected proxy of mux.json and the MP3 stream.  (The real welle-cli is built by the release workflow.)"""
 import json, os, stat, sys, tempfile, time, urllib.request, urllib.error
+import sys as _s
+if _s.platform == "win32":
+    print("skipped: this test uses POSIX shell-script stand-in programs")
+    raise SystemExit(0)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 home = tempfile.mkdtemp()
 os.environ["HOME"] = home

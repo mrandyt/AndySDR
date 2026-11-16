@@ -1,6 +1,10 @@
 """FT8 / FT4: band-plan matching, slot cutting, decode_ft8 wrapper (stand-in executable), engine auto-start.
 decode_ft8 itself (ft8_lib) is compiled by the release workflow; here a tiny stand-in prints the same line format."""
 import os, stat, sys, tempfile, time, wave
+import sys as _s
+if _s.platform == "win32":
+    print("skipped: this test uses POSIX shell-script stand-in programs")
+    raise SystemExit(0)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 home = tempfile.mkdtemp()
 os.environ["HOME"] = home
