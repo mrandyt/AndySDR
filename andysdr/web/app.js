@@ -85,6 +85,7 @@ function onJSON(m) {
     case "mesh_history": MESHMSG = d; renderMeshList(); renderMeshMsgs(); break;
     case "mesh_ble": meshBleFound(d); break;
     case "adsb": onAdsb(d); break;
+    case "meshsdr": onMeshSdr(d); break;
     case "adsb_cfg": ADS.cfg = d; adsbCfg(); adsbStat(); break;
     case "pager": addPager(d); break;
     case "pager_cfg": PAG.cfg = d; renderPager(); break;
@@ -110,6 +111,7 @@ function onHello(h) {
   renderDecoders(); renderImages(h.images); renderState();
   if (h.schedule) { SCH = h.schedule; renderSchedule(); }
   if (h.mesh) { MESH = h.mesh; MESHMSG = h.mesh_history || []; renderMesh(); }
+  if (h.meshsdr) onMeshSdr(h.meshsdr);
   if (h.pager) { PAG.msgs = h.pager.messages || []; PAG.cfg = h.pager; PAG.unseen = 0; renderPager(); }
   $("pagExport").href = `/api/pager.csv?token=${encodeURIComponent(token)}`;
   $("adsbExport").href = `/api/adsb.csv?token=${encodeURIComponent(token)}`;
@@ -2058,6 +2060,58 @@ $("meshTune").onclick = () => {
   send({ cmd: "tune", freq: Math.round(f * 1e6), mode: "WFM" });
   toast(`SDR tuned to ${f} MHz – LoRa packets show as short wide bursts on the waterfall (the SDR cannot read them; the board does)`);
 };
+
+/* ======================================================= MeshCore with just the SDR (receive only) */
+let MSDR = null, msdrView = "nodes";
+function onMeshSdr(d) { MSDR = d; renderMeshSdr(); }
+const msdrAgo = (t) => { const s = Math.max(0, (Date.now() / 1000) - t); return s < 90 ? Math.round(s) + " s" : s < 5400 ? Math.round(s / 60) + " min" : s < 172800 ? (s / 3600).toFixed(1) + " h" : Math.round(s / 86400) + " d"; };
+const msdrTime = (t) => new Date(t * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+function renderMeshSdr() {
+  if (!MSDR || !$("msdrCard")) return;
+  const c = MSDR.cfg, st = MSDR.stats, typing = ["msdrFreq", "msdrBw", "msdrSf"].some((i) => document.activeElement === $(i));
+  if (!typing) { $("msdrFreq").value = (c.freq / 1e6).toFixed(3); $("msdrBw").value = (c.bw / 1e3).toString(); $("msdrSf").value = c.sf; }
+  $("msdrStart").hidden = MSDR.running; $("msdrStop").hidden = !MSDR.running;
+  const mins = st.started ? Math.max(0, (MSDR.now - st.started) / 60) : 0;
+  $("msdrStat").textContent = MSDR.running
+    ? `Listening · ${st.frames} packets${st.bad_crc ? ", " + st.bad_crc + " damaged" : ""} · ${MSDR.nodes.length} nodes · ${mins < 1 ? "<1" : Math.round(mins)} min` + (st.frames === 0 && mins > 2 ? " · nothing heard yet – check the antenna, frequency and SF" : "")
+    : `Stopped · ${MSDR.nodes.length} nodes known`;
+  $("msdrChans").innerHTML = MSDR.channels.map((x) => {
+    const u = (MSDR.user_channels || []).find((s) => s === x.name);
+    return ` <span class="chip">${esc(x.name)}${u ? ` <a href="#" data-chan-del="${esc(u)}" title="Remove">✕</a>` : ""}</span>`;
+  }).join("");
+  document.querySelectorAll("[data-msdr]").forEach((b) => b.classList.toggle("on", b.dataset.msdr === msdrView));
+  $("msdrNodesW").hidden = msdrView !== "nodes"; $("msdrMsgsW").hidden = msdrView !== "msgs"; $("msdrPktsW").hidden = msdrView !== "pkts";
+  if (!$("tab-mesh").classList.contains("active")) return;
+  const q = $("msdrFind").value.trim().toLowerCase(), ty = $("msdrType").value;
+  const nodes = MSDR.nodes.filter((n) => (!ty || n.type === ty) && (!q || `${n.name} ${n.type} ${n.pubkey}`.toLowerCase().includes(q)));
+  const icon = { repeater: "🗼", "room server": "🏠", chat: "💬", sensor: "🌡" };
+  $("msdrNodes").querySelector("tbody").innerHTML = nodes.map((n) => `<tr>
+    <td>${icon[n.type] || ""} <b>${esc(n.name || "(no name)")}</b></td><td>${esc(n.type)}</td>
+    <td>${n.lat != null ? `<a target="_blank" rel="noopener" href="https://www.openstreetmap.org/?mlat=${n.lat}&mlon=${n.lon}#map=14/${n.lat}/${n.lon}">${n.lat.toFixed(4)}, ${n.lon.toFixed(4)}</a>` : '<span class="muted">–</span>'}</td>
+    <td class="num">${n.hops}</td><td class="num">${n.snr}</td><td>${msdrAgo(n.last)} ago</td><td class="num">${n.count}×</td><td class="mono small">${esc(n.pubkey.slice(0, 12))}…</td></tr>`).join("") ||
+    `<tr><td colspan="8" class="muted">${MSDR.running ? "Listening … nodes appear when they send an advert (repeaters and rooms do this every few hours, so it can take a while)." : "Press ▶ Start listening."}</td></tr>`;
+  $("msdrMsgs").querySelector("tbody").innerHTML = MSDR.messages.slice().reverse().map((m) => `<tr><td>${msdrTime(m.t)}</td><td>${esc(m.channel)}</td><td>${esc(m.sender || "?")}</td><td>${esc(m.text)}</td><td class="num">${m.hops}</td><td class="num">${m.snr}</td></tr>`).join("") ||
+    `<tr><td colspan="6" class="muted">No readable channel messages yet. Public-channel and any #hashtag channels you add are decrypted.</td></tr>`;
+  $("msdrPkts").querySelector("tbody").innerHTML = MSDR.packets.slice().reverse().map((p) => `<tr><td>${msdrTime(p.t)}</td><td>${esc(p.type)}</td><td>${esc(p.route)}</td><td class="small">${p.via.length ? esc(p.via.join(" → ")) : "–"}</td><td class="num">${p.len}</td><td class="num">${p.snr}</td><td>${esc(p.text)}</td></tr>`).join("") ||
+    `<tr><td colspan="7" class="muted">Nothing heard yet.</td></tr>`;
+}
+$("msdrStart").onclick = () => send({ cmd: "meshsdr_start", freq: Math.round(parseFloat($("msdrFreq").value) * 1e6), bw: Math.round(parseFloat($("msdrBw").value) * 1e3), sf: +$("msdrSf").value });
+$("msdrStop").onclick = () => send({ cmd: "meshsdr_stop" });
+$("msdrUk").onclick = () => { $("msdrFreq").value = "869.618"; $("msdrBw").value = "62.5"; $("msdrSf").value = "8"; toast("UK/EU narrow settings filled in – press Start listening"); };
+$("msdrClear").onclick = () => { if (confirm("Forget all nodes, messages and the packet log?")) send({ cmd: "meshsdr_clear" }); };
+$("msdrChanAdd").onclick = () => { const v = $("msdrChanIn").value.trim(); if (v) { send({ cmd: "meshsdr_channel_add", spec: v }); $("msdrChanIn").value = ""; } };
+$("msdrChans").onclick = (e) => { const a = e.target.closest("[data-chan-del]"); if (a) { e.preventDefault(); send({ cmd: "meshsdr_channel_remove", spec: a.dataset.chanDel }); } };
+document.querySelectorAll("[data-msdr]").forEach((b) => (b.onclick = () => { msdrView = b.dataset.msdr; renderMeshSdr(); }));
+$("msdrFind").oninput = renderMeshSdr; $("msdrType").onchange = renderMeshSdr;
+$("msdrCsv").onclick = () => {
+  if (!MSDR) return;
+  const rows = [["name", "type", "lat", "lon", "hops", "snr", "heard_count", "last_heard", "public_key"]].concat(MSDR.nodes.map((n) => [n.name, n.type, n.lat ?? "", n.lon ?? "", n.hops, n.snr, n.count, new Date(n.last * 1000).toISOString(), n.pubkey]));
+  const csv = rows.map((r) => r.map((x) => `"${String(x).replace(/"/g, '""')}"`).join(",")).join("\r\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv" })); a.download = "meshcore_nodes.csv"; a.click();
+};
+setInterval(() => { if (MSDR && MSDR.running) renderMeshSdr(); }, 5000);
+document.querySelector('[data-tab="mesh"]').addEventListener("click", () => setTimeout(renderMeshSdr, 0));
+
 $("meshFind").oninput = renderMeshList;
 $("meshChans").onclick = (e) => {
   const lv = e.target.closest("[data-leave]");
@@ -2142,6 +2196,7 @@ const HELP = {
   qdec: ["Decoder buttons", "Start a decoder with one click: DMR, P25, NXDN, dPMR, M17 (digital voice), TETRA (baseband out), PAGER (POCSAG/FLEX), APRS (also DTMF/ZVEI/EAS), WEFAX, SSTV, LRPT (Meteor-M) and ADS-B (aircraft). AUTO (Auto ID) lets AndySDR identify signals and pick the decoder itself. OFF stops the decoder. A dimmed button means its program is not installed yet – see the DECODERS tab."],
   qlock: ["Skip / lock out", "Stops the scanner dwelling on something you don't want to hear. While it is stopped on a transmission (or searching) press SKIP 10 MIN, SKIP 1 HOUR or SKIP TODAY and it carries straight on; the channel is scanned again when the time is up (or when AndySDR is restarted). LOCK OUT is the permanent version (the L/O key): a memory channel stays locked out until you untick L/O in the MEMORY tab. UNSKIP clears all temporary skips and search lockouts at once – the number shows how many are being ignored and hovering lists them. Keyboard: I = skip for 10 minutes."],
   qfiles: ["Files buttons", "IMAGES – opens the folder of received weather pictures and captures (WEFAX charts, SSTV, satellite images) in Windows Explorer and shows the WEATHER IMAGES tab. RECORDINGS – opens the folder of sound recordings made with REC. On another PC, phone or tablet the folders stay on the radio PC, so IMAGES shows the WEATHER IMAGES tab instead."],
+  meshsdr: ["MeshCore with just the SDR", "Receive-only MeshCore using your SDR – no LoRa board. Press Start listening (UK/EU narrow is 869.618 MHz, 62.5 kHz, SF8). NODES lists every repeater, room server, companion and sensor heard advertising, with its position (click it for a map). MESSAGES shows channel messages for the Public channel and any #hashtag channel you add (or a 32-digit key). PACKET LOG lists everything heard including encrypted direct messages (which cannot be read) and damaged frames. Needs a decent 869 MHz antenna; the SDR must run at 250 kS/s or more."],
   qtog: ["Audio & step buttons", "AGC – automatic RF gain. MUTE – silences this screen without touching the VOLUME knob. MONITOR – holds the squelch open so you can hear the background noise and set up the antenna or gain; press again to return to your squelch setting. STEP − / STEP + – smaller or larger tuning step (shown on the LCD)."],
   updates: ["Updates", "AndySDR looks for a newer version on its GitHub releases page when it starts and every 12 hours. When one is found a pop-up shows what is new and asks what to do: Download & install, Remind me later, or Skip this version. After the download (checked against GitHub's SHA-256) AndySDR asks again before it installs and restarts itself. 'Check for updates now' looks straight away, even for a version you skipped. Tick 'Download new versions in the background' to have the file ready so installing takes seconds. If AndySDR was installed with the Setup program the installer runs quietly in the background; a portable (unzipped) copy copies the new files over the old ones; a copy run from Python source just opens the releases page. Your settings, memories and pictures in %APPDATA%\\AndySDR are never touched. Updating restarts the radio PC's program, so remote screens reconnect by themselves a few seconds later."],
   adsbshare: ["Share aircraft feed", "Tick to let other programs on your network use AndySDR as an ADS-B receiver: SBS/BaseStation messages on TCP port 30003 and raw AVR (*8D…;) on port 30002. Point Virtual Radar Server, tar1090/readsb, PlanePlotter or a flight-tracking-site feeder at this PC and those ports. The second box turns the daily CSV position log on or off."],

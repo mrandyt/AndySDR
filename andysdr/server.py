@@ -100,7 +100,7 @@ class Server:
                 payload = dict(payload, listeners=len(self.clients))
             frame = _ws_frame(json.dumps({"type": kind, "data": payload}).encode(), 1)
             for c in self.clients:
-                c.push(frame, droppable=(kind in ("state", "adsb", "update_progress")))
+                c.push(frame, droppable=(kind in ("state", "adsb", "meshsdr", "update_progress")))
 
     # ---------------------------------------------------------------- HTTP
     async def handle(self, reader, writer):
@@ -319,6 +319,7 @@ class Server:
             "images": self._images(),
             "schedule": r.scheduler.status(),
             "mesh": r.mesh.snapshot(), "mesh_history": r.mesh.history[-1500:],
+            "meshsdr": r.meshsdr.snapshot(),
             "pager": r.pager.snapshot(),
             "adsb": r.adsb.snapshot(),
             "ft8": r.decoders.ft8_history[-300:],
@@ -502,6 +503,19 @@ class Server:
                 r.pager.set_alias(m["capcode"], m.get("name", ""))
             elif cmd == "pager_highlight":
                 r.pager.set_highlight(m["capcode"], bool(m.get("on", True)))
+            elif cmd == "meshsdr_start":
+                if any(k in m for k in ("freq", "bw", "sf")):
+                    r.meshsdr.set_cfg(freq=m.get("freq"), bw=m.get("bw"), sf=m.get("sf"))
+                r.start_meshsdr()
+            elif cmd == "meshsdr_stop":
+                r.stop_meshsdr()
+            elif cmd == "meshsdr_clear":
+                r.meshsdr.clear()
+            elif cmd == "meshsdr_channel_add":
+                if not r.meshsdr.add_channel(str(m.get("spec", ""))):
+                    self._reply(c, "event", {"level": "warn", "text": "Enter a #hashtag channel name or a 32-digit hex key"})
+            elif cmd == "meshsdr_channel_remove":
+                r.meshsdr.remove_channel(str(m.get("spec", "")))
             elif cmd == "adsb_start":
                 r.start_adsb()
             elif cmd == "adsb_stop":

@@ -7,7 +7,7 @@ import sys
 block_cipher = None
 datas = [("andysdr/web", "web")]
 binaries = []
-hidden = ["scipy.signal", "scipy.special._cdflib", "webview", "SoapySDR", "andysdr.sdrplay", "andysdr.meshlink", "andysdr.adsb", "andysdr.adsb_sim", "andysdr.aircraftinfo", "andysdr.satpass", "andysdr.iqbridge", "sgp4", "sgp4.api"]
+hidden = ["scipy.signal", "scipy.special._cdflib", "webview", "SoapySDR", "andysdr.sdrplay", "andysdr.meshlink", "andysdr.adsb", "andysdr.adsb_sim", "andysdr.aircraftinfo", "andysdr.satpass", "andysdr.lora", "andysdr.meshsdr", "andysdr.meshpacket", "andysdr.iqbridge", "sgp4", "sgp4.api"]
 
 # ---- MeshCore messaging (companion board over USB / Bluetooth / Wi-Fi)
 try:

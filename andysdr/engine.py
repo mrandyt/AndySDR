@@ -10,6 +10,7 @@ import numpy as np
 
 from . import dab, devices, ft8
 from .adsb import ADSB_FREQ, Adsb
+from .meshsdr import MeshSdr
 from .autodetect import SignalClassifier
 from .config import data_dir
 from .decoders import DecoderManager
@@ -39,6 +40,8 @@ class Radio:
         self.pager = PagerStore(settings, self._emit)
         self.adsb = Adsb(settings, self._emit)
         self.decoders.adsb = self.adsb
+        self.meshsdr = MeshSdr(settings, self._emit)
+        self.decoders.meshsdr = self.meshsdr
         self.decoders.freq_fn = lambda: self.freq
         self.decoders.dial_fn = lambda: (ft8.match_freq(self.freq, self.mode) or (None, self.freq))[1]
         self.decoders.rate_fn = lambda: self.dev.sample_rate if self.dev else 2400000
@@ -110,6 +113,7 @@ class Radio:
             self.thread.join(timeout=3)
         self.decoders.stop()
         self.adsb.shutdown()
+        self.meshsdr.shutdown()
         from .decoders import stop_pulse
         stop_pulse()
         if self.dev:
@@ -197,6 +201,8 @@ class Radio:
         f = int(f)
         if self.decoders.active in ("dab", "goes") and abs(f - self.freq) > 1000000:
             self.decoders.stop()              # moved off the DAB block / GOES channel
+        if self.decoders.active == "meshsdr" and abs(f - self.freq) > 100000:
+            self.decoders.stop()              # tuned away from the MeshCore channel
         if self.decoders.active == "adsb" and abs(f - ADSB_FREQ) > 1000000:
             self.decoders.stop()              # tuned away from 1090 MHz: the aircraft decoder is no use here
         if abs(f - self.freq) > 1000:
@@ -244,7 +250,7 @@ class Radio:
         self.call(do)
 
     def _auto_feed(self, out):
-        if self.decoders.active in ("adsb", "ft8", "goes", "dab"):
+        if self.decoders.active in ("adsb", "ft8", "goes", "dab", "meshsdr"):
             return
         # band plan says FT8 / FT4 here and something is on the air: start that decoder
         if (self.s.get("auto_identify", True) and self.decoders.active in (None, "") and not self.job
@@ -507,6 +513,8 @@ class Radio:
         def do():
             if dec_id == "adsb":
                 self._begin_adsb()
+            elif dec_id == "meshsdr":
+                self.start_meshsdr()
             elif dec_id in ("dab", "goes"):
                 f = dab.channel_freq(sub if sub and sub != "auto" else "12B") if dec_id == "dab" else 1694100000
                 if f:
@@ -539,6 +547,32 @@ class Radio:
         self.spec_fresh = False
         self._emit("event", {"level": "info", "text": "ADS-B: tuned to 1090 MHz"})
         self._emit("device", self.device_info())
+
+    # ------------------------------------------------------------------ MeshCore over SDR (receive only)
+    def start_meshsdr(self):
+        def do():
+            self._stop_scan()
+            self._auto_reset()
+            self.channel = None
+            cfg = self.meshsdr.cfg()
+            if self.dev and self.dev.sample_rate < 250000:
+                self.s["sample_rate"] = 2400000
+                self._open_device(self.dev.key)
+            self._tune(cfg["freq"], "DIG", force=True)
+            if not self.decoders.start("meshsdr"):
+                return
+            self.discard = 3
+            self._emit("event", {"level": "info", "text": "MeshCore: listening on %.3f MHz (SF%d, %.1f kHz) – receive only"
+                                 % (cfg["freq"] / 1e6, cfg["sf"], cfg["bw"] / 1e3)})
+            self._push_state(True)
+        self.call(do)
+
+    def stop_meshsdr(self):
+        def do():
+            if self.decoders.active == "meshsdr":
+                self.decoders.stop()
+            self._push_state(True)
+        self.call(do)
 
     def start_adsb(self):
         self.call(lambda: (self._begin_adsb(), self._push_state(True)))
@@ -965,7 +999,7 @@ class Radio:
                 last_pri = time.time()
                 self._priority_check(spec_db)
 
-            if self.decoders.active in ("adsb", "goes", "dab"):
+            if self.decoders.active in ("adsb", "goes", "dab", "meshsdr"):
                 self.decoders.feed_iq(iq, fs, self.offset())    # these decoders work on the raw samples; no audio
             elif produce:
                 try:

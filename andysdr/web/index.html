@@ -275,6 +275,43 @@
 
   <!-- MESHCORE -->
   <div class="tabpage" id="tab-mesh">
+    <div class="card sat-card" id="msdrCard" data-help="meshsdr">
+      <div class="row wrapline">
+        <b>📡 Listen with just the SDR – no LoRa board needed</b>
+        <span class="muted small">Receive only. Lists repeaters, room servers and other nodes from their adverts, and reads public / #hashtag channel messages. Experimental.</span>
+      </div>
+      <div class="row wrapline">
+        <button class="btn primary" id="msdrStart">▶ Start listening</button>
+        <button class="btn danger" id="msdrStop" hidden>■ Stop</button>
+        <label>Freq <input class="inp" id="msdrFreq" style="width:6.5em"> MHz</label>
+        <label>BW <input class="inp" id="msdrBw" style="width:4.5em"> kHz</label>
+        <label>SF <input class="inp" id="msdrSf" type="number" min="5" max="12" style="width:3.5em"></label>
+        <button class="btn sm" id="msdrUk" title="UK/EU narrow: 869.618 MHz, 62.5 kHz, SF8">UK preset</button>
+        <span class="muted small" id="msdrStat"></span>
+      </div>
+      <div class="row wrapline">
+        <button class="btn sm on" data-msdr="nodes">Nodes</button>
+        <button class="btn sm" data-msdr="msgs">Messages</button>
+        <button class="btn sm" data-msdr="pkts">Packet log</button>
+        <span class="grow"></span>
+        <label>Show <select id="msdrType"><option value="">All nodes</option><option>repeater</option><option>room server</option><option>chat</option><option>sensor</option></select></label>
+        <input class="inp" id="msdrFind" type="search" placeholder="find" style="width:9em">
+        <button class="btn sm" id="msdrCsv">Export CSV</button>
+        <button class="btn sm danger" id="msdrClear">Clear</button>
+      </div>
+      <div class="tablewrap" id="msdrNodesW"><table class="grid" id="msdrNodes">
+        <thead><tr><th>Name</th><th>Type</th><th>Position</th><th>Hops</th><th>SNR</th><th>Last heard</th><th>Heard</th><th>Key</th></tr></thead><tbody></tbody></table></div>
+      <div class="tablewrap" id="msdrMsgsW" hidden><table class="grid" id="msdrMsgs">
+        <thead><tr><th>Time</th><th>Channel</th><th>From</th><th>Message</th><th>Hops</th><th>SNR</th></tr></thead><tbody></tbody></table></div>
+      <div class="tablewrap" id="msdrPktsW" hidden><table class="grid" id="msdrPkts">
+        <thead><tr><th>Time</th><th>Type</th><th>Route</th><th>Via</th><th>Bytes</th><th>SNR</th><th>What</th></tr></thead><tbody></tbody></table></div>
+      <div class="row wrapline">
+        <span class="muted small">Channels it can read:</span><span id="msdrChans" class="small"></span>
+        <input class="inp" id="msdrChanIn" placeholder="#name or 32-digit key" style="width:13em">
+        <button class="btn sm" id="msdrChanAdd">+ Add channel</button>
+      </div>
+      <div class="muted small">Direct messages are end-to-end encrypted and cannot be read – they are only counted. Needs a good 869 MHz antenna; weak or distant nodes may not decode.</div>
+    </div>
     <div class="row wrapline mesh-conn" data-help="mesh">
       <span class="mesh-dot" id="meshDot"></span><b id="meshStatus">Not connected</b>
       <label>Board on <select id="meshKind">

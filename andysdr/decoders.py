@@ -65,6 +65,8 @@ DECODERS = {
                "help": "1694.1 MHz GOES-East/West images and EMWIN. Needs a dish + L-band LNA; the receiver is shared with SatDump over a local rtl_tcp link."},
     "adsb":   {"name": "ADS-B aircraft 1090 MHz (built in)", "exe": None,
                "help": "Tunes to 1090 MHz and tracks aircraft (callsign, position, altitude, speed). See the ADS-B tab."},
+    "meshsdr": {"name": "MeshCore with just an SDR (built in, receive only)", "exe": None,
+               "help": "Decodes MeshCore LoRa packets straight from the SDR: lists repeaters, room servers and other nodes from their adverts and reads public / #hashtag channel messages. No LoRa board needed. See the MESHCORE tab."},
     "tetra":  {"name": "TETRA baseband out (UDP)", "exe": None,
                "help": "Streams 48 kHz complex IQ to UDP 127.0.0.1:42000 for a TETRA decoder."},
 }
@@ -222,6 +224,7 @@ class DecoderManager:
         self.rate_fn = lambda: 2400000   # set by the radio: current receiver sample rate
         self._watch_stop = True
         self.adsb = None           # set by the radio: the ADS-B engine (takes IQ, not audio)
+        self.meshsdr = None        # set by the radio: the SDR-only MeshCore receiver (takes IQ)
 
     # ------------------------------------------------------------------
     def available(self):
@@ -379,6 +382,11 @@ class DecoderManager:
                 _Reader(self.proc.stdout, self.log, lambda l: "(D)" not in l).start()
                 self._watch_images(out)
                 self.log("SatDump (GOES HRIT) started on 1694.1 MHz – images appear in Weather images as they complete")
+            elif dec_id == "meshsdr":
+                if self.meshsdr is None:
+                    raise RuntimeError("MeshCore SDR receiver not available")
+                self.meshsdr.start()
+                self.log("MeshCore SDR receiver running – nodes and messages appear in the MESHCORE tab (receive only).")
             elif dec_id == "adsb":
                 if self.adsb is None:
                     raise RuntimeError("ADS-B engine not available")
@@ -467,6 +475,8 @@ class DecoderManager:
             self.udp = None
         if self.active == "adsb" and self.adsb:
             self.adsb.stop()
+        if self.active == "meshsdr" and self.meshsdr:
+            self.meshsdr.stop()
         if self.bridge:
             self.bridge.stop()
             self.bridge = None
@@ -504,6 +514,8 @@ class DecoderManager:
         """Decoders that work on the raw IQ stream (ADS-B, GOES) instead of demodulated audio."""
         if self.active == "adsb" and self.adsb:
             self.adsb.feed(iq, fs)
+        elif self.active == "meshsdr" and self.meshsdr:
+            self.meshsdr.feed(iq, fs, offset)
         elif self.active in ("goes", "dab") and self.bridge:
             self.bridge.feed(iq, fs, offset)
 
