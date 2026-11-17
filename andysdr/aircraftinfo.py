@@ -20,6 +20,9 @@ log = logging.getLogger("andysdr.aircraftinfo")
 
 REGISTRY_URL = "https://hexdb.io/api/v1/aircraft/%s"
 ROUTE_URL = "https://hexdb.io/api/v1/route/icao/%s"
+CALLSIGN_URL = "https://api.adsbdb.com/v0/callsign/%s"          # airline, origin and destination with city, country, position
+AIRPORT_URL = "https://hexdb.io/api/v1/airport/icao/%s"
+AIRCRAFT2_URL = "https://api.adsbdb.com/v0/aircraft/%s"
 PHOTO_URL = "https://api.planespotters.net/pub/photos/hex/%s"
 NEG_TTL = 6 * 3600                   # "not found" answers are retried after this many seconds
 MAX_CACHE = 20000
@@ -99,7 +102,8 @@ class AircraftInfo:
         e = self.cache.get(hexid.lower()) or {}
         return {"reg": e.get("reg", ""), "type": e.get("type", ""), "tcode": e.get("tcode", ""),
                 "owner": e.get("owner", ""), "maker": e.get("maker", ""), "photo": e.get("photo", ""),
-                "photo_link": e.get("photo_link", ""), "photographer": e.get("photographer", "")}
+                "photo_link": e.get("photo_link", ""), "photographer": e.get("photographer", ""),
+                "owner_country": e.get("owner_country", ""), "operator_code": e.get("operator_code", "")}
 
     def route(self, callsign):
         """origin-destination for a callsign (cached in memory for an hour), or ''."""
@@ -118,6 +122,19 @@ class AircraftInfo:
     def cached_route(self, callsign):
         e = self.cache.get("r:" + (callsign or "").strip().upper())
         return e.get("route", "") if e else ""
+
+    def route_details(self, callsign):
+        """{'airline','origin','dest'} from the cache (origin/dest: name, city, country, iata, icao, lat, lon) or {}."""
+        e = self.cache.get("r:" + (callsign or "").strip().upper()) or {}
+        return {k: e[k] for k in ("airline", "origin", "dest") if e.get(k)}
+
+    def route_names(self, route):
+        """'EGLL-KJFK' -> 'London Heathrow Airport → John F Kennedy International Airport' (what is cached so far)."""
+        out = []
+        for code in (route or "").split("-"):
+            e = self.cache.get("ap:" + code.strip().upper())
+            out.append((e or {}).get("name") or code.strip())
+        return " → ".join(out) if route else ""
 
     def shutdown(self):
         self._save(True)
@@ -159,6 +176,19 @@ class AircraftInfo:
         e = {"found": bool(reg or d.get("Type")), "t": time.time(), "reg": reg,
              "type": str(d.get("Type") or "").strip(), "tcode": str(d.get("ICAOTypeCode") or "").strip(),
              "owner": str(d.get("RegisteredOwners") or "").strip(), "maker": str(d.get("Manufacturer") or "").strip()}
+        try:                                                              # second registry fills gaps and adds the owner's country
+            x = ((self.fetch(AIRCRAFT2_URL % hexid.upper()) or {}).get("response") or {}).get("aircraft") or {}
+            if isinstance(x, dict) and x:
+                e["found"] = e["found"] or bool(x.get("registration") or x.get("type"))
+                e["reg"] = e["reg"] or str(x.get("registration") or "")
+                e["type"] = e["type"] or str(x.get("type") or "")
+                e["tcode"] = e["tcode"] or str(x.get("icao_type") or "")
+                e["owner"] = e["owner"] or str(x.get("registered_owner") or "")
+                e["maker"] = e["maker"] or str(x.get("manufacturer") or "")
+                e["owner_country"] = str(x.get("registered_owner_country_name") or "")
+                e["operator_code"] = str(x.get("registered_owner_operator_flag_code") or "")
+        except Exception:                                              # noqa: BLE001
+            pass
         with self.lock:
             old = self.cache.get(hexid, {})
             for k in ("photo", "photo_link", "photographer", "photo_done"):
@@ -181,13 +211,48 @@ class AircraftInfo:
             self.dirty = True
         self.notify()
 
+    @staticmethod
+    def _apt(a):
+        a = a if isinstance(a, dict) else {}
+        try:
+            lat, lon = float(a.get("latitude")), float(a.get("longitude"))
+        except (TypeError, ValueError):
+            lat = lon = None
+        return {"name": str(a.get("name") or ""), "city": str(a.get("municipality") or ""),
+                "country": str(a.get("country_name") or ""), "iata": str(a.get("iata_code") or ""),
+                "icao": str(a.get("icao_code") or ""), "lat": lat, "lon": lon}
+
     def _do_route(self, callsign):
         try:
             d = self.fetch(ROUTE_URL % callsign)
             route = str(d.get("route") or "") if isinstance(d, dict) else ""
         except urllib.error.HTTPError:
             route = ""
+        rec = {"route": route, "t": time.time()}
+        try:                                                              # richer second source (optional)
+            fr = ((self.fetch(CALLSIGN_URL % callsign) or {}).get("response") or {}).get("flightroute") or {}
+            if fr:
+                o, de = self._apt(fr.get("origin")), self._apt(fr.get("destination"))
+                al = fr.get("airline") if isinstance(fr.get("airline"), dict) else {}
+                rec["airline"] = str(al.get("name") or "")
+                rec["origin"], rec["dest"] = o, de
+                if not route and o["icao"] and de["icao"]:
+                    rec["route"] = route = o["icao"] + "-" + de["icao"]
+        except Exception:                                                  # noqa: BLE001 - not found / offline
+            pass
         with self.lock:
-            self.cache["r:" + callsign] = {"route": route, "t": time.time()}
+            self.cache["r:" + callsign] = rec
             self.dirty = True
+        for code in route.split("-") if route else []:                      # airport names, cached for good
+            key = "ap:" + code.upper()
+            if key in self.cache:
+                continue
+            try:
+                a = self.fetch(AIRPORT_URL % code.upper())
+                name = str(a.get("airport") or "").strip() if isinstance(a, dict) else ""
+            except Exception:                                              # noqa: BLE001 - unknown code / offline
+                continue
+            with self.lock:
+                self.cache[key] = {"name": name, "t": time.time()}
+                self.dirty = True
         self.notify()
