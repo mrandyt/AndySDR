@@ -1,7 +1,7 @@
 ; Inno Setup script – makes AndySDR-Setup.exe (Start menu + desktop shortcuts + uninstaller)
-; the build passes the real version: ISCC /DAppVer=1.10.0 installer.iss
+; the build passes the real version: ISCC /DAppVer=1.10.1 installer.iss
 #ifndef AppVer
-  #define AppVer "1.10.0"
+  #define AppVer "1.10.1"
 #endif
 
 [Setup]
