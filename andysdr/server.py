@@ -510,7 +510,7 @@ class Server:
             elif cmd == "schedule_delete":
                 r.scheduler.delete_job(str(m["id"]))
             elif cmd == "sat_cfg":
-                kw = {k: m[k] for k in ("enabled", "freq", "min_el", "from", "to") if k in m}
+                kw = {k: m[k] for k in ("enabled", "freq", "min_el", "from", "to", "days") if k in m}
                 if "freq" in kw:
                     kw["freq"] = int(kw["freq"])
                 if "min_el" in kw:

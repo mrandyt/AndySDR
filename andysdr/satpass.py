@@ -179,7 +179,8 @@ class SatPlanner:
             freq = int(u.get("freq") or d["freqs"][0])
             out[sid] = {"enabled": bool(u.get("enabled", False)), "freq": freq,
                         "min_el": float(u.get("min_el") if u.get("min_el") not in (None, "") else d["min_el"]),
-                        "from": str(u.get("from") or ""), "to": str(u.get("to") or "")}
+                        "from": str(u.get("from") or ""), "to": str(u.get("to") or ""),
+                        "days": sorted({int(x) for x in (u.get("days") or []) if str(x).isdigit() and 0 <= int(x) <= 6})}
         return out
 
     def set_cfg(self, sid, **kw):
@@ -187,7 +188,7 @@ class SatPlanner:
             return
         c = dict(self.s.get("sat_auto") or {})
         u = dict(c.get(sid) or {})
-        for k in ("enabled", "freq", "min_el", "from", "to"):
+        for k in ("enabled", "freq", "min_el", "from", "to", "days"):
             if k in kw:
                 u[k] = kw[k]
         c[sid] = u
@@ -313,6 +314,8 @@ class SatPlanner:
 
     def in_window(self, sid, now):
         c = self.cfg()[sid]
+        if c["days"] and time.localtime(now).tm_wday not in c["days"]:      # Mon=0 .. Sun=6; none ticked = every day
+            return False
         if not (c["from"] or c["to"]):
             return True
         day = time.strftime("%Y-%m-%d", time.localtime(now))
