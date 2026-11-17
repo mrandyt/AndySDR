@@ -24,7 +24,7 @@ sed -e 's/__LIBOSMOCORE_HAVE_SYS_SOCKET_H XX/__LIBOSMOCORE_HAVE_SYS_SOCKET_H 1/'
     -e 's/__LIBOSMOCORE_HAVE_NETINET_IN_H XX/__LIBOSMOCORE_HAVE_NETINET_IN_H 1/' "$T/socket_compat.h.tpl" > "$G/socket_compat.h"
 sed -e 's/{{VERSION}}/0.0.0/g' -e 's/{{VERSION_MAJOR}}/0/g' -e 's/{{VERSION_MINOR}}/0/g' -e 's/{{VERSION_PATCH}}/0/g' "$T/version.h.tpl" > "$G/version.h"
 
-CFLAGS="-O2 -fcommon -w -D_GNU_SOURCE -I. -I$HERE/ocfg -I$W/gen -I$OC/include -I$OC/src/pseudotalloc"
+CFLAGS="-O2 -fcommon -w -Wno-error=implicit-function-declaration -Wno-error=implicit-int -Wno-error=int-conversion -Wno-error=incompatible-pointer-types -D_GNU_SOURCE -I. -I$HERE/ocfg -I$W/gen -I$OC/include -I$OC/src/pseudotalloc"
 [ $WIN = 1 ] && CFLAGS="-I$HERE/shim -include $HERE/shim/win_compat.h $CFLAGS"
 mkdir -p "$W/obj"
 OBJS=()
