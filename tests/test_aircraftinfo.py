@@ -70,4 +70,31 @@ snap = tr.snapshot(time.time())
 check("snapshot carries reg/type/route", snap[0]["reg"] == "G-EUUU" and snap[0]["tcode"] == "A320" and snap[0]["route"] == "EGLL-LFPG")
 check("csv has registration", "G-EUUU" in tr.export_csv(time.time()))
 print("FAILED" if fails else "ALL OK", fails)
+
+
+# --- airport names on the route, military flag
+def fake2(url):
+    if "airport/icao/EGLL" in url: return {"airport": "London Heathrow Airport"}
+    if "airport/icao/LFPG" in url: return {"airport": "Paris Charles de Gaulle"}
+    return fake(url)
+inf2 = AircraftInfo({"adsb_lookup": True}, fetch=fake2, path=os.path.join(d, "c2.json"))
+inf2.route("BAW123")
+check("route airport names", wait(lambda: inf2.route_names("EGLL-LFPG") == "London Heathrow Airport → Paris Charles de Gaulle"))
+check("military hex blocks", adsb.is_military(0x43C123) and adsb.is_military(0xAE1234) and not adsb.is_military(0x406A5C))
+
+# --- adsbdb route details
+def fake3(url):
+    if "adsbdb.com/v0/callsign" in url:
+        return {"response": {"flightroute": {"airline": {"name": "British Airways"},
+                "origin": {"name": "London Heathrow", "municipality": "London", "country_name": "United Kingdom", "iata_code": "LHR", "icao_code": "EGLL", "latitude": 51.47, "longitude": -0.45},
+                "destination": {"name": "Charles de Gaulle", "municipality": "Paris", "country_name": "France", "iata_code": "CDG", "icao_code": "LFPG", "latitude": 49.01, "longitude": 2.55}}}}
+    if "adsbdb.com/v0/aircraft" in url:
+        return {"response": {"aircraft": {"registered_owner_country_name": "United Kingdom", "registered_owner_operator_flag_code": "BAW"}}}
+    return fake2(url)
+inf3 = AircraftInfo({"adsb_lookup": True}, fetch=fake3, path=os.path.join(d, "c3.json"))
+inf3.route("BAW123"); inf3.peek("406a5c")
+check("route details (airline, cities, position)", wait(lambda: inf3.route_details("BAW123").get("dest", {}).get("city") == "Paris"
+      and inf3.route_details("BAW123")["airline"] == "British Airways" and inf3.route_details("BAW123")["origin"]["lat"] == 51.47))
+check("owner country from second registry", wait(lambda: inf3.public("406A5C")["owner_country"] == "United Kingdom"))
+
 sys.exit(1 if fails else 0)

@@ -1007,6 +1007,35 @@ $("pagStart").onclick = () => send({ cmd: "decoder", id: "pager" });
 const ADS = { list: [], trails: new Map(), cfg: {}, stats: {}, sel: null, sort: { k: "seen", d: 1 },
   view: { lat: 54.0, lon: -2.0, z: 5, user: false, fitN: 0 }, tiles: new Map(), raf: 0, emSeen: new Set(), hit: [], hitBox: null };
 const ADS_EMER = { "7500": "hijack", "7600": "radio failure", "7700": "emergency" };
+const ADS_SQK = { "7000": "VFR conspicuity (no controller)", "7001": "military low-level", "7004": "aerobatics", "7010": "circuit flying", "2000": "IFR, no code assigned",
+  "1200": "VFR (US)", "7500": "hijack", "7600": "radio failure", "7700": "general emergency", "0020": "air ambulance / rescue helicopter", "7616": "police air support" };
+const ADS_CAT = { A1: "Light (under 15,500 lb)", A2: "Small (15,500–75,000 lb)", A3: "Large (75,000–300,000 lb)", A4: "High-vortex large (e.g. B757)", A5: "Heavy (over 300,000 lb)",
+  A6: "High-performance (fast jet)", A7: "Rotorcraft / helicopter", B1: "Glider / sailplane", B2: "Lighter-than-air (balloon)", B3: "Parachutist", B4: "Ultralight / paraglider",
+  B6: "Drone (UAV)", B7: "Space vehicle", C1: "Emergency vehicle (ground)", C2: "Service vehicle (ground)" };
+function adsPhase(a) {
+  if (a.ground) return a.gs > 40 ? "taxiing / on the runway" : "parked or stopped";
+  if (a.vr == null || a.alt == null) return "";
+  if (a.vr > 500) return "climbing"; if (a.vr < -500) return "descending";
+  return a.alt > 25000 ? "cruising" : "level flight";
+}
+function adsGc(lat1, lon1, lat2, lon2) {   // great-circle distance in nautical miles
+  const r = Math.PI / 180, a = Math.sin((lat2 - lat1) * r / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin((lon2 - lon1) * r / 2) ** 2;
+  return 2 * 3440.065 * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+function adsTrip(a) {   // origin -> destination block: place names, distance left and a rough arrival time
+  const rt = a.rt || {}, o = rt.origin, d = rt.dest; if (!o && !d) return "";
+  const place = (x) => x ? `${esc(x.city || x.name)}${x.iata ? " (" + esc(x.iata) + ")" : ""}${x.country ? ", " + esc(x.country) : ""}` : "?";
+  let h = `<span class="muted small">From</span> ${place(o)}<br><span class="muted small">To</span> ${place(d)}<br>`;
+  if (d && d.lat != null && a.lat != null) {
+    const left = adsGc(a.lat, a.lon, d.lat, d.lon), tot = o && o.lat != null ? adsGc(o.lat, o.lon, d.lat, d.lon) : null, m = adsMet();
+    h += `To go: ${Math.round(m ? left * 1.852 : left).toLocaleString()} ${m ? "km" : "NM"}`;
+    if (tot) h += ` of ${Math.round(m ? tot * 1.852 : tot).toLocaleString()} (${Math.max(0, Math.min(100, Math.round(100 * (1 - left / tot))))}% flown)`;
+    if (a.gs > 80 && !a.ground) { const mins = Math.round(left / a.gs * 60), t = new Date(Date.now() + mins * 60000); h += ` · about ${adsAgo(mins * 60)} (${t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}) at this speed`; }
+    h += "<br>";
+  }
+  return h;
+}
+function adsAgo(s) { return s < 90 ? Math.round(s) + " s" : s < 5400 ? Math.round(s / 60) + " min" : (s / 3600).toFixed(1) + " h"; }
 const adsLS = (k, d) => { try { const v = localStorage.getItem("andysdr_adsb_" + k); return v === null ? d : v; } catch (e) { return d; } };
 const adsSetLS = (k, v) => { try { localStorage.setItem("andysdr_adsb_" + k, v); } catch (e) { /* private mode */ } };
 const adsMet = () => $("adsbUnits").value === "met";
@@ -1116,14 +1145,16 @@ function adsDetail() {
   el.innerHTML = `<button class="x" id="adsbDetX" title="Close">✕</button><b class="big">${esc(a.flight || a.icao)}</b><br>
     ${a.photo ? `<a href="${esc(a.photo_link || a.photo)}" target="_blank" rel="noopener"><img class="adsb-photo" src="${esc(a.photo)}" alt="${esc(a.reg || a.icao)}"></a><div class="muted small">Photo: ${esc(a.photographer || "planespotters.net")} · planespotters.net</div>` : ""}
     ${a.reg ? `<b>${esc(a.reg)}</b> · ` : ""}${a.type ? esc(a.type) + (a.tcode ? ` (${esc(a.tcode)})` : "") + "<br>" : a.reg ? "<br>" : ""}
-    ${a.owner ? "Owner: " + esc(a.owner) + "<br>" : ""}${a.airline ? esc(a.airline) + "<br>" : ""}${a.route ? "Route: " + esc(a.route) + "<br>" : ""}Hex ${a.icao} · ${esc(a.country || "country unknown")}${a.cat ? " · cat " + esc(a.cat) : ""}<br>
-    ${a.reg ? `<a target="_blank" rel="noopener" href="https://www.flightradar24.com/data/aircraft/${encodeURIComponent(a.reg.toLowerCase())}">FR24 history</a> · ` : ""}<a target="_blank" rel="noopener" href="https://www.planespotters.net/hex/${a.icao}">Planespotters</a><br>
+    ${a.owner ? "Owner: " + esc(a.owner) + "<br>" : ""}${a.airline ? esc(a.airline) + "<br>" : ""}${a.route ? "Route: " + esc(a.route) + (a.route_names && a.route_names !== a.route ? `<br><span class="muted small">${esc(a.route_names)}</span>` : "") + "<br>" : ""}${adsTrip(a)}${a.mil ? "<b>Military aircraft</b> (hex block)<br>" : ""}${a.rt && a.rt.airline && a.rt.airline !== a.airline ? "Airline: " + esc(a.rt.airline) + "<br>" : ""}${a.owner_country ? "Registered in: " + esc(a.owner_country) + (a.operator_code ? " · operator " + esc(a.operator_code) : "") + "<br>" : ""}Hex ${a.icao} · ${esc(a.country || "country unknown")}<br>
+    ${a.cat ? "Category: " + esc(ADS_CAT[a.cat] || a.cat) + "<br>" : ""}${adsPhase(a) ? "Now: " + adsPhase(a) + "<br>" : ""}
+    ${a.reg ? `<a target="_blank" rel="noopener" href="https://www.flightradar24.com/data/aircraft/${encodeURIComponent(a.reg.toLowerCase())}">FR24 history</a> · ` : ""}<a target="_blank" rel="noopener" href="https://www.planespotters.net/hex/${a.icao}">Planespotters</a> · <a target="_blank" rel="noopener" href="https://globe.adsbexchange.com/?icao=${a.icao.toLowerCase()}">ADSBexchange</a><br>
     Altitude: ${a.ground ? "on the ground" : a.alt == null ? "–" : adsAlt(a.alt).toLocaleString() + (m ? " m" : " ft")}<br>
     Speed: ${a.gs == null ? "–" : adsSpd(a.gs) + (m ? " km/h" : " kt")} · Heading: ${a.trk == null ? "–" : Math.round(a.trk) + "°"}<br>
     Climb: ${a.vr == null ? "–" : adsVs(a.vr) + (m ? " m/s" : " ft/min")}<br>
-    Squawk: ${esc(a.squawk || "–")}${ADS_EMER[a.squawk] ? " ⚠ " + ADS_EMER[a.squawk] : ""}<br>
+    Squawk: ${esc(a.squawk || "–")}${ADS_EMER[a.squawk] ? " ⚠ " + ADS_EMER[a.squawk] : ADS_SQK[a.squawk] ? " – " + ADS_SQK[a.squawk] : ""}<br>
     ${a.dist != null ? `Distance: ${adsDist(a.dist)} ${m ? "km" : "NM"} at ${a.brg}°<br>` : ""}
     ${a.lat != null ? `Position: ${a.lat.toFixed(4)}, ${a.lon.toFixed(4)}<br>` : "No position yet<br>"}
+    <span class="muted small">Heard for ${adsAgo(a.first)} · peak ${a.max_alt == null ? "–" : adsAlt(a.max_alt).toLocaleString() + (m ? " m" : " ft")} at ${a.max_gs == null ? "–" : adsSpd(a.max_gs) + (m ? " km/h" : " kt")}${a.min_dist != null ? " · closest " + adsDist(a.min_dist) + (m ? " km" : " NM") : ""}</span><br>
     Signal ${a.rssi} dBFS · ${a.msgs} messages`;
   const x = $("adsbDetX"); if (x) x.onclick = () => { ADS.sel = null; renderAdsbTable(); adsDraw(); };
 }

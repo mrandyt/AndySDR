@@ -365,6 +365,11 @@ AIRLINES = {
 }
 
 
+def is_military(icao):
+    """Hex blocks reserved for UK (43C000-43CFFF) and US (AE0000-AFFFFF) military aircraft."""
+    return 0x43C000 <= icao <= 0x43CFFF or 0xAE0000 <= icao <= 0xAFFFFF
+
+
 def country_of(icao):
     for lo, hi, name in COUNTRIES:
         if lo <= icao <= hi:
@@ -375,7 +380,8 @@ def country_of(icao):
 # --------------------------------------------------------------------------- aircraft tracker
 class Aircraft:
     __slots__ = ("icao", "flight", "cat", "squawk", "alt", "gs", "trk", "vr", "lat", "lon", "ground", "emerg",
-                 "msgs", "first", "seen", "seen_pos", "rssi", "even", "odd", "trail", "dist", "brg", "last_log")
+                 "msgs", "first", "seen", "seen_pos", "rssi", "even", "odd", "trail", "dist", "brg", "last_log",
+                 "max_alt", "max_gs", "min_dist")
 
     def __init__(self, icao, now):
         self.icao = icao
@@ -391,10 +397,20 @@ class Aircraft:
         self.trail = collections.deque(maxlen=TRAIL_POINTS)
         self.dist = self.brg = None
         self.last_log = 0.0
+        self.max_alt = self.max_gs = self.min_dist = None     # highlights since first heard
+
+    def _extremes(self):
+        if self.alt is not None and not self.ground and (self.max_alt is None or self.alt > self.max_alt):
+            self.max_alt = self.alt
+        if self.gs is not None and (self.max_gs is None or self.gs > self.max_gs):
+            self.max_gs = self.gs
+        if self.dist is not None and (self.min_dist is None or self.dist < self.min_dist):
+            self.min_dist = self.dist
 
     def to_dict(self, now, with_trail=False):
         hexid = "%06X" % self.icao
         flt = self.flight.strip()
+        self._extremes()
         d = {"icao": hexid, "flight": flt, "cat": self.cat, "squawk": self.squawk, "alt": self.alt,
              "gs": None if self.gs is None else round(self.gs), "trk": None if self.trk is None else round(self.trk, 1),
              "vr": self.vr, "lat": None if self.lat is None else round(self.lat, 5),
@@ -403,7 +419,9 @@ class Aircraft:
              "seen_pos": round(now - self.seen_pos, 1) if self.seen_pos else None, "rssi": round(self.rssi, 1),
              "country": country_of(self.icao), "airline": AIRLINES.get(flt[:3], "") if len(flt) > 3 and flt[:3].isalpha() else "",
              "dist": None if self.dist is None else round(self.dist, 1),
-             "brg": None if self.brg is None else round(self.brg)}
+             "brg": None if self.brg is None else round(self.brg),
+             "first": round(now - self.first), "max_alt": self.max_alt, "max_gs": None if self.max_gs is None else round(self.max_gs),
+             "min_dist": None if self.min_dist is None else round(self.min_dist, 1), "mil": is_military(self.icao)}
         if with_trail:
             d["trail"] = [[round(a, 4), round(b, 4), c] for a, b, c in self.trail]
         return d
@@ -652,6 +670,8 @@ class Tracker:
                     self.info.peek(d["icao"])
                 d.update(self.info.public(d["icao"]))
                 d["route"] = self.info.cached_route(d["flight"])
+                d["route_names"] = self.info.route_names(d["route"])
+                d["rt"] = self.info.route_details(d["flight"])
         return out
 
     def export_csv(self, now):
