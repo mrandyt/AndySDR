@@ -16,7 +16,15 @@ WIN=0; case "$($CC -dumpmachine)" in *mingw*) WIN=1;; esac
 sed -i 's|fd = open(argv\[optind\], O_RDONLY);|fd = (argv[optind][0] == 45 \&\& !argv[optind][1]) ? 0 : open(argv[optind], O_RDONLY);|' tetra-rx.c
 grep -q 'argv\[optind\]\[0\] == 45' tetra-rx.c || { echo "tetra-rx.c changed upstream - stdin patch did not apply" >&2; exit 1; }
 
-CFLAGS="-O2 -fcommon -w -D_GNU_SOURCE -I. -I$HERE/ocfg -I$OC/include -I$OC/src/pseudotalloc"
+# headers that libosmocore's autotools build normally generates from templates
+G="$W/gen/osmocom/core"; mkdir -p "$G"; T="$OC/include/osmocom/core"
+for n in 16 32 64; do sed -e "s/XX/$n/g" "$T/bitXXgen.h.tpl" > "$G/bit${n}gen.h"; done
+for n in 8 16 32 64; do sed -e "s/XX/$n/g" "$T/crcXXgen.h.tpl" > "$G/crc${n}gen.h"; done
+sed -e 's/__LIBOSMOCORE_HAVE_SYS_SOCKET_H XX/__LIBOSMOCORE_HAVE_SYS_SOCKET_H 1/' \
+    -e 's/__LIBOSMOCORE_HAVE_NETINET_IN_H XX/__LIBOSMOCORE_HAVE_NETINET_IN_H 1/' "$T/socket_compat.h.tpl" > "$G/socket_compat.h"
+sed -e 's/{{VERSION}}/0.0.0/g' -e 's/{{VERSION_MAJOR}}/0/g' -e 's/{{VERSION_MINOR}}/0/g' -e 's/{{VERSION_PATCH}}/0/g' "$T/version.h.tpl" > "$G/version.h"
+
+CFLAGS="-O2 -fcommon -w -D_GNU_SOURCE -I. -I$HERE/ocfg -I$W/gen -I$OC/include -I$OC/src/pseudotalloc"
 [ $WIN = 1 ] && CFLAGS="-I$HERE/shim -include $HERE/shim/win_compat.h $CFLAGS"
 mkdir -p "$W/obj"
 OBJS=()
