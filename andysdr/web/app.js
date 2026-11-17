@@ -221,6 +221,7 @@ function renderState() {
   if (!knobs.gain.dragging) knobs.gain.set(S.gain, false);
   knobs.gain.render();
   $("agcChk").checked = !!S.agc;
+  $("gainAgc").classList.toggle("on", !!S.agc); $("gainAgc").style.fontWeight = S.agc ? "700" : "400"; $("gainAgc").textContent = S.agc ? "AGC ON" : "AGC OFF";
   renderQuick(); renderTop(); renderBw();
   document.querySelectorAll("[data-k=scan]").forEach((b) => b.classList.toggle("on", S.scan === "scan"));
   document.querySelectorAll("[data-k=srch]").forEach((b) => b.classList.toggle("on", S.scan === "search"));
@@ -1426,6 +1427,7 @@ $("tcpAdd").onclick = () => { if ($("tcpAddr").value.includes(":")) send({ cmd: 
 $("rateSel").onchange = () => send({ cmd: "device_setting", key: "sample_rate", value: +$("rateSel").value });
 $("antSel").onchange = () => send({ cmd: "device_setting", key: "antenna", value: $("antSel").value });
 $("ppmSet").onclick = () => send({ cmd: "device_setting", key: "ppm", value: +$("ppmInp").value });
+$("gainAgc").onclick = () => send({ cmd: "agc", on: !$("agcChk").checked });
 $("agcChk").onchange = () => send({ cmd: "agc", on: $("agcChk").checked });
 
 /* ----- settings / remote ----- */
@@ -2159,7 +2161,7 @@ const HELP = {
   help: ["HELP", "Opens this guide. Tick 'Explain mode' and then click any knob, key or panel to get a description of just that control. Press Esc to leave Explain mode."],
   volume: ["VOLUME knob", "Loudness on THIS computer only (each remote listener has their own). Drag up/down, use the mouse wheel, or click it and use the arrow keys. Double-click resets to 70%."],
   squelch: ["SQUELCH knob", "Mutes the hiss when nobody is transmitting. Turn it up until the noise just disappears – the little raised bar on the S-meter shows where it is set. OPEN (fully left) = always hear everything. Scanning and searching need squelch set above the noise so they know when a channel is quiet."],
-  gain: ["RF GAIN knob", "Receiver amplification. Too little = weak signals lost; too much = overload, false signals and a raised noise floor. Start in the middle, watch the waterfall, and turn down if you see lots of 'ghost' signals. For SDRplay receivers 0-100% controls the LNA state and IF gain together. Turning it switches AGC off; tick Hardware AGC in the Receiver tab to make it automatic."],
+  gain: ["RF GAIN knob", "Receiver amplification. The AGC button under the knob switches the receiver's automatic gain on or off – turn it off to set the gain yourself with the knob; for digital voice (DMR, P25, TETRA) manual gain set just below overload usually decodes best. Too little = weak signals lost; too much = overload, false signals and a raised noise floor. Start in the middle, watch the waterfall, and turn down if you see lots of 'ghost' signals. For SDRplay receivers 0-100% controls the LNA state and IF gain together. Turning it switches AGC off; tick Hardware AGC in the Receiver tab to make it automatic."],
   power: ["AUDIO ON/OFF", "Starts or stops sound on this computer. Browsers need one click before they may play audio, so press this once after opening AndySDR. The LED shows green when audio is playing."],
   lcd: ["Display", "Top row: status flags – SCAN, SRCH (search), HOLD (stopped on a signal), MAN (manual), PRI (priority on), DLY (resume delay), L/O (channel locked out), AGC, REC (recording), DEC (decoder running). Second row: banks 0-9, lit if the bank will be scanned, underlined = bank in use. CH = channel number (bank × 100 + channel). Then the frequency in MHz, mode, channel name and step size. S-meter shows signal strength in dBFS."],
   k_scan: ["SCAN", "Scans all memory channels in the lit banks, skipping locked-out channels. AndySDR uses the spectrum to skip silent channels instantly, so scanning is very fast. It stops on activity, waits the resume delay after the transmission ends, then carries on. ▲/▼ change scan direction or skip the current channel."],
