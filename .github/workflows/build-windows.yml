@@ -56,7 +56,7 @@ jobs:
       - name: New-feature self-tests (informational)
         continue-on-error: true
         run: |
-          for t in test_aircraftinfo test_satpass test_satsched test_ft8 test_dab test_bandwidth; do python tests/$t.py || echo "::warning::$t failed"; done
+          for t in test_aircraftinfo test_satpass test_satsched test_ft8 test_dab test_bandwidth test_dsdcond test_tetra; do python tests/$t.py || echo "::warning::$t failed"; done
 
       - name: Build AndySDR.exe
         run: |
@@ -155,6 +155,37 @@ jobs:
           echo "welle.io $(cd .. && git rev-parse HEAD) https://github.com/AlbrechtL/welle.io (GPL-2.0)" > "$D/ANDYSDR_SOURCE.txt"
           ls -l "$D"
 
+      - name: Set up MSYS2 for the TETRA decoder
+        continue-on-error: true
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            git
+            mingw-w64-x86_64-gcc
+      - name: Build tetra-rx (osmo-tetra TETRA decoder, AGPL-3.0)
+        continue-on-error: true            # if this fails the TETRA decoder says tetra-rx is missing; everything else still ships
+        shell: msys2 {0}
+        run: |
+          # the exact commits this was developed and tested against
+          OT=4e9f1b23b460a6b24270ece685ac68d4d7fd4cc8
+          OC=794590b5ff3059041073dceb3ca56279421db628
+          git init -q /tmp/osmo-tetra && cd /tmp/osmo-tetra && git fetch -q --depth 1 https://github.com/sq5bpf/osmo-tetra-sq5bpf.git $OT && git checkout -q FETCH_HEAD
+          git init -q /tmp/libosmocore && cd /tmp/libosmocore && git fetch -q --depth 1 https://github.com/osmocom/libosmocore.git $OC && git checkout -q FETCH_HEAD
+          cd "$GITHUB_WORKSPACE"
+          D="$GITHUB_WORKSPACE/dist/AndySDR/decoders/tetra-rx"
+          bash decoders_src/tetra/build.sh /tmp/osmo-tetra /tmp/libosmocore "$D" gcc
+          cp /tmp/osmo-tetra/COPYING "$D/LICENSE-osmo-tetra-AGPL-3.0.txt"
+          cp /tmp/libosmocore/COPYING "$D/LICENSE-libosmocore-GPL-2.0.txt"
+          printf 'osmo-tetra-sq5bpf %s https://github.com/sq5bpf/osmo-tetra-sq5bpf (AGPL-3.0)\nlibosmocore (conv/bits/utils/msgb/pseudotalloc only) %s https://github.com/osmocom/libosmocore (GPL-2.0+)\nBuild recipe and Windows shims: decoders_src/tetra in the AndySDR repository.\n' $OT $OC > "$D/ANDYSDR_SOURCE.txt"
+          ls -l "$D"
+      - name: TETRA end-to-end self-test (synthetic signal through the built tetra-rx.exe)
+        continue-on-error: true
+        shell: bash -el {0}
+        run: |
+          TETRA_RX="dist/AndySDR/decoders/tetra-rx/tetra-rx.exe" python tests/test_tetra.py
+
       - name: Visual C++ runtime for the installer
         continue-on-error: true
         shell: pwsh
@@ -211,8 +242,9 @@ jobs:
             * `AndySDR-Setup.exe` – installer (Start menu + desktop shortcut, firewall rule for remote use, Visual C++ runtime)
             * `AndySDR-windows.zip` – portable: unzip and run `AndySDR.exe`
 
-            Decoders bundled in the `decoders` folder: DSD-FME (DMR, P25, NXDN, dPMR, YSF, M17), multimon-ng (POCSAG, FLEX, APRS, DTMF, ZVEI, EAS), SatDump (Meteor-M LRPT). WEFAX and SSTV are built in.
-            1.10.1: MeshCore with just an SDR - a receive-only LoRa decoder in the MESHCORE tab lists repeaters, room servers, companions and sensors from their adverts (with positions) and reads public / #hashtag channel messages, plus a live packet log. No LoRa board needed (experimental; nothing is transmitted).
+            Decoders bundled in the `decoders` folder: DSD-FME (DMR, P25, NXDN, dPMR, YSF, M17), multimon-ng (POCSAG, FLEX, APRS, DTMF, ZVEI, EAS), SatDump (Meteor-M LRPT), tetra-rx (TETRA). WEFAX and SSTV are built in.
+            1.11.0: TETRA decoder - AndySDR now has its own TETRA demodulator feeding the osmo-tetra decoder: shows the network (MCC/MNC), cell information, call set-up and text messages on unencrypted networks (encrypted networks such as UK Airwave show signalling only). New AGC on/off button by the RF GAIN knob; DSD-FME signal centring and D-STAR / inverted DMR / inverted dPMR modes; satellite auto-record with a per-day pass list and Doppler tracking.
+            1.9.0: MeshCore with just an SDR - a receive-only LoRa decoder in the MESHCORE tab lists repeaters, room servers, companions and sensors from their adverts (with positions) and reads public / #hashtag channel messages, plus a live packet log. No LoRa board needed (experimental; nothing is transmitted).
             1.8.0: new FILES buttons under the display open the weather-images folder and the sound-recordings folder; satellite auto-capture now has Mon–Sun day boxes (no times needed - captures start only when the satellite is over you); ADS-B aircraft panel shows far more: origin/destination cities, distance to go and rough arrival time, plain-English category, flight phase, squawk meaning, military flag, owner country and session peaks.
             1.7.0: new WIDTH drop-down for the receive bandwidth, with the usual widths for each mode and an automatic ★ suggestion (from the running decoder, Auto ID and the band plan).
             1.6.1: update check no longer fails on PCs whose certificate store can't verify GitHub (falls back to a bundled CA list), and

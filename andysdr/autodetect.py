@@ -158,7 +158,7 @@ class SignalClassifier:
 
         # ---- TETRA: about 25 kHz wide, pi/4-DQPSK (envelope not constant)
         if wide and snr > 15 and env_full > 0.18 and duty > 0.75 and mode not in ("AM", "USB", "LSB", "CW"):
-            return R("TETRA", "TETRA (π/4-DQPSK, 25 kHz) – Airwave is encrypted", dmode="DIG25", conf=0.8)
+            return R("TETRA", "TETRA (π/4-DQPSK, 25 kHz) – Airwave is encrypted", "tetra", "", dmode="DIG25", conf=0.8)
 
         # ---- audio-tone signals (work in FM and SSB): SSTV, WEFAX, AFSK/APRS, DTMF
         tone = self._tones(audio, mode)

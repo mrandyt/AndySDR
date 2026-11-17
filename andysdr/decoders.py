@@ -35,6 +35,7 @@ from .ft8 import Ft8Decoder, match_freq
 from . import dab as dablib
 from .sstv import SstvDecoder
 from .wefax import WefaxDecoder
+from .tetrademod import TetraDemod
 
 log = logging.getLogger("andysdr.decoders")
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
@@ -70,8 +71,9 @@ DECODERS = {
                "help": "Tunes to 1090 MHz and tracks aircraft (callsign, position, altitude, speed). See the ADS-B tab."},
     "meshsdr": {"name": "MeshCore with just an SDR (built in, receive only)", "exe": None,
                "help": "Decodes MeshCore LoRa packets straight from the SDR: lists repeaters, room servers and other nodes from their adverts and reads public / #hashtag channel messages. No LoRa board needed. See the MESHCORE tab."},
-    "tetra":  {"name": "TETRA baseband out (UDP)", "exe": None,
-               "help": "Streams 48 kHz complex IQ to UDP 127.0.0.1:42000 for a TETRA decoder."},
+    "tetra":  {"name": "TETRA (built-in demodulator + osmo-tetra)", "exe": "tetra-rx",
+               "help": "Decodes the TETRA downlink (25 kHz, DIG25 mode, tune to the carrier centre): network codes (MCC/MNC), "
+                       "cell and call set-up and text messages. Encrypted traffic (UK Airwave) shows signalling only, no speech."},
 }
 
 
@@ -236,6 +238,8 @@ class DecoderManager:
         self.sstv = None
         self.tcp = None
         self.udp = None
+        self.tetra_demod = None
+        self.tetra_state = {}
         self.rec = None
         self.rec_path = None
         self.resample_state = None
@@ -422,10 +426,21 @@ class DecoderManager:
                 self.log("ADS-B decoder running on 1090 MHz – needs a receiver running at 2 MS/s or more. "
                          "Aircraft appear in the ADS-B tab.")
             elif dec_id == "tetra":
-                self.udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                port = int(self.settings.get("tetra_udp_port", 42000))
-                self.log(f"Streaming 48 kHz complex float32 IQ to UDP 127.0.0.1:{port}. "
-                         "Note: encrypted TETRA (e.g. Airwave) cannot be decoded.")
+                exe = find_exe("tetra-rx", ov)
+                if exe:
+                    self.tetra_demod = TetraDemod(48000.0)
+                    self.tetra_state = {"t0": time.time(), "synced": False, "last": {}, "recent": {}}
+                    self.proc = _popen([exe, "-i", "-a", "-"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                       stderr=subprocess.STDOUT)
+                    _Reader(self.proc.stdout, self._tetra_line, self._tetra_keep).start()
+                    self._start_feeder()
+                    self.log("TETRA decoder started – tune to the centre of a 25 kHz TETRA carrier (DIG25 mode). "
+                             "Encrypted networks (UK Airwave) show signalling only, not speech.")
+                else:
+                    self.udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    port = int(self.settings.get("tetra_udp_port", 42000))
+                    self.log("tetra-rx not found (Help > Decoders). Streaming 48 kHz complex float32 IQ to "
+                             f"UDP 127.0.0.1:{port} for an external TETRA decoder instead.")
             self.status = "on"
             return True
         except Exception as e:
@@ -441,6 +456,54 @@ class DecoderManager:
                 self.on_pager(line)
             except Exception as e:  # noqa: BLE001 - never let the message list stop the decoder
                 log.exception("pager: %s", e)
+
+    _TETRA_NOISE = ("BURST", "found SYNC", "####", "CRC COMP", "### AFC", "TMV-UNITDATA", "TMB-SAP", "SB1 ", "EOF")
+
+    def _tetra_keep(self, line):
+        st = self.tetra_state
+        if line.startswith("TMB-SAP SYNC"):
+            m = re.search(r"CC \d+\(0x([0-9a-fA-F]+)\).*?FN\s*\d+\(\s*(\d+)\).*?MCC \d+\((\d+)\) MNC \d+\((\d+)\)", line)
+            if m:
+                cc, fn, mcc, mnc = int(m.group(1), 16), int(m.group(2)), int(m.group(3)), int(m.group(4))
+                st["last_sync"] = time.time()
+                info = {"mcc": mcc, "mnc": mnc, "cc": cc}
+                if info != st.get("last"):
+                    st["last"] = info
+                    st["synced"] = True
+                    self.log(f"TETRA network found: MCC {mcc}  MNC {mnc}  colour code {cc}  (frame {fn})")
+                elif not st.get("synced"):
+                    st["synced"] = True
+            return False
+        if line.startswith(self._TETRA_NOISE):
+            return False
+        # identical lines repeat every frame: show each once per 5 s
+        now = time.time()
+        rec = st.setdefault("recent", {})
+        if now - rec.get(line, 0) < 5:
+            return False
+        rec[line] = now
+        if len(rec) > 400:
+            for k in [k for k, t in rec.items() if now - t > 5]:
+                rec.pop(k, None)
+        return True
+
+    def _tetra_line(self, line):
+        self.log(line)
+
+    def _tetra_watch(self):
+        st = self.tetra_state
+        now = time.time()
+        if st.get("synced") and now - st.get("last_sync", now) > 20 and not st.get("lost"):
+            st["lost"] = True
+            self.log("TETRA sync lost – signal gone or too weak.")
+        elif st.get("synced") and now - st.get("last_sync", 0) <= 20:
+            st["lost"] = False
+        if not st.get("synced") and now - st.get("hint", st.get("t0", now)) > 20:
+            st["hint"] = now
+            q = int(100 * self.tetra_demod.locked_metric)
+            self.log(f"TETRA: no sync yet (symbol quality {q}%, frequency error {self.tetra_demod.freq:+.0f} Hz). "
+                     "Check you are on the exact carrier centre in DIG25 mode, the gain, and that the network is "
+                     "a TETRA downlink.")
 
     def _dsd_filter(self, line):
         return not line.startswith(("Digital Speech Decoder", "Build", "mbelib", "Audio In",
@@ -501,6 +564,7 @@ class DecoderManager:
         if self.udp:
             self.udp.close()
             self.udp = None
+        self.tetra_demod = None
         if self.active == "adsb" and self.adsb:
             self.adsb.stop()
         if self.active == "meshsdr" and self.meshsdr:
@@ -593,6 +657,14 @@ class DecoderManager:
                 inter = np.empty(len(iq) * 2, np.float32)
                 inter[0::2], inter[1::2] = iq.real, iq.imag
                 self.rec.writeframes(np.clip(inter * 16000, -32767, 32767).astype("<i2").tobytes())
+            elif a == "tetra" and self.tetra_demod is not None and self.feed_q and out.get("iq48") is not None:
+                steps = self.tetra_demod.process(out["iq48"])
+                if len(steps):
+                    try:
+                        self.feed_q.put_nowait(steps.astype("<f4").tobytes())
+                    except queue.Full:
+                        pass
+                self._tetra_watch()
             elif a == "tetra" and self.udp and out.get("iq48") is not None:
                 port = int(self.settings.get("tetra_udp_port", 42000))
                 b = out["iq48"].astype(np.complex64).tobytes()
