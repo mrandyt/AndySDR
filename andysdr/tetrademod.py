@@ -38,6 +38,7 @@ class TetraDemod:
         self.zi = np.zeros(len(self.taps) - 1, np.complex128)
         self.nco_phase = 0.0
         self.freq = 0.0                       # Hz correction currently applied
+        self.invert = False                   # True = spectrum is mirrored (I/Q swapped): flip symbol polarity
         self.ybuf = np.zeros(0, np.complex128)
         self.base = 0                         # global index of ybuf[0]
         self.tn = None                        # global (fractional) index of the next symbol instant
@@ -108,6 +109,8 @@ class TetraDemod:
         self.locked_metric = float(np.clip(1.0 - np.mean(dev) / 0.5, 0, 1))
         self.n_total += count
         self._trim()
+        if self.invert:
+            steps = -steps
         return steps.astype(np.float32)
 
     def _trim(self):

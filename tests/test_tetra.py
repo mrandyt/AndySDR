@@ -56,5 +56,19 @@ else:
     texts = [v.get("text", "") for k, v in got if isinstance(v, dict)]
     check("network found: MCC 262 / MNC 42", any("MCC 262" in t and "MNC 42" in t for t in texts), texts[-5:])
     check("sync lines are not spammed", sum("TETRA network found" in t for t in texts) == 1)
+    # mirrored spectrum (I/Q swapped, as in many recordings): polarity must be corrected automatically
+    decoders.DecoderManager.TETRA_FLIP_S = 0.4
+    xl = np.tile(x, 3)
+    xc = np.conj(xl)
+    got2 = []
+    m2 = decoders.DecoderManager({"decoder_paths": {"tetra-rx": RX}}, lambda k, v: got2.append((k, v)))
+    m2.start("tetra", "")
+    for i in range(0, len(xc), 2400):
+        m2.feed({"iq48": xc[i:i + 2400], "audio_ungated": np.zeros(2400, np.float32), "disc": np.zeros(2400, np.float32)})
+        time.sleep(0.012)
+    time.sleep(1.5)
+    m2.stop()
+    t2 = [v.get("text", "") for k, v in got2 if isinstance(v, dict)]
+    check("mirrored spectrum: polarity auto-corrected, network found", any("MCC 262" in t for t in t2), t2[-4:])
 print("FAILED" if fails else "ALL OK", fails)
 sys.exit(1 if fails else 0)

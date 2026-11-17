@@ -476,6 +476,9 @@ class DecoderManager:
             return False
         if line.startswith(self._TETRA_NOISE):
             return False
+        if not self.settings.get("tetra_verbose"):
+            self._tetra_summary(line)
+            return False
         # identical lines repeat every frame: show each once per 5 s
         now = time.time()
         rec = st.setdefault("recent", {})
@@ -487,12 +490,59 @@ class DecoderManager:
                 rec.pop(k, None)
         return True
 
+    def _tetra_say(self, key, text, hold=60.0):
+        """log a summary line, at most once per `hold` seconds for the same key/text"""
+        rec = self.tetra_state.setdefault("said", {})
+        now = time.time()
+        if rec.get((key, text), 0) + hold > now:
+            return
+        rec[(key, text)] = now
+        self.log(text)
+
+    def _tetra_summary(self, line):
+        """boil tetra-rx's very chatty decode down to the things worth reading"""
+        m = re.match(r"BNCH SYSINFO \(DL (\d+) Hz, UL (\d+) Hz\).*LA:(\d+)", line)
+        if m:
+            dl, ul, la = int(m.group(1)) / 1e6, int(m.group(2)) / 1e6, m.group(3)
+            self._tetra_say("cell", f"TETRA cell: downlink {dl:.4f} MHz, uplink {ul:.4f} MHz, location area {la}", 120)
+            return
+        m = re.match(r"\s*Air encryption: (\d)", line)
+        if m:
+            on = m.group(1) == "1"
+            self._tetra_say("enc", "TETRA air-interface encryption: " + ("ON - voice and data are encrypted"
+                            if on else "OFF - calls and messages are in the clear"), 120)
+            return
+        m = re.search(r"Addr=SSI \+ Usage Marker\((\d+)/U(\d+)\) ChanAlloc=\w+ \(TN(\d)/([\w +]+)/(\d+)Hz\)", line)
+        if m:
+            self._tetra_say("alloc" + m.group(1), f"TETRA channel allocation: radio {m.group(1)} -> timeslot {m.group(3)} "
+                            f"on {int(m.group(5)) / 1e6:.4f} MHz ({m.group(4).strip().lower()}, usage marker {m.group(2)})", 10)
+            return
+        m = re.search(r"CallingSSI:(\d+)", line)
+        if m:
+            self._tetra_say("call" + m.group(1), f"TETRA call set-up from radio {m.group(1)}", 10)
+            return
+        m = re.search(r"NCI:\[cell_id:(\d+).*?carrier:\d+ (\d+)Hz LA:(\d+)", line)
+        if m:
+            self._tetra_say("nb" + m.group(1), f"TETRA neighbour cell {m.group(1)}: {int(m.group(2)) / 1e6:.4f} MHz, "
+                            f"location area {m.group(3)}", 300)
+            return
+        if re.search(r"\bSDS\b|SDS-TL|TEXT|Short data", line):
+            self._tetra_say("sds", "TETRA message: " + line.strip()[:200], 5)
+
     def _tetra_line(self, line):
         self.log(line)
+
+    TETRA_FLIP_S = 6.0      # no sync for this long -> try the opposite symbol polarity
 
     def _tetra_watch(self):
         st = self.tetra_state
         now = time.time()
+        if st.get("synced") and self.tetra_demod.invert and not st.get("inv_logged"):
+            st["inv_logged"] = True
+            self.log("TETRA: spectrum is mirrored (I/Q swapped) - polarity corrected automatically.")
+        if not st.get("synced") and now - st.get("flip_t", st.get("t0", now)) > self.TETRA_FLIP_S:
+            st["flip_t"] = now
+            self.tetra_demod.invert = not self.tetra_demod.invert
         if st.get("synced") and now - st.get("last_sync", now) > 20 and not st.get("lost"):
             st["lost"] = True
             self.log("TETRA sync lost – signal gone or too weak.")
