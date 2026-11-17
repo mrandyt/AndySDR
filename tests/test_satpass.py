@@ -104,3 +104,11 @@ check("observer falls back to ADS-B position", sp.SatPlanner({"adsb_lat": 52.0, 
 check("no position -> no passes", sp.SatPlanner({}, fetch=fake, path=os.path.join(d, "y.json")).upcoming(now) == [])
 print("FAILED" if fails else "ALL OK", fails)
 sys.exit(1 if fails else 0)
+
+# --- weekday filter: only the ticked days are captured
+import time as _t
+_mon = _t.mktime((2030, 1, 7, 12, 0, 0, 0, 0, -1))   # a Monday
+pl.set_cfg("meteor_m24", days=[2])                      # Wednesdays only
+assert not pl.in_window("meteor_m24", _mon) and pl.in_window("meteor_m24", _mon + 2 * 86400)
+pl.set_cfg("meteor_m24", days=[])
+assert pl.in_window("meteor_m24", _mon)
