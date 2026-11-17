@@ -75,6 +75,8 @@ DEFAULTS = {
     "mesh_conn": {},              # MeshCore companion board: {"kind": serial|tcp|ble, "target": ..., "auto": True}        # e.g. ["192.168.1.20:1234"]
     "tetra_udp_port": 42000,
     "dsd_extra_args": "",
+    "dsd_dc_remove": True,           # centre the discriminator audio before DSD-FME (cures tuning-error decode failures)
+    "dsd_gain": 6000,                # discriminator -> 16-bit scale for DSD-FME
     "pager_aliases": {},          # capcode -> name shown in the Pager Messages tab
     "pager_highlight": [],        # capcodes to highlight (and pop up a notice for)
     "pager_log": True,            # write pager messages to %APPDATA%\\AndySDR\\pager\\pager_YYYY-MM-DD.csv

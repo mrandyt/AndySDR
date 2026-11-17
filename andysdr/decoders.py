@@ -14,6 +14,7 @@ so `dsd-fme -i tcp:127.0.0.1:7355` works unchanged.
 """
 import glob
 import logging
+import math
 import os
 import queue
 import re
@@ -42,11 +43,13 @@ DSD_MODES = {
     "auto": ["-ft"], "dmr": ["-fs"], "p25p1": ["-f1"], "p25p2": ["-f2"],
     "nxdn48": ["-fi"], "nxdn96": ["-fn"], "dpmr": ["-fm"], "ysf": ["-fy"], "m17": ["-fz"],
     "provoice": ["-fp"], "x2tdma": ["-fx"],
+    "dstar": ["-fd"],                                   # D-STAR voice
+    "dmr_inv": ["-fs", "-xr"], "dpmr_inv": ["-fm", "-xd"],   # inverted-polarity DMR / dPMR (some radios and RTL dongles)
 }
 
 DECODERS = {
     "dsd":    {"name": "Digital voice (DSD-FME)", "exe": "dsd-fme",
-               "help": "DMR, P25, NXDN, dPMR, YSF, M17. Pick the sub-mode or Auto."},
+               "help": "DMR, P25, NXDN, dPMR, YSF, M17, D-STAR. Pick the sub-mode or Auto. Use the Inverted entries if a DMR/dPMR signal shows sync but garbage."},
     "pager":  {"name": "Pagers POCSAG/FLEX (multimon-ng)", "exe": "multimon-ng",
                "help": "Shows pager address and message text."},
     "data":   {"name": "APRS / DTMF / ZVEI / EAS (multimon-ng)", "exe": "multimon-ng",
@@ -153,6 +156,30 @@ class _Reader(threading.Thread):
             line = ANSI.sub("", raw.decode("utf-8", "replace")).strip()
             if line and (self.filt is None or self.filt(line)):
                 self.cb(line)
+
+
+class DiscConditioner:
+    """Cleans the FM-discriminator audio before DSD-FME sees it.
+
+    A 4FSK signal (DMR, P25, NXDN, dPMR, M17, YSF) has symbols spread evenly either side of zero, so
+    any steady offset in the discriminator output is purely tuning error (a few ppm of an RTL
+    dongle's crystal at 450 MHz is already ~1 kHz, about half the DMR outer-symbol deviation).
+    A slow, signal-gated average of that offset is subtracted so the decoder gets a centred eye.
+    No filtering is applied (DSD-FME wants unfiltered discriminator audio)."""
+
+    def __init__(self, fs=48000, tau=1.0):
+        self.alpha = 1.0 - math.exp(-1.0 / (fs * tau))
+        self.dc = 0.0
+
+    def process(self, d, signal_present=True):
+        if len(d) == 0:
+            return d
+        if signal_present:
+            m = float(np.mean(d))
+            # block mean folded into the running estimate (block = 50 ms ~ 2400 samples)
+            k = 1.0 - (1.0 - self.alpha) ** len(d)
+            self.dc += k * (m - self.dc)
+        return d - np.float32(self.dc)
 
 
 class TcpAudioServer(threading.Thread):
@@ -307,6 +334,7 @@ class DecoderManager:
                 _ensure_pulse(exe, self.log)
                 self.tcp = TcpAudioServer(7355)
                 self.tcp.start()
+                self.dsd_cond = DiscConditioner()
                 args = [exe, "-i", "tcp:127.0.0.1:7355"] + DSD_MODES.get(sub, ["-ft"])
                 extra = self.settings.get("dsd_extra_args", "")
                 if extra:
@@ -547,7 +575,10 @@ class DecoderManager:
                 self.ft8.process(out["audio_ungated"])
             elif a == "dsd" and self.tcp:
                 d = out["disc"]
-                pcm = np.clip(d * 6000, -32767, 32767).astype("<i2").tobytes()
+                if self.settings.get("dsd_dc_remove", True) and getattr(self, "dsd_cond", None):
+                    d = self.dsd_cond.process(d, bool(out.get("squelch_open", True)))
+                gain = float(self.settings.get("dsd_gain", 6000) or 6000)
+                pcm = np.clip(d * gain, -32767, 32767).astype("<i2").tobytes()
                 self.tcp.send(pcm)
             elif a in ("pager", "data") and self.feed_q:
                 d = out["disc"]
