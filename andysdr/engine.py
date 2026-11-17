@@ -379,6 +379,22 @@ class Radio:
             self._push_state(True)
         self.call(do)
 
+    def retune_job(self, f):
+        """Nudge the frequency during a satellite pass (Doppler) without restarting anything."""
+        def do():
+            if not self.job:
+                return
+            f2 = int(f)
+            if f2 == self.freq:
+                return
+            self.freq = f2
+            fs = self.dev.sample_rate if self.dev else 2400000
+            if self.dev and abs(f2 - self.dev.center) > fs * 0.42:
+                self.dev.set_center(self._hw_center_for(f2, fs))
+                self.discard = 2
+            self._push_state()
+        self.call(do)
+
     def end_job(self):
         def do():
             job, prev = self.job, self.job_prev or {}

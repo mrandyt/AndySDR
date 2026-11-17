@@ -51,6 +51,7 @@ class FakeRadio:
     def __init__(self): self.started, self.ended, self.events = [], 0, []
     def begin_job(self, job): self.started.append(job)
     def end_job(self): self.ended += 1
+    def retune_job(self, f): self.retunes = getattr(self, "retunes", []) + [f]
     def _emit(self, k, v): self.events.append(k)
 class S(dict):
     def save(self): pass
@@ -74,10 +75,11 @@ check("planner finds real upcoming passes (SGP4 propagates from old epoch)", len
 p0 = ps[0]
 when = dt.datetime.fromtimestamp(p0["aos"] + 10)
 sch.tick(when)
-check("pass start launches an LRPT job", len(r.started) == 1 and r.started[0]["action"] == "lrpt" and r.started[0]["freq"] == 137900000, r.started)
+check("pass start launches an LRPT job", len(r.started) == 1 and r.started[0]["action"] == "lrpt" and abs(r.started[0]["freq"] - 137900000) < 4000, r.started)
 check("scheduler shows it running", sch.running and sch.running["action"] == "lrpt")
 sch.tick(when + dt.timedelta(seconds=30))
 check("no second start mid-pass", len(r.started) == 1)
+check("Doppler retune during the pass", len(getattr(r, "retunes", [])) >= 1 and abs(r.retunes[-1] - 137900000) < 4000, getattr(r, "retunes", None))
 sch.tick(dt.datetime.fromtimestamp(p0["los"] + 60))
 check("job stops after the pass", sch.running is None and r.ended == 1)
 sch.tick(dt.datetime.fromtimestamp(p0["los"] + 70))
