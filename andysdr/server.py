@@ -17,6 +17,7 @@ import struct
 import time
 import urllib.parse
 
+from .dsp import BANDWIDTHS
 from .config import VERSION, data_dir, resource_dir
 from .updater import Updater
 
@@ -319,6 +320,7 @@ class Server:
             "pager": r.pager.snapshot(),
             "adsb": r.adsb.snapshot(),
             "ft8": r.decoders.ft8_history[-300:],
+            "bandwidths": {k: [[hz, lab] for hz, lab in v] for k, v in BANDWIDTHS.items()},
             "update": self.updater.status(),
             "settings": {k: self.s[k] for k in ("scan_delay", "scan_dwell", "search_threshold_db",
                                                  "server_port", "require_password_local",
@@ -352,6 +354,8 @@ class Server:
                 r.step(int(m.get("dir", 1)))
             elif cmd == "mode":
                 r.set_mode(m["mode"])
+            elif cmd == "bandwidth":
+                r.set_bandwidth(int(m.get("bw") or 0), bool(m.get("auto")))
             elif cmd == "gain":
                 r.set_gain(float(m["value"]))
             elif cmd == "agc":

@@ -6,7 +6,7 @@ import sys
 import threading
 
 APP_NAME = "AndySDR"
-VERSION = "1.6.1"
+VERSION = "1.7.0"
 GITHUB_REPO = "mrandyt/AndySDR"   # where updates are published (GitHub Releases)
 
 
@@ -45,6 +45,8 @@ DEFAULTS = {
     "step": 12500,
     "rf_gain": 30.0,              # dB
     "agc": False,
+    "bw_auto": True,              # channel bandwidth follows the suggestion (decoder / Auto ID / band plan)
+    "bw_modes": {},               # bandwidth (Hz) chosen by hand, per mode
     "squelch": -60.0,             # dBFS, -120 = open
     "volume": 0.7,
     "ppm": 0,

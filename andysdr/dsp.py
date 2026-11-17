@@ -21,6 +21,30 @@ MODES = {
     "DIG25": (12500, "Wide digital (25 kHz) – TETRA, wide P25"),
 }
 
+# Selectable channel-filter widths (total Hz) per mode: (Hz, label).  The first entry marked default=True
+# is what the mode uses when nothing is chosen (twice the half-bandwidth in MODES above).
+BANDWIDTHS = {
+    "NFM":   [(6000, "6 kHz – 6.25 kHz channels"), (8000, "8 kHz"), (10000, "10 kHz"), (12000, "12 kHz – standard narrow (default)"),
+              (15000, "15 kHz"), (20000, "20 kHz")],
+    "FM":    [(12500, "12.5 kHz"), (15000, "15 kHz"), (17000, "17 kHz – 25 kHz channels (default)"), (20000, "20 kHz"),
+              (25000, "25 kHz"), (30000, "30 kHz")],
+    "AM":    [(4000, "4 kHz – narrow"), (6000, "6 kHz"), (8000, "8 kHz – 8.33 kHz airband"), (9000, "9 kHz – broadcast (default)"),
+              (12000, "12 kHz"), (15000, "15 kHz – 25 kHz airband"), (20000, "20 kHz")],
+    "USB":   [(1800, "1.8 kHz – narrow"), (2400, "2.4 kHz – communications"), (2700, "2.7 kHz – standard SSB"),
+              (3000, "3 kHz (default)"), (3600, "3.6 kHz – wide"), (4500, "4.5 kHz")],
+    "LSB":   [(1800, "1.8 kHz – narrow"), (2400, "2.4 kHz – communications"), (2700, "2.7 kHz – standard SSB"),
+              (3000, "3 kHz (default)"), (3600, "3.6 kHz – wide"), (4500, "4.5 kHz")],
+    "CW":    [(100, "100 Hz – very narrow"), (200, "200 Hz"), (300, "300 Hz"), (500, "500 Hz (default)"), (800, "800 Hz"), (1200, "1.2 kHz")],
+    "DIG":   [(8000, "8 kHz"), (9000, "9 kHz – M17"), (10000, "10 kHz"), (12500, "12.5 kHz (default)"), (15000, "15 kHz")],
+    "DIG25": [(20000, "20 kHz"), (25000, "25 kHz (default)"), (30000, "30 kHz"), (36000, "36 kHz")],
+    "WFM":   [(200000, "200 kHz – broadcast FM (fixed)")],
+}
+MAX_CHAN_BW = 44000          # the channel filter works at the 48 kHz audio rate
+
+
+def default_bandwidth(mode):
+    return int(MODES.get(mode, MODES["NFM"])[0] * 2)
+
 
 def pick_sample_rate(available):
     for r in PREFERRED_RATES:
@@ -121,6 +145,8 @@ class Receiver:
         self.stage1 = FirDecimator(self.D1, 100000, self.fs)
         self.stage2 = FirDecimator(IF_RATE // AUDIO_RATE, 20000, IF_RATE, ntaps=61)
         self.mode = None
+        self.bw = 0                      # chosen channel width in Hz (0 = the mode's default)
+        self.bw_lookup = lambda mode: 0  # engine hook: remembered width for a mode when it is selected
         self.set_mode("NFM")
         self.deemph_us = 50
         self.last_iq = np.complex64(1)
@@ -141,20 +167,48 @@ class Receiver:
         if mode == self.mode:
             return
         self.mode = mode
-        half = MODES[mode][0]
-        if mode in ("USB", "LSB"):
-            # complex band-pass 150..3150 Hz (or mirrored for LSB)
-            lp = signal.firwin(129, 1500, fs=AUDIO_RATE)
-            shift = 1650 if mode == "USB" else -1650
-            n = np.arange(len(lp))
-            taps = lp * np.exp(2j * np.pi * shift * n / AUDIO_RATE)
-            self.chan = StatefulFIR(taps)
-        elif mode == "WFM":
+        try:
+            self.bw = int(self.bw_lookup(mode) or 0)
+        except Exception:
+            self.bw = 0
+        if mode == "WFM":
             self.chan = None
             self.wfm_dec = FirDecimator(IF_RATE // AUDIO_RATE, 15000, IF_RATE, ntaps=61, complex_=False)
             self._make_deemph()
         else:
-            self.chan = StatefulFIR(signal.firwin(129 if half > 1000 else 255, half, fs=AUDIO_RATE))
+            self._build_channel()
+
+    def bandwidth(self):
+        """Effective channel-filter width in Hz."""
+        return int(self.bw) if self.bw else default_bandwidth(self.mode)
+
+    def set_bandwidth(self, hz):
+        """Choose the channel-filter width (total Hz) for the current mode; 0 = the mode's default."""
+        hz = int(hz or 0)
+        if self.mode == "WFM":
+            return
+        if hz:
+            hz = max(50, min(MAX_CHAN_BW, hz))
+        if hz == self.bw:
+            return
+        self.bw = hz
+        self._build_channel()
+
+    def _build_channel(self):
+        mode = self.mode
+        width = self.bandwidth()
+        half = width / 2.0
+        if mode in ("USB", "LSB"):
+            # complex band-pass from 150 Hz up to 150 Hz + width (mirrored for LSB)
+            n_taps = 129 if width >= 2000 else 257
+            lp = signal.firwin(n_taps, half, fs=AUDIO_RATE)
+            shift = (150 + half) * (1 if mode == "USB" else -1)
+            n = np.arange(len(lp))
+            taps = lp * np.exp(2j * np.pi * shift * n / AUDIO_RATE)
+            self.chan = StatefulFIR(taps)
+        else:
+            n_taps = 129 if half > 1000 else (255 if half >= 200 else 1023)
+            self.chan = StatefulFIR(signal.firwin(n_taps, half, fs=AUDIO_RATE))
 
     def _make_deemph(self):
         tau = getattr(self, "deemph_us", 50) * 1e-6

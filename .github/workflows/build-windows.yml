@@ -56,7 +56,7 @@ jobs:
       - name: New-feature self-tests (informational)
         continue-on-error: true
         run: |
-          for t in test_aircraftinfo test_satpass test_satsched test_ft8 test_dab; do python tests/$t.py || echo "::warning::$t failed"; done
+          for t in test_aircraftinfo test_satpass test_satsched test_ft8 test_dab test_bandwidth; do python tests/$t.py || echo "::warning::$t failed"; done
 
       - name: Build AndySDR.exe
         run: |
@@ -212,6 +212,7 @@ jobs:
             * `AndySDR-windows.zip` – portable: unzip and run `AndySDR.exe`
 
             Decoders bundled in the `decoders` folder: DSD-FME (DMR, P25, NXDN, dPMR, YSF, M17), multimon-ng (POCSAG, FLEX, APRS, DTMF, ZVEI, EAS), SatDump (Meteor-M LRPT). WEFAX and SSTV are built in.
+            1.7.0: new WIDTH drop-down for the receive bandwidth, with the usual widths for each mode and an automatic ★ suggestion (from the running decoder, Auto ID and the band plan).
             1.6.1: update check no longer fails on PCs whose certificate store can't verify GitHub (falls back to a bundled CA list), and
             the error message now says why it failed (certificate, DNS, timeout, firewall).
             1.6.0: SDR++ style theme; satellite auto-capture (ISS SSTV, Meteor-M N2-3/N2-4 LRPT, GOES HRIT) from live pass predictions; aircraft registry/type/owner/photo lookup and a bright map in the ADS-B tab; FT8/FT4 decoder that starts itself on band-plan channels; experimental DAB radio tab. NOAA APT removed from the docs (retired).

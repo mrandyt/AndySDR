@@ -170,6 +170,7 @@ class Radio:
             self.dev.ref_fn = self.adsb.tracker.ref
         self.rx = Receiver(self.dev.sample_rate)
         self.rx.deemph_us = self.s["deemphasis_us"]
+        self.rx.bw_lookup = self._remembered_bw
         self.rx.set_mode(self.mode)
         self.rx.squelch_db = float(self.s["squelch"])
         self.dev.set_center(self._hw_center_for(self.freq, self.dev.sample_rate))
@@ -428,6 +429,30 @@ class Radio:
                 self.mode = mode
                 self.rx.set_mode(mode)
                 self._push_state(True)
+        self.call(do)
+
+    def _remembered_bw(self, mode):
+        """Width a mode starts with: the one chosen by hand for it (not in Auto - then the screens suggest one)."""
+        if self.s.get("bw_auto", True):
+            return 0
+        return int((self.s.get("bw_modes") or {}).get(mode, 0) or 0)
+
+    def set_bandwidth(self, hz, auto=False):
+        """hz = channel filter width in Hz (0 = mode default).  auto=True: the screens are following the
+        suggested width (not remembered); auto=False: chosen by hand, remembered per mode."""
+        def do():
+            h = int(hz or 0)
+            self.s["bw_auto"] = bool(auto)
+            if not auto:
+                m = dict(self.s.get("bw_modes") or {})
+                if h:
+                    m[self.mode] = h
+                else:
+                    m.pop(self.mode, None)
+                self.s["bw_modes"] = m
+            if self.rx:
+                self.rx.set_bandwidth(h)
+            self._push_state(True)
         self.call(do)
 
     def set_gain(self, g):
@@ -866,6 +891,7 @@ class Radio:
             "priority": self.priority,
             "lockouts": self.lockout_info(),
             "auto_identify": bool(self.s.get("auto_identify", True)),
+            "bw": self.rx.bandwidth() if self.rx else 0, "bw_auto": bool(self.s.get("bw_auto", True)),
             "auto_owned": self.auto_owned,
             "signal": self.signal,
             "job": {"name": self.job["name"], "action": self.job.get("action")} if self.job else None,

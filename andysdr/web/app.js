@@ -23,6 +23,7 @@ const UK_PRESETS = [
 
 let ws = null, token = sessionStorage.getItem("andysdr_token") || "", isLocal = true;
 let S = {};           // radio state
+let BWS = {};         // selectable bandwidths per mode (from the server)
 let MEM = null;       // memory banks
 let DEV = {};         // device info
 let curBank = 0;
@@ -104,7 +105,7 @@ function onHello(h) {
   if (h.token) { token = h.token; sessionStorage.setItem("andysdr_token", token); }
   isLocal = h.local;
   document.querySelectorAll(".local-only").forEach((e) => (e.style.display = isLocal ? "" : "none"));
-  S = h.state; MEM = h.memory; DEV = h.device; decoders = h.decoders;
+  S = h.state; MEM = h.memory; DEV = h.device; decoders = h.decoders; BWS = h.bandwidths || BWS;
   renderDevices(h.devices); renderDevice(); renderMemory(); renderActivity(h.activity);
   renderDecoders(); renderImages(h.images); renderState();
   if (h.schedule) { SCH = h.schedule; renderSchedule(); }
@@ -218,7 +219,7 @@ function renderState() {
   if (!knobs.gain.dragging) knobs.gain.set(S.gain, false);
   knobs.gain.render();
   $("agcChk").checked = !!S.agc;
-  renderQuick(); renderTop();
+  renderQuick(); renderTop(); renderBw();
   document.querySelectorAll("[data-k=scan]").forEach((b) => b.classList.toggle("on", S.scan === "scan"));
   document.querySelectorAll("[data-k=srch]").forEach((b) => b.classList.toggle("on", S.scan === "search"));
   document.querySelectorAll("[data-k=rec]").forEach((b) => b.classList.toggle("on", S.recording));
@@ -450,7 +451,7 @@ function onSpectrum(center, fs, freq, data) {
     sctx.fillText(fmtMHz(f, nice < 1e5 ? 3 : 2), x + 3, H - 4);
   }
   // tuned channel
-  const bw = MODE_BW[S.mode] || 6000;
+  const bw = S.bw ? S.bw / 2 : (MODE_BW[S.mode] || 6000);
   const xf = (freq - f0) / span * W, xb = bw / span * W;
   sctx.fillStyle = "rgba(255,60,60,0.16)"; sctx.fillRect(xf - xb, 0, xb * 2, H);
   // trace
@@ -1513,11 +1514,92 @@ function renderQuick() {
     else if (t === "mon") b.classList.toggle("on", S.squelch <= -119);
   });
 }
+/* ======================================================= bandwidth selector */
+const fmtBw = (hz) => hz >= 1000 ? (hz / 1000).toFixed(hz % 1000 ? 1 : 0).replace(/\.0$/, "") + " kHz" : hz + " Hz";
+// What each decoder / identified signal needs: [mode-independent width in Hz, why]
+const BW_DECODER = { dsd: [12500, "digital voice channel"], tetra: [25000, "TETRA 25 kHz carrier"], pager: [12500, "pager channel"], data: [12500, "data channel"],
+  sstv: null, wefax: [2400, "weather-fax audio"], lrpt: [25000, "Meteor LRPT"], ft8: [2700, "FT8/FT4 audio"] };
+const BW_SIGNAL = [[/M17/, 9000], [/TETRA/, 25000], [/DMR|P25|NXDN|dPMR|Digital|Pager|APRS|DTMF/, 12500]];
+function nearestBw(mode, want, atLeast) {
+  const list = (BWS[mode] || []).map((x) => x[0]);
+  if (!list.length) return 0;
+  if (atLeast) { const ok = list.filter((h) => h >= want); if (ok.length) return ok[0]; }
+  return list.reduce((a, b) => Math.abs(b - want) < Math.abs(a - want) ? b : a);
+}
+function suggestBw() {
+  const mode = S.mode, list = BWS[mode] || [];
+  if (!list.length) return null;
+  const def = (list.find((x) => /default/.test(x[1])) || list[0])[0];
+  if (mode === "WFM") return { hz: list[0][0], why: "broadcast FM is always 200 kHz" };
+  // 1. a decoder that is running knows what it needs
+  const d = S.decoder === "dsd" && /m17/i.test(S.decoder_sub || "") ? [9000, "M17 voice"] : BW_DECODER[S.decoder];
+  if (S.decoder && d) {
+    if (["USB", "LSB"].includes(mode) || mode === "CW") return { hz: nearestBw(mode, d[0]), why: "for " + d[1] };
+    return { hz: nearestBw(mode, d[0]), why: "for the " + d[1] };
+  }
+  // analogue FM voice never needs less than the mode's normal width (the band plan's 6.25 kHz is only a grid)
+  const fm = (hz) => ["NFM", "FM"].includes(mode) ? Math.max(hz, def) : hz;
+  // 2. what Auto ID measured / recognised
+  const sg = S.signal;
+  if (sg && sg.stable !== false) {
+    const hit = BW_SIGNAL.find(([re]) => re.test(sg.kind || sg.label || ""));
+    if (hit && !["USB", "LSB", "CW"].includes(mode)) return { hz: nearestBw(mode, hit[1]), why: "identified: " + (sg.label || sg.kind) };
+    if (sg.bw && sg.bw > 1 && !["USB", "LSB", "CW"].includes(mode)) {
+      const hz = fm(nearestBw(mode, sg.bw * 1000 * 1.15, true));
+      return { hz, why: hz === def ? "normal width for " + mode + " (signal measures " + sg.bw + " kHz)" : `measured ${sg.bw} kHz signal` };
+    }
+  }
+  // 3. the band plan: channel spacing of the band you are tuned to
+  const b = S.freq ? bandsAt(S.freq).filter((x) => !x.point)[0] : null;
+  const step = b && b.step;
+  if (b && step >= 6250 && step <= 25000 && !["USB", "LSB", "CW"].includes(mode)) {
+    const ideal = step <= 12500 ? step : step * (mode === "AM" ? 0.6 : 0.68);
+    const hz = fm(nearestBw(mode, ideal));
+    return { hz, why: `${b.name}: ${fmtBw(step)} channel spacing` };
+  }
+  if (["USB", "LSB"].includes(mode)) return { hz: 2700, why: "standard SSB voice" };
+  return { hz: def, why: "normal width for " + mode };
+}
+let bwLastAuto = { hz: 0, t: 0 };
+function renderBw() {
+  const sel = $("bwSel"); if (!sel) return;
+  const mode = S.mode, list = BWS[mode] || [];
+  const sug = suggestBw();
+  const cur = S.bw || 0;
+  const auto = S.bw_auto !== false;
+  const key = mode + "|" + (sug ? sug.hz : 0) + "|" + cur + "|" + auto;
+  if (sel.dataset.k !== key) {
+    sel.dataset.k = key;
+    let html = `<option value="auto" ${auto ? "selected" : ""}>Auto – ${sug ? fmtBw(sug.hz) : "default"} (suggested)</option>`;
+    html += list.map(([hz, lab]) => `<option value="${hz}" ${!auto && hz === cur ? "selected" : ""}>${sug && hz === sug.hz ? "★ " : ""}${lab}</option>`).join("");
+    sel.innerHTML = html;
+    sel.disabled = mode === "WFM";
+    const btn = $("bwSug");
+    btn.disabled = !sug || mode === "WFM";
+    btn.classList.toggle("suggest", !!sug && (auto ? false : cur !== sug.hz));
+    btn.title = sug ? `Use the suggested ${fmtBw(sug.hz)} (${sug.why})` : "";
+    $("bwWhy").textContent = sug ? `★ ${fmtBw(sug.hz)} – ${sug.why}` : "";
+  }
+  // Auto: keep the radio on the suggestion (the first screen to notice sends it; the rest see the new state)
+  if (auto && sug && sug.hz !== cur && !(bwLastAuto.hz === sug.hz && Date.now() - bwLastAuto.t < 1500)) {
+    bwLastAuto = { hz: sug.hz, t: Date.now() };
+    send({ cmd: "bandwidth", bw: sug.hz, auto: true });
+  }
+}
+function bwInit() {
+  $("bwSel").addEventListener("change", (e) => {
+    const v = e.target.value;
+    if (v === "auto") { const sug = suggestBw(); send({ cmd: "bandwidth", bw: sug ? sug.hz : 0, auto: true }); }
+    else send({ cmd: "bandwidth", bw: parseInt(v, 10), auto: false });
+  });
+  $("bwSug").addEventListener("click", () => { const sug = suggestBw(); if (sug) send({ cmd: "bandwidth", bw: sug.hz, auto: false }); });
+}
+
 function renderTop() {
   const set = (id, v) => { const e = $(id); if (e.textContent !== v) e.textContent = v; };
   set("tRx", S.device ? S.device.replace(/^SDRplay\s*/i, "").slice(0, 26) : "–");
   set("tSpan", S.fs ? (S.fs / 1e6).toFixed(2) + " MS/s" : "–");
-  const bw = MODE_BW[S.mode]; set("tBw", bw ? (bw >= 1000 ? (bw / 1000).toString().replace(/\.0$/, "") + " kHz" : bw + " Hz") + " " + S.mode : "–");
+  set("tBw", S.bw ? fmtBw(S.bw) + " " + S.mode : "–");
   const st = { scan: "SCANNING", search: "SEARCHING", hold: "HOLD", manual: "MANUAL" }[S.scan] || String(S.scan || "").toUpperCase();
   set("tState", S.job ? "JOB: " + (S.job.name || "").slice(0, 14).toUpperCase() : st);
   const dec = S.decoder ? ((decoders.find((x) => x.id === S.decoder) || {}).name || S.decoder).replace(/\s*\(.*$/, "").slice(0, 18) : "OFF";
@@ -1536,7 +1618,7 @@ function renderClock() {
   $("tLocal").textContent = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
   $("tUtc").textContent = `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
 }
-buildQuick(); renderClock(); setInterval(renderClock, 1000);
+buildQuick(); bwInit(); renderClock(); setInterval(renderClock, 1000);
 
 /* ======================================================= updates */
 let UPD = { state: "idle", progress: 0 };
@@ -2012,6 +2094,7 @@ const HELP = {
   adsbmap: ["ADS-B map", "Drag to move, mouse wheel or +/− to zoom, double-click to zoom in on a spot, ⌖ Fit to show everything. Click an aircraft for its details; click it again (or ✕) to let go. Rings are 'distance from you' (set My position first)."],
   topstatus: ["Status strip", "A live read-out across the top of the radio: LOCAL and UTC clocks (UTC is what weather-fax and satellite schedules use), the receiver in use (RX), the width of spectrum it is receiving (SPAN), the audio filter width for the current mode (FILTER), what the scanner is doing (STATE – turns amber while scanning, searching or holding), the running decoder, and how many screens are connected (LINKS)."],
   leds: ["Indicator lights", "RX (green) – a signal is open on the squelch and you are hearing it. SCAN (amber) – scanning or searching; it flashes while sweeping and stays lit when stopped on a signal. DEC (blue) – a decoder is running. REC (red) – recording to a WAV file. LINK (green) – this screen is connected to the radio."],
+  qbw: ["Bandwidth (WIDTH)", "How wide the receive filter is for the current mode. Narrower cuts out neighbouring signals and noise; wider lets the whole signal through. The list shows the usual widths for the mode. AUTO follows the ★ suggestion, which AndySDR works out from the decoder that is running, what Auto ID has measured or recognised, and the channel spacing of the band you are tuned to (the reason is shown underneath). Pick a width yourself and it is remembered for that mode; pick Auto again, or press ★, to go back to the suggestion. Broadcast FM (WFM) is always 200 kHz. The red band on the spectrum and the FILTER read-out at the top show the width in use."],
   qmode: ["Mode buttons", "One click to choose how the signal is demodulated – no need to press MODE repeatedly. NFM/FM for most two-way radio, AM for airband, WFM for FM broadcast, USB/LSB for HF voice and weather fax, CW for Morse, DIG and DIG25 for digital signals (DIG25 is the wider one for TETRA and satellites). The current mode is lit."],
   qband: ["Band buttons", "Jump straight to a popular UK band with the right mode and tuning step already set: AIR (121.500 MHz), MARINE (channel 16), PMR446, 2M, 70CM, CB, FM BC, PAGER and weather SATS. Then step with ▲ ▼, press SCAN, or use SRCH to find what is active. The button for the band you are in stays lit."],
   qdec: ["Decoder buttons", "Start a decoder with one click: DMR, P25, NXDN, dPMR, M17 (digital voice), TETRA (baseband out), PAGER (POCSAG/FLEX), APRS (also DTMF/ZVEI/EAS), WEFAX, SSTV, LRPT (Meteor-M) and ADS-B (aircraft). AUTO (Auto ID) lets AndySDR identify signals and pick the decoder itself. OFF stops the decoder. A dimmed button means its program is not installed yet – see the DECODERS tab."],
@@ -2037,7 +2120,7 @@ function openHelp() {
     <li>Press <b>SRCH</b> to hunt for live transmissions across a band.</li>
   </ol>
   <h3>KNOBS &amp; DISPLAY</h3>${ctl(["volume", "squelch", "gain", "power", "leds", "lcd", "topstatus"])}
-  <h3>QUICK BUTTONS (under the display)</h3>${ctl(["qmode", "qband", "qdec", "qlock", "qtog"])}
+  <h3>QUICK BUTTONS (under the display)</h3>${ctl(["qmode", "qbw", "qband", "qdec", "qlock", "qtog"])}
   <h3>KEYPAD &amp; FUNCTION KEYS</h3>${ctl(["k_scan", "k_man", "k_srch", "k_pgm", "k_lo", "k_pri", "k_mode", "k_step", "k_bank", "k_dly", "k_rec", "k_dec", "k_dot", "k_e", "k_arrows", "k_clr"])}
   <p class="small">Keyboard: digits and <code>.</code> type, <code>Enter</code> tunes, <code>↑ ↓</code> step, <code>S</code> scan, <code>M</code> manual, <code>P</code> program, <code>L</code> lockout, <code>I</code> skip 10 min, <code>H</code> help, <code>Esc</code> clear.</p>
   <h3>SCREENS</h3>${ctl(["scope", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "satauto", "dabtab", "ft8tab", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "updates", "receiver", "remote", "theme", "conn"])}

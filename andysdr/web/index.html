@@ -106,6 +106,10 @@
       <!-- quick-access buttons (built in app.js) -->
       <div class="quick" id="quick">
         <div class="q-group" data-help="qmode"><span class="q-lab">MODE</span><div class="q-row" id="qMode"></div></div>
+        <div class="q-group" data-help="qbw"><span class="q-lab">WIDTH</span>
+          <div class="q-row bw-row"><select id="bwSel" title="Channel bandwidth (filter width) for this mode"></select>
+            <button class="key q" id="bwSug" title="Use the suggested bandwidth">★</button></div>
+          <div class="bw-why" id="bwWhy"></div></div>
         <div class="q-group" data-help="qband"><span class="q-lab">BAND</span><div class="q-row" id="qBand"></div></div>
         <div class="q-group" data-help="qdec"><span class="q-lab">DECODE</span><div class="q-row" id="qDec"></div></div>
         <div class="q-group" data-help="qlock"><span class="q-lab">SKIP</span><div class="q-row" id="qLock"></div></div>
