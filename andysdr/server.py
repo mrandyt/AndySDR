@@ -14,6 +14,8 @@ import os
 import re
 import socket
 import struct
+import subprocess
+import sys
 import time
 import urllib.parse
 
@@ -341,6 +343,28 @@ class Server:
                     out.append((os.path.getmtime(full), os.path.relpath(full, self.images).replace("\\", "/")))
         return [p for _, p in sorted(out, reverse=True)[:200]]
 
+    def _open_folder(self, c, which):
+        """Open the images or recordings folder in the file manager - only on the radio PC itself."""
+        sub = {"images": "images", "recordings": "recordings"}.get(which)
+        if not sub:
+            return
+        folder = os.path.join(data_dir(), sub)
+        os.makedirs(folder, exist_ok=True)
+        if not self._is_local(c.peer):
+            if sub == "recordings":
+                self._reply(c, "event", {"level": "info",
+                            "text": "Recordings are saved on the radio PC in " + folder})
+            return
+        try:
+            if sys.platform.startswith("win"):
+                os.startfile(folder)
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", folder])
+            else:
+                subprocess.Popen(["xdg-open", folder])
+        except Exception as e:
+            self._reply(c, "event", {"level": "warn", "text": f"Could not open {folder}: {e}"})
+
     def _reply(self, c, kind, data):
         c.push(_ws_frame(json.dumps({"type": kind, "data": data}).encode(), 1), droppable=False)
 
@@ -441,6 +465,8 @@ class Server:
                 self.s.save()
                 if not m.get("quiet"):
                     self._reply(c, "event", {"level": "info", "text": "Settings saved"})
+            elif cmd == "open_folder":
+                self._open_folder(c, m.get("which"))
             elif cmd == "images":
                 self._reply(c, "images", self._images())
             elif cmd == "decoders":
