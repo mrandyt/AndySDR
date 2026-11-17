@@ -144,13 +144,16 @@ class Scheduler:
                 self.tick()
             except Exception:
                 log.exception("scheduler")
-            time.sleep(5)
+            time.sleep(2 if self.running else 5)
 
     def tick(self, now=None):
         now = now or dt.datetime.now()
         if self.running:
             if now >= self.running["until"]:
                 self.stop_job()
+            elif str(self.running.get("occurrence", "")).startswith("sat:"):
+                sid = self.running["occurrence"].split(":")[1]
+                self.radio.retune_job(self.sats.tuned_freq(sid, now.timestamp()))   # follow the Doppler shift
             return
         if self._tle_check < time.time() - 1800:           # keep orbit data fresh for the satellites that are on
             self._tle_check = time.time()

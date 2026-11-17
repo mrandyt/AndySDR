@@ -27,7 +27,7 @@ except Exception:                      # noqa: BLE001
 
 TLE_URL = "https://celestrak.org/NORAD/elements/gp.php?CATNR=%d&FORMAT=TLE"
 TLE_MAX_AGE = 12 * 3600
-LOOKAHEAD = 48 * 3600
+LOOKAHEAD = 96 * 3600
 GEO_BLOCK = 3600
 
 # id -> definition.  `freqs` are the selectable downlinks (Hz); the first is the default.
@@ -88,6 +88,19 @@ def look_angles(sat, lat, lon, alt_m, ts):
     el = math.degrees(math.asin(max(-1, min(1, zen / rng))))
     az = math.degrees(math.atan2(east, -south)) % 360
     return el, az, rng
+
+
+C_KMS = 299792.458
+
+
+def doppler_freq(sat, lat, lon, alt_m, ts, freq):
+    """Frequency (Hz) you must tune to hear a satellite that transmits on `freq` (range-rate Doppler)."""
+    a = look_angles(sat, lat, lon, alt_m, ts - 0.5)
+    b = look_angles(sat, lat, lon, alt_m, ts + 0.5)
+    if not a or not b:
+        return freq
+    rr = b[2] - a[2]                                   # km/s, positive = moving away
+    return int(round(freq * (1 - rr / C_KMS)))
 
 
 def find_passes(sat, lat, lon, alt_m, start, hours=48, min_el=10.0, step=30):
@@ -179,6 +192,7 @@ class SatPlanner:
             freq = int(u.get("freq") or d["freqs"][0])
             out[sid] = {"enabled": bool(u.get("enabled", False)), "freq": freq,
                         "min_el": float(u.get("min_el") if u.get("min_el") not in (None, "") else d["min_el"]),
+                        "track": bool(u.get("track", True)),
                         "from": str(u.get("from") or ""), "to": str(u.get("to") or ""),
                         "days": sorted({int(x) for x in (u.get("days") or []) if str(x).isdigit() and 0 <= int(x) <= 6})}
         return out
@@ -188,7 +202,7 @@ class SatPlanner:
             return
         c = dict(self.s.get("sat_auto") or {})
         u = dict(c.get(sid) or {})
-        for k in ("enabled", "freq", "min_el", "from", "to", "days"):
+        for k in ("enabled", "freq", "min_el", "from", "to", "days", "track"):
             if k in kw:
                 u[k] = kw[k]
         c[sid] = u
@@ -282,7 +296,7 @@ class SatPlanner:
 
     # ---- passes
     def passes(self, sid, now=None):
-        """Upcoming passes (next 48 h) for a satellite using the user's settings."""
+        """Upcoming passes (next 4 days) for a satellite using the user's settings."""
         now = now or time.time()
         obs = self.observer()
         d = SATELLITES[sid]
@@ -301,10 +315,19 @@ class SatPlanner:
                 ps = [{"aos": now, "los": now + GEO_BLOCK, "max_el": la[0], "tca": now, "az_aos": la[1], "az_los": la[1], "geo": True}]
             self.cache[sid] = (key, ps)
             return ps
-        ps = find_passes(sat, obs[0], obs[1], obs[2], now - 600, 48, c["min_el"])
+        ps = find_passes(sat, obs[0], obs[1], obs[2], now - 600, LOOKAHEAD // 3600, c["min_el"])
         ps = [p for p in ps if p["los"] > now]
         self.cache[sid] = (key, ps)
         return ps
+
+    def tuned_freq(self, sid, now=None):
+        """Doppler-corrected frequency for a satellite right now (nominal frequency if no orbit/position)."""
+        c = self.cfg()[sid]
+        d = SATELLITES[sid]
+        obs, sat = self.observer(), self.satrec(d["norad"])
+        if d["kind"] == "geo" or not c["track"] or not obs or sat is None:
+            return c["freq"]
+        return doppler_freq(sat, obs[0], obs[1], obs[2], now or time.time(), c["freq"])
 
     def geo_visible(self, sid, now=None):
         obs, sat = self.observer(), self.satrec(SATELLITES[sid]["norad"])
@@ -342,11 +365,11 @@ class SatPlanner:
         d, c = SATELLITES[best[0]], self.cfg()[best[0]]
         until = p["los"] + d["tail"]
         job = {"id": key, "name": f"{d['name']} pass (max {p['max_el']:.0f}°)" if not p.get("geo") else d["name"],
-               "freq": c["freq"], "mode": d["mode"], "action": d["action"],
+               "freq": self.tuned_freq(sid, now), "nominal": c["freq"], "sat": sid, "mode": d["mode"], "action": d["action"],
                "duration": max(1, int((until - now) / 60) + 1)}
         return sid, p, key, job, until
 
-    def upcoming(self, now=None, limit=10):
+    def upcoming(self, now=None, limit=60):
         now = now or time.time()
         rows = []
         for sid, c in self.cfg().items():
@@ -356,7 +379,8 @@ class SatPlanner:
                 if self.in_window(sid, p["aos"]):
                     rows.append({"sat": sid, "name": SATELLITES[sid]["name"], "aos": p["aos"], "los": p["los"],
                                  "max_el": round(p["max_el"]), "az": round(p["az_aos"]), "geo": bool(p.get("geo")),
-                                 "freq": c["freq"]})
+                                 "freq": c["freq"], "track": c["track"] and not p.get("geo"),
+                                 "state": "recording" if (p["aos"] - SATELLITES[sid]["lead"] <= now < p["los"] + SATELLITES[sid]["tail"]) else "waiting"})
         rows.sort(key=lambda r: r["aos"])
         return rows[:limit]
 

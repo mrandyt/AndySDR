@@ -550,13 +550,14 @@ class Server:
             elif cmd == "schedule_delete":
                 r.scheduler.delete_job(str(m["id"]))
             elif cmd == "sat_cfg":
-                kw = {k: m[k] for k in ("enabled", "freq", "min_el", "from", "to", "days") if k in m}
+                kw = {k: m[k] for k in ("enabled", "freq", "min_el", "from", "to", "days", "track") if k in m}
                 if "freq" in kw:
                     kw["freq"] = int(kw["freq"])
                 if "min_el" in kw:
                     kw["min_el"] = max(0.0, min(80.0, float(kw["min_el"])))
-                if "enabled" in kw:
-                    kw["enabled"] = bool(kw["enabled"])
+                for b in ("enabled", "track"):
+                    if b in kw:
+                        kw[b] = bool(kw[b])
                 r.scheduler.sats.set_cfg(str(m.get("id")), **kw)
                 r.scheduler.sats.refresh_tles()
                 r.scheduler._emit()
