@@ -190,6 +190,7 @@
     <button class="tab" data-tab="ft8">FT8 / FT4 <span class="tab-badge" id="ft8Badge" hidden>0</span></button>
     <button class="tab" data-tab="img">WEATHER IMAGES</button>
     <button class="tab" data-tab="rec">RECORDINGS</button>
+    <button class="tab" data-tab="eibi">SHORTWAVE (EiBi)</button>
     <button class="tab" data-tab="bp">UK BAND PLAN</button>
     <button class="tab" data-tab="sch">SCHEDULER</button>
     <button class="tab" data-tab="mesh">MESHCORE <span class="tab-badge" id="meshBadge" hidden></span></button>
@@ -471,6 +472,27 @@
     <div class="row"><b>Weather fax &amp; satellite pictures</b><span class="grow"></span>
       <button class="btn" id="imgRefresh">Refresh</button></div>
     <div class="imggrid" id="imgGrid"></div>
+  </div>
+
+  <!-- EIBI SHORTWAVE SCHEDULE -->
+  <div class="tabpage" id="tab-eibi">
+    <div class="row wrapline" data-help="eibitab">
+      <b>Shortwave broadcasts (EiBi schedule)</b>
+      <span class="muted small" id="eibiStat">no schedule loaded</span>
+      <span class="grow"></span>
+      <button class="btn primary" id="eibiDl">⬇ Get latest schedule</button>
+      <label class="btn" style="cursor:pointer">Import file… <input type="file" id="eibiFile" accept=".csv,.txt" hidden></label>
+    </div>
+    <div class="row wrapline">
+      <input type="search" id="eibiQ" placeholder="Station, language, target area or frequency" style="min-width:240px">
+      <label>Language <input id="eibiLang" size="3" maxlength="3" placeholder="E"></label>
+      <label>From <input id="eibiFmin" size="6" placeholder="kHz"></label>
+      <label>to <input id="eibiFmax" size="6" placeholder="kHz"></label>
+      <label><input type="checkbox" id="eibiNow" checked> On air now (<span id="eibiUtc">--:--</span> UTC)</label>
+      <button class="btn" id="eibiGo">Search</button>
+    </div>
+    <div class="tablewrap" style="max-height:520px"><table class="grid" id="eibiTable"><thead><tr><th>kHz</th><th>UTC</th><th>Days</th><th>Station</th><th>Lang</th><th>Target</th><th>Remarks</th><th></th></tr></thead><tbody></tbody></table></div>
+    <p class="muted small">The EiBi list (eibispace.de, by Eike Bierwirth) shows who broadcasts on shortwave and when. <b>Tune</b> sets the radio to the station in AM, <b>★</b> stores it in the memory bank you have selected, and <b>⏰</b> adds a scheduled capture so AndySDR tunes to it by itself every time it is on air (see the SCHEDULER tab to change it to a recording). Needs a receiver that covers HF (e.g. RSP2pro). DRM stations cannot be decoded.</p>
   </div>
 
   <!-- RECORDINGS -->

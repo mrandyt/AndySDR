@@ -16,10 +16,12 @@ import socket
 import struct
 import subprocess
 import sys
+import threading
 import time
 import urllib.parse
 
 from . import capturemeta
+from .eibi import Eibi
 from .dsp import BANDWIDTHS
 from .config import VERSION, data_dir, resource_dir
 from .updater import Updater
@@ -76,6 +78,7 @@ class Server:
         self.web = os.path.join(resource_dir(), "web")
         self.images = os.path.join(data_dir(), "images")
         self.fail_times = {}
+        self.eibi = Eibi()
         radio.add_listener(self._from_radio)
         self.updater = Updater(settings, self._from_radio, shutdown=radio.stop)
 
@@ -522,6 +525,27 @@ class Server:
                     self._reply(c, "event", {"level": "info", "text": "Settings saved"})
             elif cmd == "open_folder":
                 self._open_folder(c, m.get("which"))
+            elif cmd == "eibi_query":
+                self._reply(c, "eibi", dict(self.eibi.query(m.get("q", ""), m.get("lang", ""), float(m.get("fmin") or 0),
+                                                            float(m.get("fmax") or 0), bool(m.get("now"))),
+                                            status=self.eibi.status()))
+            elif cmd == "eibi_import":
+                try:
+                    n = self.eibi.import_text(str(m.get("text", "")))
+                    self._reply(c, "event", {"level": "info", "text": f"EiBi schedule imported: {n} broadcasts"})
+                except Exception as e:
+                    self._reply(c, "event", {"level": "warn", "text": str(e)})
+                self._reply(c, "eibi", dict(self.eibi.query(), status=self.eibi.status()))
+            elif cmd == "eibi_download":
+                def _dl(c=c):
+                    try:
+                        code, n = self.eibi.download()
+                        text, lvl = f"EiBi schedule {code.upper()} downloaded: {n} broadcasts", "info"
+                    except Exception as e:
+                        text, lvl = str(e), "warn"
+                    self.loop.call_soon_threadsafe(self._reply, c, "event", {"level": lvl, "text": text})
+                    self.loop.call_soon_threadsafe(self._reply, c, "eibi", dict(self.eibi.query(), status=self.eibi.status()))
+                threading.Thread(target=_dl, name="eibi-dl", daemon=True).start()
             elif cmd == "images":
                 self._reply(c, "images", self._images())
             elif cmd == "recordings":
