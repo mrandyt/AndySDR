@@ -6,12 +6,14 @@ Any PC/laptop/tablet on the network opens  http://<this-pc>:8045  and enters the
 import asyncio
 import base64
 import hashlib
+import ctypes
 import hmac
 import json
 import logging
 import mimetypes
 import os
 import re
+import shutil
 import socket
 import struct
 import subprocess
@@ -67,6 +69,23 @@ class Client:
             except asyncio.QueueEmpty:
                 pass
         self.q.put_nowait(item)
+
+
+def downloads_dir():
+    """The user's Downloads folder (follows Windows' own setting, e.g. when moved to OneDrive)."""
+    if sys.platform.startswith("win"):
+        try:
+            class _GUID(ctypes.Structure):
+                _fields_ = [("a", ctypes.c_ulong), ("b", ctypes.c_ushort), ("c", ctypes.c_ushort), ("d", ctypes.c_ubyte * 8)]
+            g = _GUID(0x374DE290, 0x123F, 0x4565, (ctypes.c_ubyte * 8)(0x91, 0x64, 0x39, 0xC4, 0x92, 0x5E, 0x46, 0x7B))
+            buf = ctypes.c_wchar_p()
+            if ctypes.windll.shell32.SHGetKnownFolderPath(ctypes.byref(g), 0, None, ctypes.byref(buf)) == 0 and buf.value:
+                path = buf.value
+                ctypes.windll.ole32.CoTaskMemFree(buf)
+                return path
+        except Exception:
+            pass
+    return os.path.join(os.path.expanduser("~"), "Downloads")
 
 
 class Server:
@@ -401,6 +420,34 @@ class Server:
             res.append(d)
         return res
 
+    def _save_download(self, c, kind, rel, name):
+        """Copy a picture / recording into the Downloads folder of the PC AndySDR runs on (the desktop window
+        cannot do browser downloads; remote browsers use their own normal download instead)."""
+        root = {"images": self.images, "recordings": os.path.join(data_dir(), "recordings")}.get(kind)
+        if not root or not self._is_local(c.peer):
+            return
+        src = os.path.realpath(os.path.join(root, str(rel or "")))
+        if not src.startswith(os.path.realpath(root) + os.sep) or not os.path.isfile(src):
+            self._reply(c, "event", {"level": "warn", "text": "That file no longer exists"})
+            return
+        fname = re.sub(r'[\\/:*?"<>|]+', "_", os.path.basename(str(name or "")) or os.path.basename(src))
+        dest_dir = downloads_dir()
+
+        def run():
+            try:
+                os.makedirs(dest_dir, exist_ok=True)
+                base, ext = os.path.splitext(fname)
+                dest, n = os.path.join(dest_dir, fname), 1
+                while os.path.exists(dest):
+                    n += 1
+                    dest = os.path.join(dest_dir, f"{base} ({n}){ext}")
+                shutil.copy2(src, dest)
+                text, lvl = f"Saved to your Downloads folder: {os.path.basename(dest)}", "info"
+            except Exception as e:
+                text, lvl = f"Could not save the file: {e}", "warn"
+            self.loop.call_soon_threadsafe(self._reply, c, "event", {"level": lvl, "text": text})
+        threading.Thread(target=run, name="save-download", daemon=True).start()
+
     def _open_folder(self, c, which):
         """Open the images or recordings folder in the file manager - only on the radio PC itself."""
         sub = {"images": "images", "recordings": "recordings"}.get(which)
@@ -523,6 +570,8 @@ class Server:
                 self.s.save()
                 if not m.get("quiet"):
                     self._reply(c, "event", {"level": "info", "text": "Settings saved"})
+            elif cmd == "save_download":
+                self._save_download(c, m.get("kind"), m.get("f"), m.get("name"))
             elif cmd == "open_folder":
                 self._open_folder(c, m.get("which"))
             elif cmd == "eibi_query":

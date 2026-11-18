@@ -1395,12 +1395,12 @@ function renderImages(list) {
     <figcaption><b>${esc(x.name || "Picture")}</b>
       <div class="cap-meta">${esc([fmtMHzUnit(x.freq), x.when].filter(Boolean).join(" · "))}</div>
       <div class="cap-file">${esc(x.f)}</div>
-      <a class="btn small dl" href="${imgUrl(x.f)}" download="${esc(x.dl || x.f.split("/").pop())}" title="Save this picture to this device">⬇ Download</a></figcaption></figure>`).join("") ||
+      <a class="btn small dl" data-kind="images" data-f="${esc(x.f)}" href="${imgUrl(x.f)}" download="${esc(x.dl || x.f.split("/").pop())}" title="Save this picture to your Downloads folder">⬇ Download</a></figcaption></figure>`).join("") ||
     '<p class="muted">No pictures yet. Tune a WEFAX station in USB and start the WEFAX decoder, or record a Meteor-M pass with the LRPT decoder.</p>';
   $("imgGrid").querySelectorAll("img").forEach((im) => im.onclick = () => {
     const x = IMGS[im.dataset.f] || { f: im.dataset.f, dl: im.dataset.f.split("/").pop() };
     const v = document.createElement("div"); v.className = "imgview";
-    v.innerHTML = `<div class="imgbar"><span>${esc(imgCaption(x))}</span><a class="btn small dl" href="${im.src}" download="${esc(x.dl)}">⬇ Download</a><span class="muted small">click anywhere else to close</span></div><img src="${im.src}">`;
+    v.innerHTML = `<div class="imgbar"><span>${esc(imgCaption(x))}</span><a class="btn small dl" data-kind="images" data-f="${esc(x.f)}" href="${im.src}" download="${esc(x.dl)}">⬇ Download</a><span class="muted small">click anywhere else to close</span></div><img src="${im.src}">`;
     v.onclick = () => v.remove();
     v.querySelector("a").onclick = (e) => e.stopPropagation();
     document.body.appendChild(v);
@@ -1411,6 +1411,14 @@ function addImage(f) {
   if (ex) ex.src = imgUrl(f); else send({ cmd: "images" });
 }
 $("imgRefresh").onclick = () => send({ cmd: "images" });
+// On the radio PC itself the desktop window cannot do browser downloads, so AndySDR copies the file into the
+// Downloads folder; on a remote PC / phone the normal browser download (the link's own href) is used.
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("a.dl[data-kind]");
+  if (!a || !isLocal) return;
+  e.preventDefault(); e.stopPropagation();
+  send({ cmd: "save_download", kind: a.dataset.kind, f: a.dataset.f, name: a.getAttribute("download") });
+}, true);
 
 /* ----- recordings ----- */
 const fmtSize = (b) => (b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB");
@@ -1420,7 +1428,7 @@ function renderRecordings(list) {
         <div class="cap-meta">${esc([fmtMHzUnit(x.freq), x.when, fmtSize(x.size || 0)].filter(Boolean).join(" · "))}</div>
         <div class="cap-file">${esc(x.f)}</div></div>
       ${x.iq ? '<span class="muted small">raw IQ for SatDump</span>' : `<audio controls preload="none" src="${recUrl(x.f)}"></audio>`}
-      <a class="btn small dl" href="${recUrl(x.f)}" download="${esc(x.dl || x.f)}" title="Save this recording to this device">⬇ Download</a></div>`).join("") ||
+      <a class="btn small dl" data-kind="recordings" data-f="${esc(x.f)}" href="${recUrl(x.f)}" download="${esc(x.dl || x.f)}" title="Save this recording to your Downloads folder">⬇ Download</a></div>`).join("") ||
     '<p class="muted">No recordings yet. Press the REC key to record what you are listening to, or add a "Record audio" capture in the SCHEDULER.</p>';
 }
 $("recRefresh").onclick = () => send({ cmd: "recordings" });
