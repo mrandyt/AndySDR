@@ -1847,7 +1847,7 @@ async function dabPoll() {
     try {
       const r = await fetch(`/api/dab/mux.json?token=${encodeURIComponent(token)}`);
       if (r.ok) {
-        const d = await r.json(), ens = (d.ensemble && (d.ensemble.label && d.ensemble.label.label || d.ensemble.label)) || "";
+        const d = await r.json(), ens0 = (d.ensemble && (d.ensemble.label && d.ensemble.label.label || d.ensemble.label)) || "", ens = typeof ens0 === "string" ? ens0 : "";
         const sv = (d.services || []).map((x) => ({ sid: x.sid, name: (x.label && x.label.label) || x.label || x.sid, dls: (x.dls && x.dls.label) || x.dls || "" })).filter((x) => x.sid).sort((a, b) => String(a.name).localeCompare(String(b.name)));
         $("dabStat").textContent = `running · block ${S.decoder_sub}${ens ? " · " + String(ens).trim() : ""} · ${sv.length} stations`;
         $("dabTable").querySelector("tbody").innerHTML = sv.map((x) => `<tr data-sid="${esc(x.sid)}" class="${dabPlaying && dabPlaying.sid === x.sid ? "sel" : ""}"><td class="cs">${esc(String(x.name).trim())}</td><td class="muted">${esc(String(x.dls).trim())}</td></tr>`).join("") ||
