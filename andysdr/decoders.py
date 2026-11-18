@@ -32,6 +32,7 @@ from scipy import signal
 from .config import app_dir, data_dir
 from .iqbridge import IqBridge
 from .ft8 import Ft8Decoder, match_freq
+from . import capturemeta
 from . import dab as dablib
 from .sstv import SstvDecoder
 from .wefax import WefaxDecoder
@@ -249,6 +250,7 @@ class DecoderManager:
         self.ft8 = None
         self.dab_port = 0
         self.freq_fn = None        # set by the radio: () -> tuned frequency (Hz)
+        self.job_fn = None         # set by the radio: () -> running scheduled job (dict) or None
         self.dial_fn = None        # set by the radio: () -> FT8 dial frequency of the tuned channel (Hz)
         self.ft8_history = []
         self.bridge = None         # IqBridge (rtl_tcp server) while GOES / DAB decoders run
@@ -308,10 +310,20 @@ class DecoderManager:
         else:
             self.log(v)
 
+    def _note_capture(self, kind):
+        """Log satellite / station name + frequency for the pictures this decoder is about to make."""
+        try:
+            job = self.job_fn() if self.job_fn else None
+            capturemeta.note(kind, self.freq_fn() if self.freq_fn else 0, (job or {}).get("name", ""),
+                             (job or {}).get("mode", ""))
+        except Exception:
+            pass
+
     def adopt_sstv(self, dec):
         """Take over an SSTV decoder that already found a VIS header (auto-detect)."""
         self.stop()
         self.active, self.sub = "sstv", "auto"
+        self._note_capture("sstv")
         dec.on_event = self._img_event
         dec.promote()
         self.sstv = dec
@@ -323,6 +335,8 @@ class DecoderManager:
             return True
         ov = self.settings.get("decoder_paths", {})
         self.active, self.sub = dec_id, sub
+        if dec_id in ("wefax", "sstv", "lrpt", "goes"):
+            self._note_capture(dec_id)
         try:
             if dec_id == "wefax":
                 self.wefax = WefaxDecoder(self.images_dir, on_event=lambda k, v: (

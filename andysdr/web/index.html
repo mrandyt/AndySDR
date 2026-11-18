@@ -116,8 +116,8 @@
         <div class="q-group" data-help="qlock"><span class="q-lab">SKIP</span><div class="q-row" id="qLock"></div></div>
         <div class="q-group" data-help="qtog"><span class="q-lab">AUDIO</span><div class="q-row" id="qTog"></div></div>
         <div class="q-group" data-help="qfiles"><span class="q-lab">FILES</span><div class="q-row" id="qFiles">
-          <button class="key q" data-f="images" title="Open the folder of received weather pictures and captures (WEFAX, SSTV, satellite images)">IMAGES</button>
-          <button class="key q" data-f="recordings" title="Open the folder of sound recordings (REC)">RECORDINGS</button></div></div>
+          <button class="key q" data-f="images" title="Show the received weather pictures and captures (WEFAX, SSTV, satellite images) with a Download button on each">IMAGES</button>
+          <button class="key q" data-f="recordings" title="Show the sound recordings (REC and scheduled recordings) - play or download them">RECORDINGS</button></div></div>
       </div>
     </div>
 
@@ -189,6 +189,7 @@
     <button class="tab" data-tab="dab">DAB RADIO</button>
     <button class="tab" data-tab="ft8">FT8 / FT4 <span class="tab-badge" id="ft8Badge" hidden>0</span></button>
     <button class="tab" data-tab="img">WEATHER IMAGES</button>
+    <button class="tab" data-tab="rec">RECORDINGS</button>
     <button class="tab" data-tab="bp">UK BAND PLAN</button>
     <button class="tab" data-tab="sch">SCHEDULER</button>
     <button class="tab" data-tab="mesh">MESHCORE <span class="tab-badge" id="meshBadge" hidden></span></button>
@@ -470,6 +471,14 @@
     <div class="row"><b>Weather fax &amp; satellite pictures</b><span class="grow"></span>
       <button class="btn" id="imgRefresh">Refresh</button></div>
     <div class="imggrid" id="imgGrid"></div>
+  </div>
+
+  <!-- RECORDINGS -->
+  <div class="tabpage" id="tab-rec">
+    <div class="row"><b>Sound recordings</b><span class="grow"></span>
+      <button class="btn" id="recRefresh">Refresh</button></div>
+    <div class="reclist" id="recList"></div>
+    <p class="muted small">Recordings come from the REC key and from scheduled "Record audio" captures. Each row shows what it is, the frequency and when it was made; press <b>Play</b> to listen here or <b>Download</b> to save the file to the device you are using (works from remote PCs, tablets and phones too). Files named "raw IQ" are the baseband recording of a Meteor pass – they are for SatDump, not for listening.</p>
   </div>
 
   <!-- UK BAND PLAN -->

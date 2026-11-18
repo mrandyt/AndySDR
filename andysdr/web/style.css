@@ -350,7 +350,17 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 .imggrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
 .imggrid figure { margin: 0; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .imggrid img { width: 100%; height: 160px; object-fit: cover; display: block; background: #000; cursor: zoom-in; }
-.imggrid figcaption { font-size: 11px; padding: 5px 8px; color: var(--muted); word-break: break-all; }
+.imggrid figcaption { font-size: 11px; padding: 6px 8px 8px; color: var(--muted); word-break: break-all; }
+.imggrid figcaption b { color: var(--text, #e6e6e6); font-size: 12px; word-break: normal; }
+.cap-meta { margin-top: 2px; color: var(--text, #e6e6e6); opacity: .85; }
+.cap-file { margin: 2px 0 6px; opacity: .6; font-size: 10px; }
+.btn.small.dl { display: inline-block; padding: 3px 10px; font-size: 11px; text-decoration: none; }
+.reclist { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.recrow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+.recrow .recinfo { flex: 1 1 220px; min-width: 0; }
+.recrow audio { height: 34px; max-width: 320px; }
+.imgbar { position: fixed; top: 0; left: 0; right: 0; z-index: 81; display: flex; gap: 14px; align-items: center; padding: 8px 14px; background: rgba(0,0,0,.85); color: #fff; font-size: 13px; cursor: default; }
+.imgbar .grow { flex: 1; }
 .devsettings { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
 .devsettings label { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 8px; display: flex; gap: 8px; align-items: center; color: var(--text); }
 .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
@@ -385,7 +395,7 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 .toast.error { border-left-color: #e04a4a; }
 .toast.warn { border-left-color: #e0b04a; }
 .imgview { position: fixed; inset: 0; background: rgba(0,0,0,.9); z-index: 80; overflow: auto; cursor: zoom-out; display: flex; align-items: flex-start; justify-content: center; }
-.imgview img { max-width: none; margin: 20px; }
+.imgview img { max-width: none; margin: 56px 20px 20px; }
 
 /* ---------- small screens / tablets used as remotes ---------- */
 @media (max-width: 1150px) {

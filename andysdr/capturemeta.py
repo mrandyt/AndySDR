@@ -100,6 +100,8 @@ def describe(rel, mtime, size=0, ents=None):
         if best:
             freq = freq or best.get("freq", 0)
             name, mode = best.get("name", ""), best.get("mode", "")
+    if kind == "record" and name and mode:
+        name = f"{name} ({mode})"
     if not name:
         name = _preset_name(kind, freq) or LABELS.get(kind, "Picture")
         if kind == "lrpt" and freq in (137100000, 137900000):

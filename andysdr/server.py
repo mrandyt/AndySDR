@@ -19,6 +19,7 @@ import sys
 import time
 import urllib.parse
 
+from . import capturemeta
 from .dsp import BANDWIDTHS
 from .config import VERSION, data_dir, resource_dir
 from .updater import Updater
@@ -129,7 +130,7 @@ class Server:
         if path == "/ws" and headers.get("upgrade", "").lower() == "websocket":
             await self._websocket(reader, writer, headers, ip)
             return
-        if path.startswith("/images/") or path.startswith("/api/"):
+        if path.startswith(("/images/", "/recordings/", "/api/")):
             if not self._token_ok(ip, (query.get("token") or [""])[0]):
                 await self._send(writer, 403, b"Password required", "text/plain")
                 return
@@ -162,6 +163,9 @@ class Server:
             return
         if path.startswith("/images/"):
             await self._file(writer, self.images, path[len("/images/"):])
+            return
+        if path.startswith("/recordings/"):
+            await self._stream_file(writer, os.path.join(data_dir(), "recordings"), path[len("/recordings/"):])
             return
         if path in ("/", ""):
             path = "/index.html"
@@ -214,6 +218,31 @@ class Server:
         with open(full, "rb") as f:
             data = f.read()
         await self._send(writer, 200, data, ctype)
+
+    async def _stream_file(self, writer, root, rel):
+        """Send a (possibly large) file in pieces - recordings can be hundreds of MB."""
+        full = os.path.realpath(os.path.join(root, rel))
+        if not full.startswith(os.path.realpath(root) + os.sep) or not os.path.isfile(full):
+            await self._send(writer, 404, b"Not found", "text/plain")
+            return
+        size = os.path.getsize(full)
+        ctype = "audio/wav" if full.lower().endswith(".wav") else (mimetypes.guess_type(full)[0] or "application/octet-stream")
+        head = (f"HTTP/1.1 200 OK\r\nContent-Type: {ctype}\r\nContent-Length: {size}\r\n"
+                "Cache-Control: no-cache\r\nConnection: close\r\n\r\n").encode()
+        try:
+            writer.write(head)
+            left = size
+            with open(full, "rb") as f:
+                while left > 0:
+                    chunk = f.read(min(262144, left))
+                    if not chunk:
+                        break
+                    left -= len(chunk)
+                    writer.write(chunk)
+                    await writer.drain()
+        except Exception:
+            pass
+        writer.close()
 
     async def _send(self, writer, code, body, ctype, extra=None):
         reason = {200: "OK", 403: "Forbidden", 404: "Not Found"}.get(code, "OK")
@@ -336,13 +365,38 @@ class Server:
         c.push(_ws_frame(json.dumps({"type": "hello", "data": hello}).encode(), 1), droppable=False)
 
     def _images(self):
+        """Newest 200 pictures, each with satellite / station name, frequency and time."""
         out = []
         for root, _, files in os.walk(self.images):
             for f in files:
                 if f.lower().endswith((".png", ".jpg")):
                     full = os.path.join(root, f)
-                    out.append((os.path.getmtime(full), os.path.relpath(full, self.images).replace("\\", "/")))
-        return [p for _, p in sorted(out, reverse=True)[:200]]
+                    out.append((os.path.getmtime(full), os.path.relpath(full, self.images).replace("\\", "/"),
+                                os.path.getsize(full)))
+        ents = capturemeta.entries()
+        return [capturemeta.describe(rel, mt, sz, ents) for mt, rel, sz in sorted(out, reverse=True)[:200]]
+
+    def _recordings(self):
+        """Sound recordings (and Meteor IQ recordings), newest first."""
+        folder = os.path.join(data_dir(), "recordings")
+        out = []
+        try:
+            names = os.listdir(folder)
+        except OSError:
+            names = []
+        for f in names:
+            full = os.path.join(folder, f)
+            if f.lower().endswith(".wav") and os.path.isfile(full):
+                out.append((os.path.getmtime(full), f, os.path.getsize(full)))
+        ents = capturemeta.entries()
+        res = []
+        for mt, f, sz in sorted(out, reverse=True)[:200]:
+            d = capturemeta.describe(f, mt, sz, ents)
+            d["iq"] = f.startswith("lrpt_")          # raw 240 kS/s baseband for SatDump - not listenable
+            if d["iq"]:
+                d["name"] += " (raw IQ)"
+            res.append(d)
+        return res
 
     def _open_folder(self, c, which):
         """Open the images or recordings folder in the file manager - only on the radio PC itself."""
@@ -470,6 +524,8 @@ class Server:
                 self._open_folder(c, m.get("which"))
             elif cmd == "images":
                 self._reply(c, "images", self._images())
+            elif cmd == "recordings":
+                self._reply(c, "recordings", self._recordings())
             elif cmd == "decoders":
                 self._reply(c, "decoders", r.decoders.available())
             elif cmd == "mesh_connect":

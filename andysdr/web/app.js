@@ -80,6 +80,7 @@ function onJSON(m) {
     case "signal": S.signal = d; renderSignal(); break;
     case "schedule": SCH = d; renderSchedule(); break;
     case "images": renderImages(d); break;
+    case "recordings": renderRecordings(d); break;
     case "mesh": MESH = d; renderMesh(); break;
     case "mesh_msg": meshAddMsg(d); break;
     case "mesh_history": MESHMSG = d; renderMeshList(); renderMeshMsgs(); break;
@@ -799,6 +800,7 @@ function showTab(name) {
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === name));
   document.querySelectorAll(".tabpage").forEach((p) => p.classList.toggle("active", p.id === "tab-" + name));
   if (name === "img") send({ cmd: "images" });
+  if (name === "rec") send({ cmd: "recordings" });
   if (name === "dec") send({ cmd: "decoders" });
   if (name === "bp") renderBandPlan();
   if (name === "sch") send({ cmd: "schedule" });
@@ -1379,11 +1381,26 @@ setInterval(() => { if (adsTabOpen()) { renderAdsbTable(); } }, 5000);
 
 /* ----- images ----- */
 const imgUrl = (f) => `/images/${f.split("/").map(encodeURIComponent).join("/")}?token=${encodeURIComponent(token)}&t=${Date.now()}`;
+const recUrl = (f) => `/recordings/${f.split("/").map(encodeURIComponent).join("/")}?token=${encodeURIComponent(token)}`;
+const fmtMHzUnit = (hz) => (hz ? fmtMHz(hz, 4) + " MHz" : "");
+let IMGS = {};
+const imgCaption = (x) => [x.name || "Picture", fmtMHzUnit(x.freq), x.when].filter(Boolean).join(" · ");
 function renderImages(list) {
-  $("imgGrid").innerHTML = (list || []).map((f) => `<figure><img loading="lazy" src="${imgUrl(f)}" data-f="${esc(f)}"><figcaption>${esc(f)}</figcaption></figure>`).join("") ||
+  const items = (list || []).map((x) => (typeof x === "string" ? { f: x, name: "", freq: 0, when: "", dl: x.split("/").pop() } : x));
+  IMGS = {}; items.forEach((x) => (IMGS[x.f] = x));
+  $("imgGrid").innerHTML = items.map((x) => `<figure><img loading="lazy" src="${imgUrl(x.f)}" data-f="${esc(x.f)}">
+    <figcaption><b>${esc(x.name || "Picture")}</b>
+      <div class="cap-meta">${esc([fmtMHzUnit(x.freq), x.when].filter(Boolean).join(" · "))}</div>
+      <div class="cap-file">${esc(x.f)}</div>
+      <a class="btn small dl" href="${imgUrl(x.f)}" download="${esc(x.dl || x.f.split("/").pop())}" title="Save this picture to this device">⬇ Download</a></figcaption></figure>`).join("") ||
     '<p class="muted">No pictures yet. Tune a WEFAX station in USB and start the WEFAX decoder, or record a Meteor-M pass with the LRPT decoder.</p>';
   $("imgGrid").querySelectorAll("img").forEach((im) => im.onclick = () => {
-    const v = document.createElement("div"); v.className = "imgview"; v.innerHTML = `<img src="${im.src}">`; v.onclick = () => v.remove(); document.body.appendChild(v);
+    const x = IMGS[im.dataset.f] || { f: im.dataset.f, dl: im.dataset.f.split("/").pop() };
+    const v = document.createElement("div"); v.className = "imgview";
+    v.innerHTML = `<div class="imgbar"><span>${esc(imgCaption(x))}</span><a class="btn small dl" href="${im.src}" download="${esc(x.dl)}">⬇ Download</a><span class="muted small">click anywhere else to close</span></div><img src="${im.src}">`;
+    v.onclick = () => v.remove();
+    v.querySelector("a").onclick = (e) => e.stopPropagation();
+    document.body.appendChild(v);
   });
 }
 function addImage(f) {
@@ -1391,6 +1408,19 @@ function addImage(f) {
   if (ex) ex.src = imgUrl(f); else send({ cmd: "images" });
 }
 $("imgRefresh").onclick = () => send({ cmd: "images" });
+
+/* ----- recordings ----- */
+const fmtSize = (b) => (b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB");
+function renderRecordings(list) {
+  $("recList").innerHTML = (list || []).map((x) => `<div class="recrow">
+      <div class="recinfo"><b>${esc(x.name)}</b>
+        <div class="cap-meta">${esc([fmtMHzUnit(x.freq), x.when, fmtSize(x.size || 0)].filter(Boolean).join(" · "))}</div>
+        <div class="cap-file">${esc(x.f)}</div></div>
+      ${x.iq ? '<span class="muted small">raw IQ for SatDump</span>' : `<audio controls preload="none" src="${recUrl(x.f)}"></audio>`}
+      <a class="btn small dl" href="${recUrl(x.f)}" download="${esc(x.dl || x.f)}" title="Save this recording to this device">⬇ Download</a></div>`).join("") ||
+    '<p class="muted">No recordings yet. Press the REC key to record what you are listening to, or add a "Record audio" capture in the SCHEDULER.</p>';
+}
+$("recRefresh").onclick = () => send({ cmd: "recordings" });
 
 /* ----- receiver ----- */
 function renderDevices(list) {
@@ -1514,10 +1544,7 @@ function buildQuick() {
       else if (k === "clr") send({ cmd: "lockout_clear" });
       else send({ cmd: "lockout_temp", minutes: +k.slice(1) });
     }
-    else if (b.dataset.f) {
-      if (b.dataset.f === "images") showTab("img");
-      send({ cmd: "open_folder", which: b.dataset.f });
-    }
+    else if (b.dataset.f) showTab(b.dataset.f === "images" ? "img" : "rec");
     else if (b.dataset.t === "agc") send({ cmd: "agc", on: !S.agc });
     else if (b.dataset.t === "mute") { player.muted = !player.muted; player.setVolume(player.vol); renderQuick(); }
     else if (b.dataset.t === "mon") {
@@ -2207,7 +2234,7 @@ const HELP = {
   qband: ["Band buttons", "Jump straight to a popular UK band with the right mode and tuning step already set: AIR (121.500 MHz), MARINE (channel 16), PMR446, 2M, 70CM, CB, FM BC, PAGER and weather SATS. Then step with ▲ ▼, press SCAN, or use SRCH to find what is active. The button for the band you are in stays lit."],
   qdec: ["Decoder buttons", "Start a decoder with one click: DMR, P25, NXDN, dPMR, M17 (digital voice), TETRA (network, call and message signalling), PAGER (POCSAG/FLEX), APRS (also DTMF/ZVEI/EAS), WEFAX, SSTV, LRPT (Meteor-M) and ADS-B (aircraft). AUTO (Auto ID) lets AndySDR identify signals and pick the decoder itself. OFF stops the decoder. A dimmed button means its program is not installed yet – see the DECODERS tab."],
   qlock: ["Skip / lock out", "Stops the scanner dwelling on something you don't want to hear. While it is stopped on a transmission (or searching) press SKIP 10 MIN, SKIP 1 HOUR or SKIP TODAY and it carries straight on; the channel is scanned again when the time is up (or when AndySDR is restarted). LOCK OUT is the permanent version (the L/O key): a memory channel stays locked out until you untick L/O in the MEMORY tab. UNSKIP clears all temporary skips and search lockouts at once – the number shows how many are being ignored and hovering lists them. Keyboard: I = skip for 10 minutes."],
-  qfiles: ["Files buttons", "IMAGES – opens the folder of received weather pictures and captures (WEFAX charts, SSTV, satellite images) in Windows Explorer and shows the WEATHER IMAGES tab. RECORDINGS – opens the folder of sound recordings made with REC. On another PC, phone or tablet the folders stay on the radio PC, so IMAGES shows the WEATHER IMAGES tab instead."],
+  qfiles: ["Files buttons", "IMAGES – shows the WEATHER IMAGES tab: every received picture (WEFAX charts, SSTV, satellite images) with the satellite or station name, frequency and time, and a Download button that saves it to the device you are using. RECORDINGS – shows the RECORDINGS tab: your sound recordings with Play and Download buttons. Both work the same on the radio PC and on remote PCs, tablets and phones."],
   meshsdr: ["MeshCore with just the SDR", "Receive-only MeshCore using your SDR – no LoRa board. Press Start listening (UK/EU narrow is 869.618 MHz, 62.5 kHz, SF8). NODES lists every repeater, room server, companion and sensor heard advertising, with its position (click it for a map). MESSAGES shows channel messages for the Public channel and any #hashtag channel you add (or a 32-digit key). PACKET LOG lists everything heard including encrypted direct messages (which cannot be read) and damaged frames. Needs a decent 869 MHz antenna; the SDR must run at 250 kS/s or more."],
   qtog: ["Audio & step buttons", "AGC – automatic RF gain. MUTE – silences this screen without touching the VOLUME knob. MONITOR – holds the squelch open so you can hear the background noise and set up the antenna or gain; press again to return to your squelch setting. STEP − / STEP + – smaller or larger tuning step (shown on the LCD)."],
   updates: ["Updates", "AndySDR looks for a newer version on its GitHub releases page when it starts and every 12 hours. When one is found a pop-up shows what is new and asks what to do: Download & install, Remind me later, or Skip this version. After the download (checked against GitHub's SHA-256) AndySDR asks again before it installs and restarts itself. 'Check for updates now' looks straight away, even for a version you skipped. Tick 'Download new versions in the background' to have the file ready so installing takes seconds. If AndySDR was installed with the Setup program the installer runs quietly in the background; a portable (unzipped) copy copies the new files over the old ones; a copy run from Python source just opens the releases page. Your settings, memories and pictures in %APPDATA%\\AndySDR are never touched. Updating restarts the radio PC's program, so remote screens reconnect by themselves a few seconds later."],

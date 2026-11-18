@@ -8,7 +8,7 @@ import wave
 
 import numpy as np
 
-from . import dab, devices, ft8
+from . import capturemeta, dab, devices, ft8
 from .adsb import ADSB_FREQ, Adsb
 from .meshsdr import MeshSdr
 from .autodetect import SignalClassifier
@@ -43,6 +43,7 @@ class Radio:
         self.meshsdr = MeshSdr(settings, self._emit)
         self.decoders.meshsdr = self.meshsdr
         self.decoders.freq_fn = lambda: self.freq
+        self.decoders.job_fn = lambda: self.job
         self.decoders.dial_fn = lambda: (ft8.match_freq(self.freq, self.mode) or (None, self.freq))[1]
         self.decoders.rate_fn = lambda: self.dev.sample_rate if self.dev else 2400000
         self.decoders.on_pager = lambda line: self.pager.add_line(
@@ -728,6 +729,11 @@ class Radio:
             if on and not self.rec:
                 path = os.path.join(data_dir(), "recordings",
                                     time.strftime("audio_%Y%m%d_%H%M%S_") + f"{self.freq / 1e6:.4f}MHz.wav")
+                # what is it? scheduled job name, else the memory channel name, else Auto ID's label
+                what = ((self.job or {}).get("name")
+                        or (self.channel[2].get("name", "") if self.channel else "")
+                        or ((self.signal or {}).get("label", "") if self.s.get("auto_identify", True) else ""))
+                capturemeta.note("record", self.freq, what, self.mode)
                 self.rec = wave.open(path, "wb")
                 self.rec.setnchannels(1)
                 self.rec.setsampwidth(2)
