@@ -111,5 +111,10 @@ check("restart on another block", r.decoders.active == "dab" and r.decoders.sub 
 r.set_decoder("", "auto")
 time.sleep(0.5)
 check("DAB stop", r.decoders.active in (None, ""))
+d = dab.clean_directory([{"block": "11d", "ensemble": "D1 National", "t": 5, "services": [{"sid": "c2f8", "name": "Kisstory"}, {"sid": "", "name": "x"}]},
+                         {"block": "99Z", "services": [{"sid": "1", "name": "bad"}]}, "junk"])
+check("directory keeps good block/stations, drops bad", len(d) == 1 and d[0]["block"] == "11D" and d[0]["services"] == [{"sid": "c2f8", "name": "Kisstory"}])
+check("UK scan order is all valid blocks", all(b in dab.CHANNELS for b in dab.UK_SCAN))
+
 print(f"{ok} passed, {fail} failed")
 sys.exit(1 if fail else 0)

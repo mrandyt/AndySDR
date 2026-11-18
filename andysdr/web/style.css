@@ -616,6 +616,8 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 
 .dab-wrap { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 12px; align-items: start; }
 .dab-list { max-height: 460px; }
+.dab-dir { max-height: 300px; margin: 6px 0 12px; }
+.dab-dir td.cs { font-weight: 600; }
 #dabTable tr[data-sid] { cursor: pointer; }
 #dabTable tr.sel td { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 .dab-player { padding: 12px; }

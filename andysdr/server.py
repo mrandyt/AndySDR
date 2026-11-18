@@ -19,7 +19,7 @@ import sys
 import time
 import urllib.parse
 
-from . import capturemeta
+from . import capturemeta, dab as dablib
 from .dsp import BANDWIDTHS
 from .config import VERSION, data_dir, resource_dir
 from .updater import Updater
@@ -524,6 +524,12 @@ class Server:
                 self._open_folder(c, m.get("which"))
             elif cmd == "images":
                 self._reply(c, "images", self._images())
+            elif cmd == "dab_dir":
+                self._reply(c, "dab_dir", self.s.get("dab_stations", []))
+            elif cmd == "dab_dir_save":
+                self.s["dab_stations"] = dablib.clean_directory(m.get("list"))
+                self.s.save()
+                self._reply(c, "dab_dir", self.s["dab_stations"])
             elif cmd == "recordings":
                 self._reply(c, "recordings", self._recordings())
             elif cmd == "decoders":

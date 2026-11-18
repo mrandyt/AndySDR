@@ -81,6 +81,7 @@ function onJSON(m) {
     case "schedule": SCH = d; renderSchedule(); break;
     case "images": renderImages(d); break;
     case "recordings": renderRecordings(d); break;
+    case "dab_dir": dabDir = d || []; dabRenderDir(); break;
     case "mesh": MESH = d; renderMesh(); break;
     case "mesh_msg": meshAddMsg(d); break;
     case "mesh_history": MESHMSG = d; renderMeshList(); renderMeshMsgs(); break;
@@ -804,7 +805,7 @@ function showTab(name) {
   if (name === "dec") send({ cmd: "decoders" });
   if (name === "bp") renderBandPlan();
   if (name === "sch") send({ cmd: "schedule" });
-  if (name === "dab") dabPoll();
+  if (name === "dab") { dabPoll(); send({ cmd: "dab_dir" }); }
   if (name === "ft8") { FT8.unseen = 0; $("ft8Badge").hidden = true; renderFt8(); }
   if (name === "mesh") { meshRead(meshConv); renderMesh(); setTimeout(() => $("meshMsgs").scrollTop = 1e9, 0); }
   if (name === "pag") { PAG.unseen = 0; pagBadge(); }
@@ -1849,15 +1850,98 @@ async function dabPoll() {
   }
   dabTimer = setTimeout(dabPoll, 3000);
 }
+const dabMux = async () => {
+  try {
+    const r = await fetch(`/api/dab/mux.json?token=${encodeURIComponent(token)}`);
+    if (!r.ok) return null;
+    const d = await r.json();
+    const lab = (x) => (x && typeof x === "object" ? x.label : x) || "";
+    return { ensemble: String(lab(d.ensemble && d.ensemble.label) || "").trim(),
+             services: (d.services || []).map((x) => ({ sid: String(x.sid || ""), name: String(lab(x.label) || "").trim(), dls: String(lab(x.dls) || "").trim() })).filter((x) => x.sid) };
+  } catch (e) { return null; }
+};
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const dabHasName = (x) => x.name && x.name.toLowerCase() !== x.sid.toLowerCase();
+function dabPlay(sid, name) {
+  dabPlaying = { sid, name };
+  $("dabNow").textContent = "▶ " + name;
+  const a = $("dabAudio"); a.src = `/api/dab/mp3/${encodeURIComponent(sid)}?token=${encodeURIComponent(token)}`; a.play().catch(() => {});
+  dabPoll();
+}
 $("dabStart").onclick = () => { send({ cmd: "decoder", id: "dab", sub: $("dabCh").value }); dabPlaying = null; $("dabAudio").removeAttribute("src"); setTimeout(dabPoll, 1500); };
-$("dabStop").onclick = () => { send({ cmd: "decoder", id: "", sub: "auto" }); $("dabAudio").pause(); $("dabAudio").removeAttribute("src"); dabPlaying = null; $("dabNow").textContent = "Nothing playing"; setTimeout(dabPoll, 800); };
+$("dabStop").onclick = () => { dabScanStop = true; send({ cmd: "decoder", id: "", sub: "auto" }); $("dabAudio").pause(); $("dabAudio").removeAttribute("src"); dabPlaying = null; $("dabNow").textContent = "Nothing playing"; setTimeout(dabPoll, 800); };
 $("dabTable").querySelector("tbody").addEventListener("click", (e) => {
   const tr = e.target.closest("tr[data-sid]"); if (!tr) return;
-  dabPlaying = { sid: tr.dataset.sid, name: tr.querySelector(".cs").textContent };
-  $("dabNow").textContent = "▶ " + dabPlaying.name;
-  const a = $("dabAudio"); a.src = `/api/dab/mp3/${encodeURIComponent(dabPlaying.sid)}?token=${encodeURIComponent(token)}`; a.play().catch(() => {});
-  dabPoll();
+  dabPlay(tr.dataset.sid, tr.querySelector(".cs").textContent);
 });
+
+/* ----- station directory: scan every block once, then pick a station by name ----- */
+let dabDir = [], dabScanning = false, dabScanStop = false;
+function dabRenderDir() {
+  const q = $("dabFind").value.trim().toLowerCase();
+  const rows = [];
+  dabDir.forEach((e) => e.services.forEach((x) => { if (!q || x.name.toLowerCase().includes(q) || (e.ensemble || "").toLowerCase().includes(q)) rows.push({ e, x }); }));
+  rows.sort((a, b) => a.x.name.localeCompare(b.x.name));
+  $("dabDir").querySelector("tbody").innerHTML = rows.map(({ e, x }) => `<tr><td class="cs">${esc(x.name)}</td><td class="muted">${esc(e.ensemble || "")} · ${esc(e.block)} · ${(DAB_CH[e.block] || 0).toFixed(3)} MHz</td>
+    <td><button class="btn small" data-block="${esc(e.block)}" data-sid="${esc(x.sid)}" data-name="${esc(x.name)}">▶ Play</button></td></tr>`).join("") ||
+    `<tr><td colspan="3" class="muted">${dabDir.length ? "No station matches that name." : "No stations saved yet – press ⟳ Scan for stations (needs the receiver and a Band III antenna)."}</td></tr>`;
+  const n = dabDir.reduce((a, e) => a + e.services.length, 0);
+  if (!dabScanning) $("dabDirStat").textContent = dabDir.length ? `${n} stations on ${dabDir.length} multiplexes · last scan ${new Date(Math.max(...dabDir.map((e) => e.t || 0)) * 1000).toLocaleString()}` : "";
+}
+$("dabFind").oninput = dabRenderDir;
+async function dabTuneAndPlay(block, sid, name) {
+  $("dabDirStat").textContent = `Tuning ${name} (block ${block}) …`;
+  if (!(dabRunning() && S.decoder_sub === block)) {
+    send({ cmd: "decoder", id: "dab", sub: block }); dabPlaying = null; $("dabAudio").removeAttribute("src");
+    for (let i = 0; i < 30 && !(dabRunning() && S.decoder_sub === block); i++) await sleep(500);
+  }
+  for (let i = 0; i < 25; i++) {                      // wait for the ensemble to be decoded (up to ~50 s)
+    const m = await dabMux();
+    if (m && m.services.some((x) => x.sid === sid)) { dabPlay(sid, name); $("dabDirStat").textContent = ""; dabRenderDir(); return; }
+    await sleep(2000);
+  }
+  $("dabDirStat").textContent = `Could not find ${name} on block ${block} – check the antenna and RF GAIN, or scan again.`;
+}
+$("dabDir").querySelector("tbody").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-sid]"); if (!b || dabScanning) return;
+  dabTuneAndPlay(b.dataset.block, b.dataset.sid, b.dataset.name);
+});
+const DAB_UK_SCAN = ["12B", "11D", "11B", "10B", "10C", "10D", "11A", "11C", "12A", "12C", "12D", "10A", "13A", "13B", "13C", "13D", "13E", "13F"];
+async function dabScan() {
+  if (dabScanning) { dabScanStop = true; return; }
+  const blocks = $("dabScanSel").value === "all" ? Object.keys(DAB_CH) : DAB_UK_SCAN;
+  dabScanning = true; dabScanStop = false; $("dabScanBtn").textContent = "■ Stop scan";
+  $("dabAudio").pause(); $("dabAudio").removeAttribute("src"); dabPlaying = null; $("dabNow").textContent = "Nothing playing";
+  const found = [];
+  for (let i = 0; i < blocks.length && !dabScanStop; i++) {
+    const b = blocks[i];
+    $("dabDirStat").textContent = `Scanning ${b} (${DAB_CH[b].toFixed(3)} MHz) – ${i + 1} of ${blocks.length} · ${found.reduce((a, e) => a + e.services.length, 0)} stations so far`;
+    send({ cmd: "decoder", id: "dab", sub: b });
+    let up = false;
+    for (let k = 0; k < 12 && !dabScanStop; k++) { if (dabRunning() && S.decoder_sub === b) { up = true; break; } await sleep(500); }
+    if (!up) { if (dabScanStop) break; $("dabDirStat").textContent = "The DAB decoder did not start – see the DECODERS tab (welle-cli, receiver at 2.4 MS/s or more)."; dabScanning = false; $("dabScanBtn").textContent = "⟳ Scan for stations"; return; }
+    let last = "", still = 0, got = null;
+    for (let k = 0; k < 14 && !dabScanStop; k++) {       // up to ~28 s per block
+      await sleep(2000);
+      const m = await dabMux();
+      const named = m ? m.services.filter(dabHasName) : [];
+      if (m && m.ensemble && named.length) {
+        const sig = named.map((x) => x.sid).sort().join(",");
+        still = sig === last ? still + 1 : 0; last = sig; got = { ensemble: m.ensemble, services: named };
+        if (still >= 2) break;                          // station list has stopped growing
+      } else if (k >= 4) break;                         // nothing after ~10 s: no multiplex here
+    }
+    if (got) found.push({ block: b, ensemble: got.ensemble, t: Date.now() / 1000, services: got.services.map((x) => ({ sid: x.sid, name: x.name })) });
+  }
+  send({ cmd: "decoder", id: "", sub: "auto" });
+  dabScanning = false; $("dabScanBtn").textContent = "⟳ Scan for stations";
+  if (found.length) { dabDir = found; send({ cmd: "dab_dir_save", list: found }); dabRenderDir(); }
+  $("dabDirStat").textContent = dabScanStop ? (found.length ? `Scan stopped – saved ${found.length} multiplexes.` : "Scan stopped.")
+    : found.length ? `Scan finished – ${found.reduce((a, e) => a + e.services.length, 0)} stations on ${found.length} multiplexes saved.`
+                   : "Scan finished but no multiplex was found. Check the Band III antenna and RF GAIN, and that the receiver can run at 2.4 MS/s or more.";
+  setTimeout(dabPoll, 800);
+}
+$("dabScanBtn").onclick = dabScan;
 
 /* ======================================================= FT8 / FT4 */
 const FT8 = { msgs: [], unseen: 0 };

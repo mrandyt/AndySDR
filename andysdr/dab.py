@@ -56,3 +56,28 @@ def parse_mux(d):
         out["services"].append({"sid": sid, "name": str(name).strip(), "dls": str(dls).strip()})
     out["services"].sort(key=lambda x: x["name"].lower())
     return out
+
+
+# Blocks worth scanning in the UK (national + local multiplexes live in 10A-12D; a few extras in 13x), busiest first.
+UK_SCAN = ["12B", "11D", "11B", "10B", "10C", "10D", "11A", "11C", "12A", "12C", "12D", "10A", "13A", "13B", "13C", "13D", "13E", "13F"]
+
+
+def clean_directory(lst):
+    """Station directory saved by the GUI after a scan -> validated list of
+    {"block", "ensemble", "t", "services": [{"sid", "name"}]} (bad entries dropped, sizes capped)."""
+    out = []
+    for e in (lst if isinstance(lst, list) else [])[:40]:
+        if not isinstance(e, dict) or str(e.get("block", "")).upper() not in CHANNELS:
+            continue
+        svc = []
+        for x in (e.get("services") or [])[:80]:
+            if isinstance(x, dict) and str(x.get("sid", "")).strip() and str(x.get("name", "")).strip():
+                svc.append({"sid": str(x["sid"]).strip()[:12], "name": str(x["name"]).strip()[:40]})
+        if svc:
+            try:
+                t = float(e.get("t") or 0)
+            except (TypeError, ValueError):
+                t = 0.0
+            out.append({"block": str(e["block"]).upper(), "ensemble": str(e.get("ensemble", "")).strip()[:40],
+                        "t": t, "services": svc})
+    return out
