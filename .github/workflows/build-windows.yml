@@ -56,7 +56,7 @@ jobs:
       - name: New-feature self-tests (informational)
         continue-on-error: true
         run: |
-          for t in test_aircraftinfo test_satpass test_satsched test_ft8 test_bandwidth test_imgcheck test_dsdcond test_tetra; do python tests/$t.py || echo "::warning::$t failed"; done
+          for t in test_aircraftinfo test_satpass test_satsched test_ft8 test_bandwidth test_imgcheck test_dspquality test_dsdcond test_tetra; do python tests/$t.py || echo "::warning::$t failed"; done
 
       - name: Build AndySDR.exe
         run: |

@@ -174,6 +174,7 @@ class Radio:
         if isinstance(self.dev, devices.SimDevice):
             self.dev.ref_fn = self.adsb.tracker.ref
         self.rx = Receiver(self.dev.sample_rate)
+        self.rx.nb_on = bool(self.s.get("noise_blanker", True))
         self.rx.deemph_us = self.s["deemphasis_us"]
         self.rx.bw_lookup = self._remembered_bw
         self.rx.set_mode(self.mode)

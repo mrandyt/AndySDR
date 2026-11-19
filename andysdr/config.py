@@ -46,6 +46,7 @@ DEFAULTS = {
     "rf_gain": 30.0,              # dB
     "agc": False,
     "keep_iq": False,             # keep the raw Meteor IQ recording after SatDump has made the pictures (large files)
+    "noise_blanker": True,        # remove impulse noise (ignition, switching) in AM / SSB / CW
     "bw_auto": True,              # channel bandwidth follows the suggestion (decoder / Auto ID / band plan)
     "bw_modes": {},               # bandwidth (Hz) chosen by hand, per mode
     "squelch": -60.0,             # dBFS, -120 = open

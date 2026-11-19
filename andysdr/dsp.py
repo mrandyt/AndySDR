@@ -5,6 +5,8 @@ from scipy import signal
 IF_RATE = 240000      # first decimation stage output
 AUDIO_RATE = 48000    # every demodulator delivers 48 kHz
 BLOCK_SECONDS = 0.05  # processing block length
+SQ_HANG_BLOCKS = 5     # squelch hang time = 5 blocks = 0.25 s
+NB_FACTOR = 6.0        # noise blanker: samples this many times above the median level are removed
 
 PREFERRED_RATES = [2400000, 1920000, 2880000, 6000000, 4800000, 3840000, 7200000, 960000]
 
@@ -157,6 +159,10 @@ class Receiver:
         self.audio_hpf = StatefulIIR(*signal.butter(2, 250, "highpass", fs=AUDIO_RATE))
         self.audio_lpf = StatefulIIR(*signal.butter(4, 3400, "lowpass", fs=AUDIO_RATE))
         self.agc_gain = 1.0
+        self.am_car = None               # AM carrier level (tracks fades slowly) - makes AM loudness independent of signal strength
+        self.nb_on = True                # impulse noise blanker (ignition, switching noise) for AM / SSB / CW
+        self.nb_hits = 0
+        self.hang = 0                    # squelch hang: keeps the audio open briefly so word endings are not chopped
         self.cw_mix = Mixer()
         self.ssb_mix = Mixer()
 
@@ -227,6 +233,8 @@ class Receiver:
         """Returns dict(audio, disc, iq48, level_db, squelch_open)."""
         x = self.mixer.process(iq, offset_hz, self.fs)
         x = self.stage1.process(x)                     # 240 kS/s
+        if self.nb_on and self.mode in ("AM", "USB", "LSB", "CW"):
+            x = self._blank_impulses(x)
         out = {"iq240": x}
         if self.mode == "WFM":
             p = float(np.mean(np.abs(x) ** 2)) if len(x) else 1e-12
@@ -248,9 +256,7 @@ class Receiver:
                 scale = 1.0 / (2 * np.pi * (2500 if m != "FM" else 5000) / AUDIO_RATE) * 0.35
                 audio = self.audio_lpf.process(self.audio_hpf.process(d * scale))
             elif m == "AM":
-                env = np.abs(c)
-                audio = self.audio_hpf.process(env)
-                audio = self._agc(audio)
+                audio = self._am_demod(c)
                 out["disc"] = audio
             elif m in ("USB", "LSB"):
                 audio = self._agc(np.real(c))
@@ -270,10 +276,46 @@ class Receiver:
         else:
             self.sq_open = self.level_db > self.squelch_db
         out["audio_ungated"] = np.clip(audio, -1, 1).astype(np.float32)
-        out["audio"] = out["audio_ungated"] if self.sq_open else np.zeros_like(out["audio_ungated"])
+        if self.sq_open or self.squelch_db <= -119:
+            self.hang = SQ_HANG_BLOCKS
+        elif self.hang > 0:
+            self.hang -= 1
+        audio_open = self.sq_open or self.hang > 0
+        out["audio"] = out["audio_ungated"] if audio_open else np.zeros_like(out["audio_ungated"])
         out["level_db"] = self.level_db
         out["squelch_open"] = self.sq_open
         return out
+
+    def _am_demod(self, c):
+        """Envelope AM detector referenced to the carrier: audio = envelope / carrier - 1, so a strong and a weak
+        station sound equally loud, and fades are followed smoothly (no block-by-block pumping)."""
+        env = np.abs(c).astype(np.float32)
+        if not len(env):
+            return env
+        m = float(np.mean(env)) + 1e-9
+        old = self.am_car if self.am_car else m
+        alpha = 0.6 if m > old else 0.12                   # attack fast, release slowly
+        new = old + (m - old) * alpha
+        self.am_car = new
+        car = np.linspace(old, new, len(env), dtype=np.float32)
+        a = (env / car - 1.0) * 0.5
+        return self.audio_hpf.process(np.clip(a, -1.5, 1.5))
+
+    def _blank_impulses(self, x):
+        """Impulse noise blanker: zero the few samples that stand far above the typical level."""
+        if len(x) < 64:
+            return x
+        mag = np.abs(x)
+        ref = float(np.median(mag)) + 1e-12
+        hit = mag > ref * NB_FACTOR
+        n = int(hit.sum())
+        if n == 0 or n > len(x) * 0.15:                    # nothing to remove - or the signal itself is bursty: leave it alone
+            return x
+        hit = np.convolve(hit.astype(np.uint8), np.ones(5, np.uint8), "same") > 0      # widen a little around each spike
+        self.nb_hits += n
+        y = x.copy()
+        y[hit] = 0
+        return y
 
     def _agc(self, a):
         peak = float(np.max(np.abs(a))) if len(a) else 0.0
@@ -285,8 +327,13 @@ class Receiver:
                 self.agc_gain = want
             else:
                 self.agc_gain = self.agc_gain * 0.9 + want * 0.1
-        self.agc_gain = min(self.agc_gain, 1e5)
-        return a * self.agc_gain
+        new = min(self.agc_gain, 1e5)
+        old = getattr(self, "_agc_prev", new)
+        self._agc_prev = new
+        self.agc_gain = new
+        if len(a) and abs(new - old) > 1e-9 * max(new, old):
+            return a * np.linspace(old, new, len(a), dtype=np.float32)        # ramp, so block-to-block gain steps do not click or pump
+        return a * new
 
 
 def find_peaks_db(spec_db, fs, center, threshold_db, min_sep_hz=10000):
