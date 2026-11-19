@@ -421,8 +421,53 @@ function sizeCanvases() {
 window.addEventListener("resize", sizeCanvases);
 sizeCanvases();
 
+/* ---- zoom / pan: the view is a window (viewC centre, fs/zoom wide) into the received span ---- */
+let zoom = 1, viewC = null, follow = true;      // follow = view stays centred on the tuned frequency while zoomed
+let smooth = null, wfAcc = 0, wfLast = 0, frameEma = 60, lastFrameT = 0, drawQueued = false, wfView = null;
+function viewOf(sp) {
+  const span = sp.fs / zoom;
+  let c = follow || viewC === null ? sp.freq : viewC;
+  const lo = sp.center - sp.fs / 2 + span / 2, hi = sp.center + sp.fs / 2 - span / 2;
+  c = Math.min(hi, Math.max(lo, c));            // never look outside what the receiver is actually capturing
+  return { f0: c - span / 2, span, c };
+}
+function setZoom(z, anchorFrac) {
+  if (!spec) { zoom = z; return; }
+  const v = viewOf(spec), fa = v.f0 + v.span * (anchorFrac ?? 0.5);       // keep the frequency under the pointer still
+  zoom = Math.min(32, Math.max(1, z));
+  const span = spec.fs / zoom;
+  viewC = fa - span * ((anchorFrac ?? 0.5) - 0.5); follow = zoom === 1 ? true : false;
+  if (anchorFrac === undefined && S.freq) { viewC = S.freq; follow = true; }
+  syncZoomUi(); queueDraw();
+}
+function panView(frac) {
+  if (!spec || zoom === 1) return;
+  const v = viewOf(spec); viewC = v.c + frac * v.span; follow = false; syncZoomUi(); queueDraw();
+}
+function syncZoomUi() {
+  $("zoomTxt").textContent = zoom === 1 ? "Full" : zoom.toFixed(zoom < 10 ? 1 : 0) + "×";
+  $("zoomFollow").checked = follow;
+}
+$("zoomIn").onclick = () => setZoom(zoom * 1.6);
+$("zoomOut").onclick = () => setZoom(zoom / 1.6);
+$("zoomFit").onclick = () => { zoom = 1; follow = true; viewC = null; syncZoomUi(); queueDraw(); };
+$("zoomFollow").onchange = (e) => { follow = e.target.checked; if (!follow && spec) viewC = viewOf(spec).c; queueDraw(); };
+
 function onSpectrum(center, fs, freq, data) {
-  spec = { center, fs, freq, data };
+  const n = data.length, now = performance.now();
+  if (lastFrameT) frameEma = frameEma * 0.9 + Math.min(60, Math.max(2, 1000 / Math.max(1, now - lastFrameT))) * 0.1;
+  lastFrameT = now;
+  // light temporal smoothing so the trace and waterfall flow instead of flicker
+  if (!smooth || smooth.length !== n) smooth = Float32Array.from(data);
+  else for (let i = 0; i < n; i++) smooth[i] += (data[i] - smooth[i]) * 0.55;
+  spec = { center, fs, freq, data: smooth };
+  queueDraw();
+}
+function queueDraw() { if (!drawQueued && spec) { drawQueued = true; requestAnimationFrame(drawScope); } }
+function drawScope(ts) {
+  drawQueued = false;
+  if (!spec) return;
+  const { center, fs, freq, data } = spec;
   const W = specC.width, H = specC.height, dpr = window.devicePixelRatio || 1;
   const n = data.length;
   if ($("scopeAuto").checked) {
@@ -432,15 +477,20 @@ function onSpectrum(center, fs, freq, data) {
     $("scopeLo").value = Math.round(autoLo); $("scopeHi").value = Math.round(autoLo + 70);
   }
   const lo = +$("scopeLo").value, hi = Math.max(lo + 10, +$("scopeHi").value);
+  const V = viewOf(spec), f0 = V.f0, span = V.span;
+  // spectrum columns: interpolate between bins when zoomed in, take the peak when several bins share a pixel
+  const binHz = fs / n, fLo = center - fs / 2;
   const col = new Float32Array(W);
   for (let x = 0; x < W; x++) {
-    const a = Math.floor(x * n / W), b = Math.max(a + 1, Math.floor((x + 1) * n / W));
-    let m = 0; for (let i = a; i < b; i++) if (data[i] > m) m = data[i];
+    const fa = f0 + x / W * span, fb = f0 + (x + 1) / W * span;
+    const ba = (fa - fLo) / binHz, bb = (fb - fLo) / binHz;
+    let m;
+    if (bb - ba > 1) { m = 0; for (let i = Math.max(0, Math.floor(ba)); i <= Math.min(n - 1, Math.floor(bb)); i++) if (data[i] > m) m = data[i]; }
+    else { const bc = (ba + bb) / 2 - 0.5, i0 = Math.min(n - 1, Math.max(0, Math.floor(bc))), i1 = Math.min(n - 1, i0 + 1), t = Math.min(1, Math.max(0, bc - i0)); m = data[i0] * (1 - t) + data[i1] * t; }
     col[x] = -130 + m / 255 * 120;
   }
   const css = getComputedStyle(document.body);
   sctx.fillStyle = "#07090b"; sctx.fillRect(0, 0, W, H);
-  // grid
   sctx.strokeStyle = "rgba(255,255,255,0.07)"; sctx.fillStyle = "rgba(255,255,255,0.45)";
   sctx.font = `${11 * dpr}px Consolas, monospace`; sctx.lineWidth = 1;
   for (let db = Math.ceil(lo / 10) * 10; db <= hi; db += 10) {
@@ -448,18 +498,15 @@ function onSpectrum(center, fs, freq, data) {
     sctx.beginPath(); sctx.moveTo(0, y); sctx.lineTo(W, y); sctx.stroke();
     sctx.fillText(db + "", 4, y - 2);
   }
-  const span = fs, f0 = center - span / 2;
-  const nice = [10e3, 25e3, 50e3, 100e3, 200e3, 250e3, 500e3, 1e6, 2e6].find((s) => span / s <= Math.max(3, Math.min(12, W / (95 * dpr)))) || 2e6;
+  const nice = [1e3, 2.5e3, 5e3, 10e3, 25e3, 50e3, 100e3, 200e3, 250e3, 500e3, 1e6, 2e6].find((s) => span / s <= Math.max(3, Math.min(12, W / (95 * dpr)))) || 2e6;
   for (let f = Math.ceil(f0 / nice) * nice; f < f0 + span; f += nice) {
     const x = (f - f0) / span * W;
     sctx.beginPath(); sctx.moveTo(x, 0); sctx.lineTo(x, H); sctx.stroke();
-    sctx.fillText(fmtMHz(f, nice < 1e5 ? 3 : 2), x + 3, H - 4);
+    sctx.fillText(fmtMHz(f, nice < 1e5 ? 4 : 2), x + 3, H - 4);
   }
-  // tuned channel
   const bw = S.bw ? S.bw / 2 : (MODE_BW[S.mode] || 6000);
   const xf = (freq - f0) / span * W, xb = bw / span * W;
   sctx.fillStyle = "rgba(255,60,60,0.16)"; sctx.fillRect(xf - xb, 0, xb * 2, H);
-  // trace
   const y = (v) => H - (v - lo) / (hi - lo) * H;
   sctx.beginPath(); sctx.moveTo(0, H);
   for (let x = 0; x < W; x++) sctx.lineTo(x, y(col[x]));
@@ -469,33 +516,90 @@ function onSpectrum(center, fs, freq, data) {
   for (let x = 0; x < W; x++) x ? sctx.lineTo(x, y(col[x])) : sctx.moveTo(x, y(col[x]));
   sctx.strokeStyle = css.getPropertyValue("--scope-line"); sctx.lineWidth = 1.2 * dpr; sctx.stroke();
   const stripH = drawBandStrip(sctx, f0, span, W, dpr);
-  sctx.strokeStyle = "#ff4040"; sctx.lineWidth = 1.5 * dpr; sctx.beginPath(); sctx.moveTo(xf, stripH); sctx.lineTo(xf, H); sctx.stroke();
-  drawVfoFlag(sctx, xf, stripH, W, freq, dpr);
-  // waterfall
-  const WH = wfC.height;
-  wctx.drawImage(wfC, 0, 0, W, WH - 1, 0, 1, W, WH - 1);
-  const row = wctx.createImageData(W, 1);
-  for (let x = 0; x < W; x++) {
-    const p = Math.max(0, Math.min(255, Math.round((col[x] - lo) / (hi - lo) * 255)));
-    const c = palette[p];
-    row.data[x * 4] = c[0]; row.data[x * 4 + 1] = c[1]; row.data[x * 4 + 2] = c[2]; row.data[x * 4 + 3] = 255;
+  if (xf >= 0 && xf <= W) {
+    sctx.strokeStyle = "#ff4040"; sctx.lineWidth = 1.5 * dpr; sctx.beginPath(); sctx.moveTo(xf, stripH); sctx.lineTo(xf, H); sctx.stroke();
+    drawVfoFlag(sctx, xf, stripH, W, freq, dpr);
   }
-  wctx.putImageData(row, 0, 0);
-  wctx.fillStyle = "rgba(255,64,64,0.8)"; wctx.fillRect(xf - dpr / 2, 0, dpr, 3);
-  $("scopeInfo").textContent = `centre ${fmtMHz(center, 4)} MHz · span ${(fs / 1e6).toFixed(2)} MHz · tuned ${fmtMHz(freq, 5)}`;
+  // waterfall: rows scroll at the measured frame rate, timed by the display, so the motion is even
+  const WH = wfC.height;
+  if (wfView && (Math.abs(wfView.f0 - f0) > 1 || Math.abs(wfView.span - span) > 1) && wfView.W === W) {
+    const tmp = document.createElement("canvas"); tmp.width = W; tmp.height = WH; tmp.getContext("2d").drawImage(wfC, 0, 0);
+    wctx.fillStyle = "#000"; wctx.fillRect(0, 0, W, WH);
+    wctx.drawImage(tmp, (f0 - wfView.f0) / wfView.span * W, 0, span / wfView.span * W, WH, 0, 0, W, WH);   // keep the old picture, re-scaled to the new view
+  }
+  wfView = { f0, span, W };
+  const dt = wfLast ? Math.min(100, ts - wfLast) : 16; wfLast = ts;
+  wfAcc += dt / 1000 * frameEma * dpr;
+  const k = Math.min(Math.floor(wfAcc), 8); wfAcc -= Math.floor(wfAcc);
+  if (k > 0) {
+    wctx.drawImage(wfC, 0, 0, W, WH - k, 0, k, W, WH - k);
+    const row = wctx.createImageData(W, 1);
+    for (let x = 0; x < W; x++) {
+      const p = Math.max(0, Math.min(255, Math.round((col[x] - lo) / (hi - lo) * 255)));
+      const c = palette[p];
+      row.data[x * 4] = c[0]; row.data[x * 4 + 1] = c[1]; row.data[x * 4 + 2] = c[2]; row.data[x * 4 + 3] = 255;
+    }
+    for (let j = 0; j < k; j++) wctx.putImageData(row, 0, j);
+  }
+  if (xf >= 0 && xf <= W) { wctx.fillStyle = "rgba(255,64,64,0.8)"; wctx.fillRect(xf - dpr / 2, 0, dpr, 3); }
+  $("scopeInfo").textContent = `centre ${fmtMHz(V.c, 4)} MHz · view ${(span / 1e6).toFixed(span < 1e6 ? 3 : 2)} MHz of ${(fs / 1e6).toFixed(2)} · tuned ${fmtMHz(freq, 5)}`;
   drawBandMap();
 }
 function scopeFreq(e, c) {
   if (!spec) return null;
-  const r = c.getBoundingClientRect();
-  const f = spec.center + ((e.clientX - r.left) / r.width - 0.5) * spec.fs;
+  const r = c.getBoundingClientRect(), V = viewOf(spec);
+  const f = V.f0 + ((e.clientX - r.left) / r.width) * V.span;
   const st = S.step || 12500;
   return Math.round(f / st) * st;
 }
 ["scopeLo", "scopeHi"].forEach((id) => $(id).addEventListener("input", () => ($("scopeAuto").checked = false)));
+/* mouse / touchpad / touch:  wheel or two-finger scroll = move the view left/right,  pinch / stretch (or Ctrl+wheel) = zoom,
+   drag = pan,  click = tune,  Shift+wheel = step the tuning frequency as before */
+const pointers = new Map();
+let pinch0 = null, dragged = false, dragStart = null;
 for (const c of [specC, wfC]) {
-  c.addEventListener("click", (e) => {
-    if (explainOn) return;
+  c.style.touchAction = "none";
+  c.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const r = c.getBoundingClientRect();
+    if (e.shiftKey) { send({ cmd: "step", dir: e.deltaY < 0 ? 1 : -1 }); return; }
+    if (e.ctrlKey) {                                   // touchpad pinch arrives as Ctrl+wheel; Ctrl+wheel with a mouse zooms too
+      setZoom(zoom * Math.exp(-e.deltaY * 0.01), (e.clientX - r.left) / r.width);
+      return;
+    }
+    const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    if (zoom === 1) { send({ cmd: "step", dir: d < 0 ? 1 : -1 }); return; }     // nothing to pan when the whole span is showing
+    panView(Math.max(-0.5, Math.min(0.5, d * (e.deltaMode ? 0.06 : 0.0016))));
+  }, { passive: false });
+  c.addEventListener("pointerdown", (e) => {
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); c.setPointerCapture(e.pointerId);
+    dragged = false; dragStart = { x: e.clientX, c: spec ? viewOf(spec).c : 0 };
+    if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch0 = { d: Math.hypot(a.x - b.x, a.y - b.y), z: zoom }; dragged = true; }
+  });
+  c.addEventListener("pointermove", (e) => {
+    if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const r = c.getBoundingClientRect();
+    if (pointers.size === 2 && pinch0) {               // two fingers: stretch = zoom in, pinch = zoom out
+      const [a, b] = [...pointers.values()];
+      setZoom(pinch0.z * Math.hypot(a.x - b.x, a.y - b.y) / pinch0.d, ((a.x + b.x) / 2 - r.left) / r.width);
+      return;
+    }
+    if (pointers.size === 1 && dragStart && spec && zoom > 1 && Math.abs(e.clientX - dragStart.x) > 5) {   // one finger / button held: drag the view
+      dragged = true;
+      const V = viewOf(spec); viewC = dragStart.c - (e.clientX - dragStart.x) / r.width * V.span; follow = false; syncZoomUi(); queueDraw();
+      return;
+    }
+    if (!pointers.size) {
+      const f = scopeFreq(e, c); if (!f) return;
+      const b = bandsAt(f).filter((x) => !x.point)[0];
+      c.title = fmtMHz(f, 4) + " MHz" + (b ? " · " + b.name : "") + " – click to tune · scroll to move · pinch or Ctrl+scroll to zoom";
+    }
+  });
+  const up = (e) => {
+    const wasPinch = pointers.size === 2;
+    pointers.delete(e.pointerId); if (pointers.size < 2) pinch0 = null;
+    if (explainOn || dragged || wasPinch || e.type === "pointercancel") { if (!pointers.size) dragStart = null; return; }
+    dragStart = null;
     const f = scopeFreq(e, c); if (!f) return;
     if (c === specC && bpSize) {     // a click on the band-plan strip also selects that section
       const r = c.getBoundingClientRect();
@@ -505,13 +609,9 @@ for (const c of [specC, wfC]) {
       }
     }
     send({ cmd: "tune", freq: f });
-  });
-  c.addEventListener("wheel", (e) => { e.preventDefault(); send({ cmd: "step", dir: e.deltaY < 0 ? 1 : -1 }); }, { passive: false });
-  c.addEventListener("mousemove", (e) => {
-    const f = scopeFreq(e, c); if (!f) return;
-    const b = bandsAt(f).filter((x) => !x.point)[0];
-    c.title = fmtMHz(f, 4) + " MHz" + (b ? " · " + b.name : "") + " – click to tune";
-  });
+  };
+  c.addEventListener("pointerup", up);
+  c.addEventListener("pointercancel", up);
 }
 
 /* ======================================================= UK band plan + VFO */
@@ -2224,7 +2324,8 @@ const HELP = {
   k_e: ["E (Enter)", "Tunes the frequency you typed (in MHz). Keyboard Enter does the same."],
   k_arrows: ["▲ ▼", "Step up/down by the STEP size. While scanning or searching they set the direction / skip to the next channel."],
   k_clr: ["CLR", "Clears what you were typing (keyboard: Backspace or Esc)."],
-  scope: ["Spectrum & waterfall", "Live picture of the radio band around you. The top graph shows signal strength across the received bandwidth; the waterfall below shows history – transmissions appear as bright streaks. Click anywhere to tune there, use the mouse wheel to step. The red line and shading show the channel you are listening to. 'Range' and 'Top' set the display contrast."],
+  zoom: ["Zoom", "Magnify the spectrum. On a touch screen stretch two fingers apart to zoom in and pinch to zoom out; on a laptop touchpad do the same pinch gesture; with a mouse hold Ctrl and scroll. When zoomed in, scroll the wheel (or two-finger swipe on the touchpad) up/down to slide the view left/right, or drag it. Click a signal to tune it. Follow keeps the view centred on the frequency you are tuned to; Fit shows everything. Shift+scroll still steps the tuning frequency."],
+  scope: ["Spectrum & waterfall", "Live picture of the radio band around you. The top graph shows signal strength across the received bandwidth; the waterfall below shows history – transmissions appear as bright streaks. Click anywhere to tune there; pinch or Ctrl+scroll to zoom (see Zoom). The red line and shading show the channel you are listening to. 'Range' and 'Top' set the display contrast."],
   banks: ["Memory banks", "10 banks × 100 channels = 1000 memories. Click a bank to view it, right-click to include/exclude it from scanning. In the table: click a frequency or ▶ to listen, click the name to rename, change mode/decoder in the drop-downs, tick L/O to lock out, PRI to make it the priority channel, ✕ to delete."],
   import: ["RadioReference UK import", "On radioreference.com open a UK county/agency database page and use its CSV download (premium) – or select the frequency table on the page, copy it and save it as a .txt file. Choose the file, pick the bank, and Import. AndySDR recognises Frequency, Alpha Tag, Description, Mode, Tag and Tone columns, converts FMN/AM/DMR/P25/NXDN/TETRA modes, and attaches the right decoder. Talkgroup lists (Decimal/Alpha Tag) are stored as talkgroups. Banks overflow into the next free bank."],
   search: ["Search", "Set From/To in MHz, the channel step, mode and sensitivity (lower dB = finds weaker signals but more false hits), then Search. UK quick ranges fill the boxes for you. Results list each active frequency with hit count and strength – click a frequency to listen, Store to save it to the selected bank."],
@@ -2277,7 +2378,7 @@ function openHelp() {
   <h3>QUICK BUTTONS (under the display)</h3>${ctl(["qmode", "qbw", "qband", "qdec", "qlock", "qtog", "qfiles"])}
   <h3>KEYPAD &amp; FUNCTION KEYS</h3>${ctl(["k_scan", "k_man", "k_srch", "k_pgm", "k_lo", "k_pri", "k_mode", "k_step", "k_bank", "k_dly", "k_rec", "k_dec", "k_dot", "k_e", "k_arrows", "k_clr"])}
   <p class="small">Keyboard: digits and <code>.</code> type, <code>Enter</code> tunes, <code>↑ ↓</code> step, <code>S</code> scan, <code>M</code> manual, <code>P</code> program, <code>L</code> lockout, <code>I</code> skip 10 min, <code>H</code> help, <code>Esc</code> clear.</p>
-  <h3>SCREENS</h3>${ctl(["scope", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "satauto", "eibitab", "ft8tab", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "updates", "receiver", "remote", "theme", "conn"])}
+  <h3>SCREENS</h3>${ctl(["scope", "zoom", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "satauto", "eibitab", "ft8tab", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "updates", "receiver", "remote", "theme", "conn"])}
   <h3>DECODER PROGRAMS</h3>
   <p>AndySDR has WEFAX and SSTV built in (SSTV: Martin, Scottie, Robot and PD modes – ISS 145.800 NFM, 2 m 144.500 NFM, 20 m 14.230 USB). DSD-FME, multimon-ng and SatDump now come bundled in the <code>decoders</code> folder next to <code>AndySDR.exe</code>. If one shows ✖ in the DECODERS tab, press <b>⬇ Download missing decoders</b> and AndySDR fetches it from GitHub into <code>%APPDATA%\\AndySDR\\decoders</code>. You can also unzip your own copy into either folder (any sub-folder is fine – AndySDR finds the .exe):</p>
   <dl><dt>DSD-FME</dt><dd>github.com/lwvmobile/dsd-fme – DMR, P25 1/2, NXDN, dPMR, YSF, M17. AndySDR feeds it like SDR++'s network sink (TCP 127.0.0.1:7355, 48 kHz); DSD-FME plays decoded voice on your speakers itself (AndySDR starts the PulseAudio sound server that comes with it).</dd>

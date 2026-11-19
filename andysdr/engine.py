@@ -35,7 +35,7 @@ class Radio:
         self.dev = None
         self.dev_list = []
         self.rx = None
-        self.spec = Spectrum(2048)
+        self.spec = Spectrum(4096)
         self.decoders = DecoderManager(settings, self._emit)
         self.pager = PagerStore(settings, self._emit)
         self.adsb = Adsb(settings, self._emit)
