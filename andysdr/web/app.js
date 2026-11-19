@@ -466,7 +466,13 @@ function onSpectrum(center, fs, freq, data) {
   if (!smooth || smooth.length !== n) smooth = Float32Array.from(data);
   else for (let i = 0; i < n; i++) smooth[i] += (data[i] - smooth[i]) * 0.55;
   spec = { center, fs, freq, data: smooth };
-  queueDraw();
+  if (!scopeLoop) scopeLoop = requestAnimationFrame(scopeTick);   // drawing runs on the display clock, not when data happens to arrive
+}
+let scopeLoop = 0, scopeLastDraw = 0;
+function scopeTick(ts) {
+  scopeLoop = requestAnimationFrame(scopeTick);
+  if (ts - scopeLastDraw < 30) return;              // ~30 fps keeps the waterfall even and the CPU low
+  scopeLastDraw = ts; drawScope(ts);
 }
 function queueDraw() { if (!drawQueued && spec) { drawQueued = true; requestAnimationFrame(drawScope); } }
 function drawScope(ts) {
@@ -986,7 +992,7 @@ function crEnable(on) {
 }
 function crAuto() {
   const mode = $("layoutSel").value;
-  crEnable(mode === "control" || (mode === "auto" && window.innerWidth >= 1300 && window.innerHeight >= 800));
+  crEnable(mode === "control" || (mode === "auto" && window.innerWidth >= 1700 && window.innerHeight >= 950));
 }
 try { $("layoutSel").value = localStorage.getItem("andysdr_layout") || "auto"; } catch (e) {}
 $("layoutSel").onchange = () => { try { localStorage.setItem("andysdr_layout", $("layoutSel").value); } catch (e) {} crAuto(); };
