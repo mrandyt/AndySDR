@@ -186,7 +186,6 @@
     <button class="tab" data-tab="dec">DECODERS</button>
     <button class="tab" data-tab="pag">PAGER MESSAGES <span class="tab-badge" id="pagBadge" hidden>0</span></button>
     <button class="tab" data-tab="adsb">ADS-B <span class="tab-badge" id="adsbBadge" hidden>0</span></button>
-    <button class="tab" data-tab="dab">DAB RADIO</button>
     <button class="tab" data-tab="ft8">FT8 / FT4 <span class="tab-badge" id="ft8Badge" hidden>0</span></button>
     <button class="tab" data-tab="img">WEATHER IMAGES</button>
     <button class="tab" data-tab="rec">RECORDINGS</button>
@@ -421,37 +420,6 @@
       </div>
     </div>
     <div class="muted small" id="adsbNote"></div>
-  </div>
-
-  <!-- DAB -->
-  <div class="tabpage" id="tab-dab">
-    <div class="row wrapline" data-help="dabtab">
-      <b>DAB / DAB+ digital radio</b>
-      <span class="muted small" id="dabStat">stopped</span>
-      <span class="grow"></span>
-      <label>Multiplex <select id="dabCh"></select></label>
-      <button class="btn primary" id="dabStart">▶ Start DAB</button>
-      <button class="btn danger" id="dabStop">■ Stop</button>
-    </div>
-    <div class="row wrapline" id="dabDirRow">
-      <b>Find a station</b>
-      <input type="search" id="dabFind" placeholder="Type a station name, e.g. Kisstory" style="min-width:230px">
-      <span class="grow"></span>
-      <label>Scan <select id="dabScanSel"><option value="uk">UK blocks (about 5 min)</option><option value="all">All Band III (about 12 min)</option></select></label>
-      <button class="btn" id="dabScanBtn">⟳ Scan for stations</button>
-    </div>
-    <div class="muted small" id="dabDirStat"></div>
-    <div class="tablewrap dab-dir"><table class="grid" id="dabDir"><thead><tr><th>Station</th><th>Multiplex</th><th></th></tr></thead><tbody></tbody></table></div>
-    <div class="dab-wrap">
-      <div class="tablewrap dab-list"><table class="grid" id="dabTable"><thead><tr><th>Station</th><th>Now playing</th></tr></thead><tbody></tbody></table></div>
-      <div class="dab-player card">
-        <div class="big" id="dabNow">Nothing playing</div>
-        <div class="muted small" id="dabDls"></div>
-        <audio id="dabAudio" controls preload="none" style="width:100%;margin-top:8px"></audio>
-        <div class="muted small" style="margin-top:6px">The sound plays on <i>this</i> screen (also over the network). Normal radio audio is muted while DAB runs.</div>
-      </div>
-    </div>
-    <p class="muted small">Needs a receiver that can run at 2.4 MS/s or more (RSP2pro, RTL-SDR) and a Band III (174–240 MHz) antenna. UK national multiplexes: BBC National 12B, Digital One 11D, Sound Digital 11B; local multiplexes differ by area (try 10B–10D, 11A, 12A, 12C, 12D). Press <b>Scan for stations</b> once: AndySDR visits each block, notes the multiplex and station names, and remembers them. After that, type a name, press <b>▶ Play</b> and AndySDR tunes the right block for you. Experimental: the DAB decoder (welle-cli) is built from source with the release.</p>
   </div>
 
   <!-- FT8 / FT4 -->

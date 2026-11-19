@@ -24,7 +24,6 @@ network server so any other PC, laptop, tablet or phone in the house can use the
 | Scheduler | Timed captures for **WEFAX charts, SSTV (ISS events), Meteor-M passes** or plain recordings: pick a station, start time, length, days of the week or a single date. AndySDR tunes, decodes, then puts the radio back how it was. Quick picks for Northwood WEFAX, ISS/2 m/HF SSTV and Meteor-M. |
 | Satellites | **SCHEDULER › Satellite auto-capture**: tick ISS SSTV (145.800 MHz), Meteor-M N2-3 / N2-4 (137.900 / 137.100 MHz LRPT) or GOES-19 / GOES-18 (1694.1 MHz HRIT) and AndySDR predicts every pass over your position (orbit data from CelesTrak), tunes in at acquisition of signal, starts the decoder and stops at loss of signal. Minimum-elevation setting, ISS event-date window, honest *below your horizon* notice for geostationary satellites. A capture you add by hand always wins. |
 | FT8 / FT4 | **FT8 / FT4** tab: USB decode in 15 s (FT4: 7.5 s) UTC slots with ft8_lib. Starts by itself when you tune or scan onto an FT8/FT4 dial frequency from the band plan and something is on the air. |
-| DAB radio | **DAB RADIO** tab (experimental): UK Band III multiplex picker, station list with now-playing text and a player – also from remote PCs. Uses welle.io's welle-cli. |
 | Memory | 10 banks × 100 channels. RadioReference CSV / copied-table import (UK or any country), talkgroup lists, export to CSV. |
 | Decoders | DMR, P25 Phase 1/2, NXDN, dPMR, YSF, M17 (via DSD-FME) · POCSAG & FLEX pagers, APRS, DTMF, ZVEI, EAS (via multimon-ng) · **ADS-B aircraft (1090 MHz), FT8/FT4, WEFAX weather charts and SSTV pictures (Martin, Scottie, Robot, PD modes) built in** · Meteor-M LRPT and GOES HRIT satellite pictures (via SatDump) · DAB/DAB+ (via welle-cli) · **TETRA** (own π/4-DQPSK demodulator + osmo-tetra `tetra-rx`: network MCC/MNC, cell and call signalling, text messages; encrypted networks such as Airwave show signalling only). |
 | ADS-B aircraft | **ADS-B** tab: press **▶ Start ADS-B** and AndySDR tunes to 1090 MHz and decodes Mode S / ADS-B itself (any receiver running at 2 MS/s or more – RSP2pro, RTL-SDR, Airspy, HackRF…). Live **aircraft table** (callsign, hex, airline, country, altitude, speed, heading, climb, squawk, distance, messages, last seen – click a heading to sort, filter by text) and a **map** with plane icons pointing the way they fly, height colours, trails, range rings and click-for-details; bright street map by default (or dark / offline styles). **Aircraft info**: registration, type, owner, route and a photo are looked up online (hexdb.io and planespotters.net – only the hex code is sent; switch it off with *Look up registration…*) and cached on disk. Emergency squawks (7500/7600/7700) flash red. Enter your position for distance/bearing and faster fixes. Daily CSV log, CSV export, and an optional feed to other programs (SBS port 30003, raw port 30002, dump1090-style `aircraft.json`). Works from remote PCs and phones too. |
@@ -209,15 +208,14 @@ andysdr/wefax.py       built-in weather fax decoder
 andysdr/pager.py       POCSAG/FLEX message parser, capcode names, daily pager logs
 andysdr/adsb.py        ADS-B / Mode S demodulator, aircraft tracker, SBS + raw feeds
 andysdr/adsb_sim.py    ADS-B message encoder + simulated air traffic (Simulator receiver, tests)
-tests/                 self-tests: adsb, aircraftinfo, satpass, satsched, ft8, dab, updater, lockout (python tests/test_<name>.py)
+tests/                 self-tests: adsb, aircraftinfo, satpass, satsched, ft8, updater, lockout (python tests/test_<name>.py)
 andysdr/memory.py      memory banks + RadioReference import
 andysdr/meshlink.py    MeshCore messaging through a companion board (USB / Wi-Fi / Bluetooth)
 andysdr/server.py      network server (HTTP + WebSocket, password protected)
 andysdr/aircraftinfo.py aircraft registry / photo lookup with disk cache
 andysdr/satpass.py     satellite pass prediction (SGP4) and auto-capture planner
-andysdr/iqbridge.py    local rtl_tcp-compatible IQ server (SatDump, welle-cli use your receiver through it)
+andysdr/iqbridge.py    local rtl_tcp-compatible IQ server (SatDump uses your receiver through it)
 andysdr/ft8.py         FT8 / FT4 slot handling around ft8_lib's decode_ft8
-andysdr/dab.py         DAB channel table + welle-cli mux parsing
 andysdr/updater.py     self-update: GitHub release check, download + SHA-256 check, install, restart
 andysdr/web/           the front panel (HTML/CSS/JS) and logo
 AndySDR.spec           PyInstaller recipe        build_windows.bat   local build

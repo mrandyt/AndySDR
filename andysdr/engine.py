@@ -8,7 +8,7 @@ import wave
 
 import numpy as np
 
-from . import capturemeta, dab, devices, ft8
+from . import capturemeta, devices, ft8
 from .adsb import ADSB_FREQ, Adsb
 from .meshsdr import MeshSdr
 from .autodetect import SignalClassifier
@@ -200,8 +200,8 @@ class Radio:
 
     def _tune(self, f, mode=None, force=False):
         f = int(f)
-        if self.decoders.active in ("dab", "goes") and abs(f - self.freq) > 1000000:
-            self.decoders.stop()              # moved off the DAB block / GOES channel
+        if self.decoders.active == "goes" and abs(f - self.freq) > 1000000:
+            self.decoders.stop()              # moved off the GOES channel
         if self.decoders.active == "meshsdr" and abs(f - self.freq) > 100000:
             self.decoders.stop()              # tuned away from the MeshCore channel
         if self.decoders.active == "adsb" and abs(f - ADSB_FREQ) > 1000000:
@@ -251,7 +251,7 @@ class Radio:
         self.call(do)
 
     def _auto_feed(self, out):
-        if self.decoders.active in ("adsb", "ft8", "goes", "dab", "meshsdr"):
+        if self.decoders.active in ("adsb", "ft8", "goes", "meshsdr"):
             return
         # band plan says FT8 / FT4 here and something is on the air: start that decoder
         if (self.s.get("auto_identify", True) and self.decoders.active in (None, "") and not self.job
@@ -532,13 +532,11 @@ class Radio:
                 self._begin_adsb()
             elif dec_id == "meshsdr":
                 self.start_meshsdr()
-            elif dec_id in ("dab", "goes"):
-                f = dab.channel_freq(sub if sub and sub != "auto" else "12B") if dec_id == "dab" else 1694100000
-                if f:
-                    self._stop_scan()
-                    self.channel = None
-                    self._tune(f, "DIG25", force=True)
-                self.decoders.start(dec_id, (sub if sub and sub != "auto" else "12B") if dec_id == "dab" else sub)
+            elif dec_id == "goes":
+                self._stop_scan()
+                self.channel = None
+                self._tune(1694100000, "DIG25", force=True)
+                self.decoders.start(dec_id, sub)
             else:
                 was_adsb = self.decoders.active == "adsb"
                 self.decoders.start(dec_id, sub)
@@ -1021,7 +1019,7 @@ class Radio:
                 last_pri = time.time()
                 self._priority_check(spec_db)
 
-            if self.decoders.active in ("adsb", "goes", "dab", "meshsdr"):
+            if self.decoders.active in ("adsb", "goes", "meshsdr"):
                 self.decoders.feed_iq(iq, fs, self.offset())    # these decoders work on the raw samples; no audio
             elif produce:
                 try:

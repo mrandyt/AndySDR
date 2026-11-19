@@ -81,7 +81,6 @@ function onJSON(m) {
     case "schedule": SCH = d; renderSchedule(); break;
     case "images": renderImages(d); break;
     case "recordings": renderRecordings(d); break;
-    case "dab_dir": dabDir = d || []; dabRenderDir(); break;
     case "eibi": renderEibi(d); break;
     case "mesh": MESH = d; renderMesh(); break;
     case "mesh_msg": meshAddMsg(d); break;
@@ -807,7 +806,6 @@ function showTab(name) {
   if (name === "dec") send({ cmd: "decoders" });
   if (name === "bp") renderBandPlan();
   if (name === "sch") send({ cmd: "schedule" });
-  if (name === "dab") { dabPoll(); send({ cmd: "dab_dir" }); }
   if (name === "ft8") { FT8.unseen = 0; $("ft8Badge").hidden = true; renderFt8(); }
   if (name === "mesh") { meshRead(meshConv); renderMesh(); setTimeout(() => $("meshMsgs").scrollTop = 1e9, 0); }
   if (name === "pag") { PAG.unseen = 0; pagBadge(); }
@@ -1516,13 +1514,12 @@ const Q_BANDS = [
 const Q_DECS = [
   ["DMR", "dsd", "dmr"], ["P25", "dsd", "p25p1"], ["NXDN", "dsd", "nxdn48"], ["dPMR", "dsd", "dpmr"], ["M17", "dsd", "m17"],
   ["TETRA", "tetra", ""], ["PAGER", "pager", ""], ["APRS", "data", ""], ["WEFAX", "wefax", ""], ["SSTV", "sstv", ""],
-  ["LRPT", "lrpt", ""], ["GOES", "goes", ""], ["DAB", "dab", "12B"], ["ADS-B", "adsb", ""], ["FT8", "ft8", "ft8"], ["FT4", "ft8", "ft4"],
+  ["LRPT", "lrpt", ""], ["GOES", "goes", ""], ["ADS-B", "adsb", ""], ["FT8", "ft8", "ft8"], ["FT4", "ft8", "ft4"],
 ];
 const Q_DEC_TIPS = { dmr: "DMR digital voice", p25p1: "P25 Phase 1 digital voice", nxdn48: "NXDN 4800 digital voice", dpmr: "dPMR digital voice",
   m17: "M17 digital voice", tetra: "TETRA network and call signalling (25 kHz, DIG25)", pager: "POCSAG / FLEX pagers – messages appear in PAGER MESSAGES",
   data: "APRS, DTMF, ZVEI, EAS", wefax: "Weather fax charts (USB mode)", sstv: "SSTV pictures", lrpt: "Meteor-M satellite pictures",
   adsb: "Aircraft tracking on 1090 MHz – opens the ADS-B tab data", goes: "GOES-East/West HRIT images on 1694.1 MHz (needs a dish and LNA)",
-  "12B": "DAB digital radio (BBC National multiplex) – stations in the DAB tab",
   ft8: "FT8 weak-signal digital (USB, 15 s slots) – messages appear in the FT8 tab", ft4: "FT4 (USB, 7.5 s slots)" };
 let sqPrev = -60;
 
@@ -1833,125 +1830,6 @@ function renderSchedule() {
     tr.querySelector("[data-act=edit]").onclick = () => fillSchForm(j);
   });
 }
-/* ======================================================= DAB */
-const DAB_CH = {"5A":174.928,"5B":176.640,"5C":178.352,"5D":180.064,"6A":181.936,"6B":183.648,"6C":185.360,"6D":187.072,"7A":188.928,"7B":190.640,"7C":192.352,"7D":194.064,"8A":195.936,"8B":197.648,"8C":199.360,"8D":201.072,"9A":202.928,"9B":204.640,"9C":206.352,"9D":208.064,"10A":209.936,"10B":211.648,"10C":213.360,"10D":215.072,"11A":216.928,"11B":218.640,"11C":220.352,"11D":222.064,"12A":223.936,"12B":225.648,"12C":227.360,"12D":229.072,"13A":230.784,"13B":232.496,"13C":234.208,"13D":235.776,"13E":237.488,"13F":239.200};
-const DAB_UK = { "12B": "BBC National DAB", "11D": "Digital One", "11B": "Sound Digital" };
-$("dabCh").innerHTML = Object.entries(DAB_CH).map(([k, f]) => `<option value="${k}" ${k === "12B" ? "selected" : ""}>${k} – ${f.toFixed(3)} MHz${DAB_UK[k] ? " · " + DAB_UK[k] : ""}</option>`).join("");
-let dabPlaying = null, dabTimer = null;
-const dabRunning = () => S && S.decoder === "dab";
-async function dabPoll() {
-  clearTimeout(dabTimer);
-  if (!$("tab-dab").classList.contains("active")) return;
-  $("dabStat").textContent = dabRunning() ? `running · block ${S.decoder_sub}` : "stopped";
-  if (dabRunning()) {
-    try {
-      const r = await fetch(`/api/dab/mux.json?token=${encodeURIComponent(token)}`);
-      if (r.ok) {
-        const d = await r.json(), ens0 = (d.ensemble && (d.ensemble.label && d.ensemble.label.label || d.ensemble.label)) || "", ens = typeof ens0 === "string" ? ens0 : "";
-        const sv = (d.services || []).map((x) => ({ sid: x.sid, name: (x.label && x.label.label) || x.label || x.sid, dls: (x.dls && x.dls.label) || x.dls || "" })).filter((x) => x.sid).sort((a, b) => String(a.name).localeCompare(String(b.name)));
-        $("dabStat").textContent = `running · block ${S.decoder_sub}${ens ? " · " + String(ens).trim() : ""} · ${sv.length} stations`;
-        $("dabTable").querySelector("tbody").innerHTML = sv.map((x) => `<tr data-sid="${esc(x.sid)}" class="${dabPlaying && dabPlaying.sid === x.sid ? "sel" : ""}"><td class="cs">${esc(String(x.name).trim())}</td><td class="muted">${esc(String(x.dls).trim())}</td></tr>`).join("") ||
-          '<tr><td colspan="2" class="muted">Searching for the multiplex … stations appear when the ensemble has been decoded (10–30 s).</td></tr>';
-        if (dabPlaying) { const cur = sv.find((x) => x.sid === dabPlaying.sid); if (cur) $("dabDls").textContent = String(cur.dls).trim(); }
-      }
-    } catch (e) { /* server busy */ }
-  } else {
-    $("dabTable").querySelector("tbody").innerHTML = '<tr><td colspan="2" class="muted">DAB is not running. Pick a multiplex and press ▶ Start DAB.</td></tr>';
-  }
-  dabTimer = setTimeout(dabPoll, 3000);
-}
-const dabMux = async () => {
-  try {
-    const r = await fetch(`/api/dab/mux.json?token=${encodeURIComponent(token)}`);
-    if (!r.ok) return null;
-    const d = await r.json();
-    const lab = (x) => (x && typeof x === "object" ? x.label : x) || "";
-    return { ensemble: String(lab(d.ensemble && d.ensemble.label) || "").trim(),
-             services: (d.services || []).map((x) => ({ sid: String(x.sid || ""), name: String(lab(x.label) || "").trim(), dls: String(lab(x.dls) || "").trim() })).filter((x) => x.sid) };
-  } catch (e) { return null; }
-};
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const dabHasName = (x) => x.name && x.name.toLowerCase() !== x.sid.toLowerCase();
-function dabPlay(sid, name) {
-  dabPlaying = { sid, name };
-  $("dabNow").textContent = "▶ " + name;
-  const a = $("dabAudio"); a.src = `/api/dab/mp3/${encodeURIComponent(sid)}?token=${encodeURIComponent(token)}`; a.play().catch(() => {});
-  dabPoll();
-}
-$("dabStart").onclick = () => { send({ cmd: "decoder", id: "dab", sub: $("dabCh").value }); dabPlaying = null; $("dabAudio").removeAttribute("src"); setTimeout(dabPoll, 1500); };
-$("dabStop").onclick = () => { dabScanStop = true; send({ cmd: "decoder", id: "", sub: "auto" }); $("dabAudio").pause(); $("dabAudio").removeAttribute("src"); dabPlaying = null; $("dabNow").textContent = "Nothing playing"; setTimeout(dabPoll, 800); };
-$("dabTable").querySelector("tbody").addEventListener("click", (e) => {
-  const tr = e.target.closest("tr[data-sid]"); if (!tr) return;
-  dabPlay(tr.dataset.sid, tr.querySelector(".cs").textContent);
-});
-
-/* ----- station directory: scan every block once, then pick a station by name ----- */
-let dabDir = [], dabScanning = false, dabScanStop = false;
-function dabRenderDir() {
-  const q = $("dabFind").value.trim().toLowerCase();
-  const rows = [];
-  dabDir.forEach((e) => e.services.forEach((x) => { if (!q || x.name.toLowerCase().includes(q) || (e.ensemble || "").toLowerCase().includes(q)) rows.push({ e, x }); }));
-  rows.sort((a, b) => a.x.name.localeCompare(b.x.name));
-  $("dabDir").querySelector("tbody").innerHTML = rows.map(({ e, x }) => `<tr><td class="cs">${esc(x.name)}</td><td class="muted">${esc(e.ensemble || "")} · ${esc(e.block)} · ${(DAB_CH[e.block] || 0).toFixed(3)} MHz</td>
-    <td><button class="btn small" data-block="${esc(e.block)}" data-sid="${esc(x.sid)}" data-name="${esc(x.name)}">▶ Play</button></td></tr>`).join("") ||
-    `<tr><td colspan="3" class="muted">${dabDir.length ? "No station matches that name." : "No stations saved yet – press ⟳ Scan for stations (needs the receiver and a Band III antenna)."}</td></tr>`;
-  const n = dabDir.reduce((a, e) => a + e.services.length, 0);
-  if (!dabScanning) $("dabDirStat").textContent = dabDir.length ? `${n} stations on ${dabDir.length} multiplexes · last scan ${new Date(Math.max(...dabDir.map((e) => e.t || 0)) * 1000).toLocaleString()}` : "";
-}
-$("dabFind").oninput = dabRenderDir;
-async function dabTuneAndPlay(block, sid, name) {
-  $("dabDirStat").textContent = `Tuning ${name} (block ${block}) …`;
-  if (!(dabRunning() && S.decoder_sub === block)) {
-    send({ cmd: "decoder", id: "dab", sub: block }); dabPlaying = null; $("dabAudio").removeAttribute("src");
-    for (let i = 0; i < 30 && !(dabRunning() && S.decoder_sub === block); i++) await sleep(500);
-  }
-  for (let i = 0; i < 25; i++) {                      // wait for the ensemble to be decoded (up to ~50 s)
-    const m = await dabMux();
-    if (m && m.services.some((x) => x.sid === sid)) { dabPlay(sid, name); $("dabDirStat").textContent = ""; dabRenderDir(); return; }
-    await sleep(2000);
-  }
-  $("dabDirStat").textContent = `Could not find ${name} on block ${block} – check the antenna and RF GAIN, or scan again.`;
-}
-$("dabDir").querySelector("tbody").addEventListener("click", (e) => {
-  const b = e.target.closest("button[data-sid]"); if (!b || dabScanning) return;
-  dabTuneAndPlay(b.dataset.block, b.dataset.sid, b.dataset.name);
-});
-const DAB_UK_SCAN = ["12B", "11D", "11B", "10B", "10C", "10D", "11A", "11C", "12A", "12C", "12D", "10A", "13A", "13B", "13C", "13D", "13E", "13F"];
-async function dabScan() {
-  if (dabScanning) { dabScanStop = true; return; }
-  const blocks = $("dabScanSel").value === "all" ? Object.keys(DAB_CH) : DAB_UK_SCAN;
-  dabScanning = true; dabScanStop = false; $("dabScanBtn").textContent = "■ Stop scan";
-  $("dabAudio").pause(); $("dabAudio").removeAttribute("src"); dabPlaying = null; $("dabNow").textContent = "Nothing playing";
-  const found = [];
-  for (let i = 0; i < blocks.length && !dabScanStop; i++) {
-    const b = blocks[i];
-    $("dabDirStat").textContent = `Scanning ${b} (${DAB_CH[b].toFixed(3)} MHz) – ${i + 1} of ${blocks.length} · ${found.reduce((a, e) => a + e.services.length, 0)} stations so far`;
-    send({ cmd: "decoder", id: "dab", sub: b });
-    let up = false;
-    for (let k = 0; k < 12 && !dabScanStop; k++) { if (dabRunning() && S.decoder_sub === b) { up = true; break; } await sleep(500); }
-    if (!up) { if (dabScanStop) break; $("dabDirStat").textContent = "The DAB decoder did not start – see the DECODERS tab (welle-cli, receiver at 2.4 MS/s or more)."; dabScanning = false; $("dabScanBtn").textContent = "⟳ Scan for stations"; return; }
-    let last = "", still = 0, got = null;
-    for (let k = 0; k < 14 && !dabScanStop; k++) {       // up to ~28 s per block
-      await sleep(2000);
-      const m = await dabMux();
-      const named = m ? m.services.filter(dabHasName) : [];
-      if (m && m.ensemble && named.length) {
-        const sig = named.map((x) => x.sid).sort().join(",");
-        still = sig === last ? still + 1 : 0; last = sig; got = { ensemble: m.ensemble, services: named };
-        if (still >= 2) break;                          // station list has stopped growing
-      } else if (k >= 4) break;                         // nothing after ~10 s: no multiplex here
-    }
-    if (got) found.push({ block: b, ensemble: got.ensemble, t: Date.now() / 1000, services: got.services.map((x) => ({ sid: x.sid, name: x.name })) });
-  }
-  send({ cmd: "decoder", id: "", sub: "auto" });
-  dabScanning = false; $("dabScanBtn").textContent = "⟳ Scan for stations";
-  if (found.length) { dabDir = found; send({ cmd: "dab_dir_save", list: found }); dabRenderDir(); }
-  $("dabDirStat").textContent = dabScanStop ? (found.length ? `Scan stopped – saved ${found.length} multiplexes.` : "Scan stopped.")
-    : found.length ? `Scan finished – ${found.reduce((a, e) => a + e.services.length, 0)} stations on ${found.length} multiplexes saved.`
-                   : "Scan finished but no multiplex was found. Check the Band III antenna and RF GAIN, and that the receiver can run at 2.4 MS/s or more.";
-  setTimeout(dabPoll, 800);
-}
-$("dabScanBtn").onclick = dabScan;
 /* ======================================================= EiBi shortwave schedule */
 let eibiRows = [], eibiTimer = null;
 function eibiSearch() {
@@ -2354,7 +2232,6 @@ const HELP = {
   receiver: ["Receiver", "Choose which SDR to use: every SoapySDR device (RTL-SDR/Nooelec, SDRplay RSP1A/RSP2/RSP2pro/RSPdx/RSPduo, Airspy, HackRF, LimeSDR, Pluto…), rtl_tcp servers on other machines, or the Simulator for practice. Sample rate sets how wide the waterfall is. Antenna picks the input (RSP2: Antenna A, B or Hi-Z). Device switches (bias-T, notch filters, direct sampling) appear underneath automatically."],
   autoid: ["Auto ID (automatic signal identification)", "When ticked, AndySDR analyses whatever you are listening to and shows what it is next to the VFO: DMR (it spots the 30 ms TDMA bursts), P25, NXDN, dPMR, pagers (POCSAG/FLEX), APRS, DTMF, SSTV, WEFAX, TETRA or analogue voice (with any CTCSS tone). It then switches to the right mode and starts the matching decoder by itself, and stops it again when the channel goes back to voice. SSTV pictures are caught from their very first line. A decoder you pick yourself, or one stored on a memory channel, is never overridden. Untick to turn it off."],
   eibitab: ["Shortwave (EiBi)", "The EiBi shortwave broadcast schedule: press Get latest schedule once (or Import file…), then search by station, language or frequency. Tick On air now to see only what is being broadcast right now (UTC). Tune goes to the frequency in AM; ★ stores it in memory; ⏰ schedules an automatic tune-in every time that broadcast is on."],
-  dabtab: ["DAB radio", "UK digital radio (DAB/DAB+, Band III 174–240 MHz). Choose a multiplex (BBC National is 12B, Digital One 11D, Sound Digital 11B), press ▶ Start DAB, wait 10–30 seconds for the station list, then click a station to listen. It needs a receiver running at 2.4 MS/s or more and a Band III antenna; the sound plays on the screen you are using, including a remote PC. Experimental."],
   ft8tab: ["FT8 / FT4", "Weak-signal amateur digital modes. Pick a band and press ▶ FT8 (or ▶ FT4): AndySDR tunes USB to the dial frequency and decodes every 15 s UTC slot (FT4: 7.5 s). It also starts by itself when you tune or scan onto an FT8/FT4 channel from the band plan and something is on the air. The PC clock must be accurate. CQ only hides everything except stations calling CQ. From/Grid are read from the message."],
   satauto: ["Satellite auto-capture", "Tick Record on a satellite and AndySDR predicts every pass over your position for the next 4 days (listed day by day) (set it with My position or 📍), tunes at acquisition of signal, follows the Doppler shift if Track is ticked, runs the right decoder and stops when the satellite sets – then puts the radio back as it was. ISS SSTV listens on 145.800 MHz FM (limit it to the ARISS event dates with the date boxes); Meteor-M N2-3 and N2-4 are LRPT on 137.900 MHz (switch to 137.100 if the satellite moves); GOES-19/18 are 1694.1 MHz HRIT from geostationary orbit – AndySDR says honestly when the satellite is below your horizon. Tick the days of the week you want (none ticked = every day) – you never type a time, AndySDR starts each capture only when the satellite is actually above your horizon. Min elevation hides low, weak passes. Orbit data (TLEs) is downloaded from CelesTrak and refreshed automatically. A capture you add by hand always takes priority."],
   sched: ["Scheduler", "Captures that run by themselves at set times – ideal for weather fax charts, ISS SSTV events and Meteor-M satellite passes. Pick a station from Quick pick (or type a frequency), choose what to do (WEFAX, SSTV, LRPT, record…), the start time on this PC's clock and how long, and either tick days of the week or pick a single date. At the start time AndySDR stops scanning, tunes, runs the decoder; at the end it saves the pictures and puts the radio back exactly as it was. ▶ Now runs one straight away. AndySDR must be running (it can run as a server in the background)."],
@@ -2400,7 +2277,7 @@ function openHelp() {
   <h3>QUICK BUTTONS (under the display)</h3>${ctl(["qmode", "qbw", "qband", "qdec", "qlock", "qtog", "qfiles"])}
   <h3>KEYPAD &amp; FUNCTION KEYS</h3>${ctl(["k_scan", "k_man", "k_srch", "k_pgm", "k_lo", "k_pri", "k_mode", "k_step", "k_bank", "k_dly", "k_rec", "k_dec", "k_dot", "k_e", "k_arrows", "k_clr"])}
   <p class="small">Keyboard: digits and <code>.</code> type, <code>Enter</code> tunes, <code>↑ ↓</code> step, <code>S</code> scan, <code>M</code> manual, <code>P</code> program, <code>L</code> lockout, <code>I</code> skip 10 min, <code>H</code> help, <code>Esc</code> clear.</p>
-  <h3>SCREENS</h3>${ctl(["scope", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "satauto", "dabtab", "eibitab", "ft8tab", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "updates", "receiver", "remote", "theme", "conn"])}
+  <h3>SCREENS</h3>${ctl(["scope", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "satauto", "eibitab", "ft8tab", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "updates", "receiver", "remote", "theme", "conn"])}
   <h3>DECODER PROGRAMS</h3>
   <p>AndySDR has WEFAX and SSTV built in (SSTV: Martin, Scottie, Robot and PD modes – ISS 145.800 NFM, 2 m 144.500 NFM, 20 m 14.230 USB). DSD-FME, multimon-ng and SatDump now come bundled in the <code>decoders</code> folder next to <code>AndySDR.exe</code>. If one shows ✖ in the DECODERS tab, press <b>⬇ Download missing decoders</b> and AndySDR fetches it from GitHub into <code>%APPDATA%\\AndySDR\\decoders</code>. You can also unzip your own copy into either folder (any sub-folder is fine – AndySDR finds the .exe):</p>
   <dl><dt>DSD-FME</dt><dd>github.com/lwvmobile/dsd-fme – DMR, P25 1/2, NXDN, dPMR, YSF, M17. AndySDR feeds it like SDR++'s network sink (TCP 127.0.0.1:7355, 48 kHz); DSD-FME plays decoded voice on your speakers itself (AndySDR starts the PulseAudio sound server that comes with it).</dd>

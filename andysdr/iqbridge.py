@@ -1,6 +1,6 @@
 """rtl_tcp-compatible IQ server.
 
-Lets external programs (SatDump for GOES HRIT, welle-cli for DAB) use the receiver AndySDR already
+Lets external programs (SatDump for GOES HRIT) use the receiver AndySDR already
 has open – RSP2pro, RTL-SDR, anything – by connecting to it as if it were an `rtl_tcp` server:
 
     4-byte "RTL0" magic, tuner type, gain count   (12 bytes)

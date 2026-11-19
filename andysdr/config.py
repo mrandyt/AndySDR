@@ -89,7 +89,6 @@ DEFAULTS = {
     "adsb_raw_port": 30002,
     "update_check": True,         # look for a newer AndySDR on GitHub (start-up + every 12 h) and ask before doing anything
     "update_auto_download": False,  # download in the background, then ask before installing
-    "dab_stations": [],           # DAB station directory built by the DAB tab's scan: [{block, ensemble, services}]
     "update_skip": "",            # version the user chose to skip
     "update_last_check": 0,
 }

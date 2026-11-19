@@ -33,7 +33,6 @@ from .config import app_dir, data_dir
 from .iqbridge import IqBridge
 from .ft8 import Ft8Decoder, match_freq
 from . import capturemeta
-from . import dab as dablib
 from .sstv import SstvDecoder
 from .wefax import WefaxDecoder
 from .tetrademod import TetraDemod
@@ -64,8 +63,6 @@ DECODERS = {
                "help": "Records the pass, then SatDump makes the images. 137.9 MHz, DIG25 mode."},
     "ft8":    {"name": "FT8 / FT4 weak-signal digital (ft8_lib)", "exe": "decode_ft8",
                "help": "Decodes FT8 (15 s) or FT4 (7.5 s) in USB mode – tune the dial frequency (e.g. 14.074 MHz). Starts by itself on FT8/FT4 channels from the band plan."},
-    "dab":    {"name": "DAB / DAB+ digital radio (welle-cli)", "exe": "welle-cli",
-               "help": "UK Band III DAB radio. Choose the multiplex in the DAB tab; stations appear there with a player. Experimental."},
     "goes":   {"name": "GOES HRIT weather satellite (SatDump)", "exe": "satdump",
                "help": "1694.1 MHz GOES-East/West images and EMWIN. Needs a dish + L-band LNA; the receiver is shared with SatDump over a local rtl_tcp link."},
     "adsb":   {"name": "ADS-B aircraft 1090 MHz (built in)", "exe": None,
@@ -76,12 +73,6 @@ DECODERS = {
                "help": "Decodes the TETRA downlink (25 kHz, DIG25 mode, tune to the carrier centre): network codes (MCC/MNC), "
                        "cell and call set-up and text messages. Encrypted traffic (UK Airwave) shows signalling only, no speech."},
 }
-
-
-def _free_port():
-    with socket.socket() as sk:
-        sk.bind(("127.0.0.1", 0))
-        return sk.getsockname()[1]
 
 
 def find_exe(base, overrides=None):
@@ -248,12 +239,11 @@ class DecoderManager:
         self.status = "off"
         self.on_pager = None       # set by the radio: on_pager(line) -> Pager Messages tab
         self.ft8 = None
-        self.dab_port = 0
         self.freq_fn = None        # set by the radio: () -> tuned frequency (Hz)
         self.job_fn = None         # set by the radio: () -> running scheduled job (dict) or None
         self.dial_fn = None        # set by the radio: () -> FT8 dial frequency of the tuned channel (Hz)
         self.ft8_history = []
-        self.bridge = None         # IqBridge (rtl_tcp server) while GOES / DAB decoders run
+        self.bridge = None         # IqBridge (rtl_tcp server) while the GOES decoder runs
         self.rate_fn = lambda: 2400000   # set by the radio: current receiver sample rate
         self._watch_stop = True
         self.adsb = None           # set by the radio: the ADS-B engine (takes IQ, not audio)
@@ -400,19 +390,6 @@ class DecoderManager:
                 self.ft8 = Ft8Decoder(exe, proto, on_message=self._ft8_msg, on_log=self.log, dial=self.dial_fn)
                 self.log(f"{proto.upper()} decoder running – decoding at the end of each {self.ft8.slot_len:g} s UTC slot. "
                          "Keep the PC clock accurate (Windows: Settings > Time > Sync now).")
-            elif dec_id == "dab":
-                exe = find_exe("welle-cli", ov)
-                if not exe:
-                    raise FileNotFoundError("welle-cli.exe not found – see Help > Decoders")
-                ch = sub.upper() if sub and sub.upper() in dablib.CHANNELS else "12B"
-                self.sub = ch
-                self.bridge = IqBridge(out_rate=dablib.DAB_RATE)
-                port = self.bridge.start()
-                self.dab_port = _free_port()
-                args = [exe, "-c", ch, "-w", str(self.dab_port), "-F", f"rtl_tcp,127.0.0.1:{port}"]
-                self.proc = _popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
-                _Reader(self.proc.stdout, self.log, lambda l: any(k in l for k in ("Ensemble", "ensemble", "rror", "Service", "Found", "Lock", "SNR"))).start()
-                self.log(f"DAB: welle-cli started on block {ch} ({dablib.CHANNELS[ch] / 1e6:.3f} MHz) – stations appear in the DAB tab")
             elif dec_id == "goes":
                 exe = find_exe("satdump", ov)
                 if not exe:
@@ -672,7 +649,7 @@ class DecoderManager:
             self.adsb.feed(iq, fs)
         elif self.active == "meshsdr" and self.meshsdr:
             self.meshsdr.feed(iq, fs, offset)
-        elif self.active in ("goes", "dab") and self.bridge:
+        elif self.active == "goes" and self.bridge:
             self.bridge.feed(iq, fs, offset)
 
     def _watch_images(self, out):

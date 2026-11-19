@@ -22,7 +22,7 @@ import threading
 import time
 import urllib.parse
 
-from . import capturemeta, dab as dablib
+from . import capturemeta
 from .eibi import Eibi
 from .dsp import BANDWIDTHS
 from .config import VERSION, data_dir, resource_dir
@@ -177,12 +177,6 @@ class Server:
             data = json.dumps(self.radio.adsb.tracker.aircraft_json(time.time())).encode()
             await self._send(writer, 200, data, "application/json")
             return
-        if path == "/api/dab/mux.json":
-            await self._dab_proxy(writer, "/mux.json", False)
-            return
-        if path.startswith("/api/dab/mp3/"):
-            await self._dab_proxy(writer, "/mp3/" + path[len("/api/dab/mp3/"):], True)
-            return
         if path.startswith("/images/"):
             await self._file(writer, self.images, path[len("/images/"):])
             return
@@ -192,42 +186,6 @@ class Server:
         if path in ("/", ""):
             path = "/index.html"
         await self._file(writer, self.web, path.lstrip("/"))
-
-    async def _dab_proxy(self, writer, upstream, stream):
-        """Relay welle-cli's /mux.json or an MP3 stream, so remote screens can use DAB behind our password check."""
-        port = self.radio.decoders.dab_port if self.radio.decoders.active == "dab" else 0
-        if not port or not re.fullmatch(r"/(mux\.json|mp3/[0-9A-Za-z_.x-]{1,40})", upstream):
-            await self._send(writer, 404, b"DAB is not running", "text/plain")
-            return
-        try:
-            ur, uw = await asyncio.wait_for(asyncio.open_connection("127.0.0.1", port), 5)
-            uw.write(f"GET {upstream} HTTP/1.0\r\nHost: localhost\r\n\r\n".encode())
-            await uw.drain()
-            head = await asyncio.wait_for(ur.readuntil(b"\r\n\r\n"), 10)
-            status = head.split(b"\r\n", 1)[0].decode("latin-1")
-            if " 200" not in status:
-                await self._send(writer, 404, b"Station not available yet", "text/plain")
-                uw.close()
-                return
-            if not stream:
-                body = await asyncio.wait_for(ur.read(), 10)
-                await self._send(writer, 200, body, "application/json")
-                uw.close()
-                return
-            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: audio/mpeg\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n")
-            while True:
-                chunk = await asyncio.wait_for(ur.read(4096), 30)
-                if not chunk:
-                    break
-                writer.write(chunk)
-                await writer.drain()
-        except Exception:                       # client left, welle-cli stopped ...
-            pass
-        finally:
-            try:
-                writer.close()
-            except Exception:
-                pass
 
     async def _file(self, writer, root, rel):
         full = os.path.realpath(os.path.join(root, rel))
@@ -597,12 +555,6 @@ class Server:
                 threading.Thread(target=_dl, name="eibi-dl", daemon=True).start()
             elif cmd == "images":
                 self._reply(c, "images", self._images())
-            elif cmd == "dab_dir":
-                self._reply(c, "dab_dir", self.s.get("dab_stations", []))
-            elif cmd == "dab_dir_save":
-                self.s["dab_stations"] = dablib.clean_directory(m.get("list"))
-                self.s.save()
-                self._reply(c, "dab_dir", self.s["dab_stations"])
             elif cmd == "recordings":
                 self._reply(c, "recordings", self._recordings())
             elif cmd == "decoders":

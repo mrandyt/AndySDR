@@ -614,17 +614,8 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 
 .adsb-photo { display: block; width: 100%; max-width: 240px; border-radius: 6px; margin-bottom: 4px; }
 
-.dab-wrap { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 12px; align-items: start; }
-.dab-list { max-height: 460px; }
-.dab-dir { max-height: 300px; margin: 6px 0 12px; }
-.dab-dir td.cs { font-weight: 600; }
-#dabTable tr[data-sid] { cursor: pointer; }
-#dabTable tr.sel td { background: color-mix(in srgb, var(--accent) 22%, transparent); }
-.dab-player { padding: 12px; }
-.dab-player .big { font-size: 18px; font-weight: 700; color: var(--accent); }
 tr.cq td { color: var(--accent); }
 .sat-card { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
-@media (max-width: 800px) { .dab-wrap { grid-template-columns: 1fr; } }
 
 /* ---- bandwidth selector ---- */
 .bw-row { grid-template-columns: 1fr auto; }
