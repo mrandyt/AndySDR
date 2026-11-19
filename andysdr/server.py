@@ -378,6 +378,25 @@ class Server:
             res.append(d)
         return res
 
+    def _delete_capture(self, c, kind, rel):
+        """Delete one picture or recording (the person pressed Delete and confirmed)."""
+        root = {"images": self.images, "recordings": os.path.join(data_dir(), "recordings")}.get(kind)
+        if not root:
+            return
+        src = os.path.realpath(os.path.join(root, str(rel or "")))
+        if not src.startswith(os.path.realpath(root) + os.sep) or not os.path.isfile(src):
+            self._reply(c, "event", {"level": "warn", "text": "That file no longer exists"})
+        else:
+            try:
+                os.remove(src)
+                self._reply(c, "event", {"level": "info", "text": f"Deleted {os.path.basename(src)}"})
+            except OSError as e:
+                self._reply(c, "event", {"level": "warn", "text": f"Could not delete: {e}"})
+        if kind == "images":
+            self._reply(c, "images", self._images())
+        else:
+            self._reply(c, "recordings", self._recordings())
+
     def _save_download(self, c, kind, rel, name):
         """Copy a picture / recording into the Downloads folder of the PC AndySDR runs on (the desktop window
         cannot do browser downloads; remote browsers use their own normal download instead)."""
@@ -528,6 +547,8 @@ class Server:
                 self.s.save()
                 if not m.get("quiet"):
                     self._reply(c, "event", {"level": "info", "text": "Settings saved"})
+            elif cmd == "delete_capture":
+                self._delete_capture(c, m.get("kind"), m.get("f"))
             elif cmd == "save_download":
                 self._save_download(c, m.get("kind"), m.get("f"), m.get("name"))
             elif cmd == "open_folder":

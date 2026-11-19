@@ -276,8 +276,9 @@ class Radio:
             self.classifier.reset()
             return
         # SSTV pictures start with a VIS header – watch for it continuously so none are missed
+        recording_sound = self.rec is not None or bool(self.job and self.job.get("action") == "record")
         if self.decoders.active in (None, "") or (self.auto_owned and self.decoders.active != "sstv"):
-            if self.mode != "WFM":
+            if self.mode != "WFM" and not recording_sound:        # a sound recording makes sound only - no pictures
                 if self.sstv_watch is None:
                     self.sstv_watch = SstvDecoder(self.decoders.images_dir, watch_only=True)
                 self.sstv_watch.process(out["audio_ungated"])
@@ -379,6 +380,9 @@ class Radio:
             self.job = job
             self._tune(job["freq"], job.get("mode"), force=True)
             act = job.get("action")
+            if act in ("wefax", "sstv", "lrpt", "goes") and self.rec:
+                self.rec.close()               # picture jobs keep the picture only, not the sound
+                self.rec = None
             if act in ("wefax", "sstv", "lrpt", "goes", "pager", "data", "dsd"):
                 self.decoders.start(act, "auto")
             elif act == "record" and not self.rec:
@@ -538,6 +542,10 @@ class Radio:
                 self._tune(1694100000, "DIG25", force=True)
                 self.decoders.start(dec_id, sub)
             else:
+                if dec_id in ("wefax", "sstv", "lrpt") and self.rec:
+                    self.rec.close()           # picture decoders keep the picture only, not the sound
+                    self.rec = None
+                    self._emit("event", {"level": "info", "text": "Sound recording stopped – picture decoders save the picture only"})
                 was_adsb = self.decoders.active == "adsb"
                 self.decoders.start(dec_id, sub)
                 if was_adsb:
@@ -725,6 +733,9 @@ class Radio:
     def record(self, on):
         def do():
             if on and not self.rec:
+                if self.decoders.active in ("wefax", "sstv", "lrpt"):
+                    self._emit("event", {"level": "info", "text": "A picture decoder is running – it saves the picture only, so no sound is recorded"})
+                    return
                 path = os.path.join(data_dir(), "recordings",
                                     time.strftime("audio_%Y%m%d_%H%M%S_") + f"{self.freq / 1e6:.4f}MHz.wav")
                 # what is it? scheduled job name, else the memory channel name, else Auto ID's label

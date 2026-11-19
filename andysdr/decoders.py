@@ -32,7 +32,7 @@ from scipy import signal
 from .config import app_dir, data_dir
 from .iqbridge import IqBridge
 from .ft8 import Ft8Decoder, match_freq
-from . import capturemeta
+from . import capturemeta, imgcheck
 from .sstv import SstvDecoder
 from .wefax import WefaxDecoder
 from .tetrademod import TetraDemod
@@ -294,9 +294,17 @@ class DecoderManager:
         self.ft8_history = (self.ft8_history + [m])[-300:]
         self.emit("ft8", m)
 
+    def _publish_image(self, rel):
+        """Announce a new picture - unless it is blank, in which case it is deleted and nothing is shown."""
+        full = os.path.join(self.images_dir, rel)
+        if imgcheck.discard_if_blank(full):
+            self.log(f"Skipped a blank picture ({os.path.basename(rel)}) – nothing was decoded")
+            return
+        self.emit("image", {"file": rel})
+
     def _img_event(self, k, v):
         if k == "image":
-            self.emit("image", {"file": v})
+            self._publish_image(v)
         else:
             self.log(v)
 
@@ -330,7 +338,7 @@ class DecoderManager:
         try:
             if dec_id == "wefax":
                 self.wefax = WefaxDecoder(self.images_dir, on_event=lambda k, v: (
-                    self.emit("image", {"file": v}) if k == "image" else self.log(v)))
+                    self._publish_image(v) if k == "image" else self.log(v)))
                 self.log("WEFAX decoder running – waiting for start tone (free-running meanwhile)")
             elif dec_id == "sstv":
                 self.sstv = SstvDecoder(self.images_dir, on_event=self._img_event)
@@ -638,8 +646,21 @@ class DecoderManager:
             p.wait()
             pngs = glob.glob(os.path.join(out, "**", "*.png"), recursive=True)
             self.log(f"SatDump finished – {len(pngs)} images")
+            shown = 0
             for f in pngs[:30]:
-                self.emit("image", {"file": os.path.relpath(f, self.images_dir).replace("\\", "/")})
+                rel = os.path.relpath(f, self.images_dir).replace("\\", "/")
+                if imgcheck.discard_if_blank(f):
+                    continue
+                shown += 1
+                self.emit("image", {"file": rel})
+            self.log(f"{shown} picture(s) kept" + (f", {len(pngs) - shown} blank one(s) discarded" if len(pngs) > shown else ""))
+            # the pictures are the product: drop the huge raw IQ recording once SatDump has made them
+            if pngs and not self.settings.get("keep_iq", False):
+                try:
+                    os.remove(path)
+                    self.log("Raw IQ recording deleted (pictures are kept)")
+                except OSError:
+                    pass
         threading.Thread(target=run, daemon=True).start()
 
     # ------------------------------------------------------------------
@@ -662,7 +683,8 @@ class DecoderManager:
                 for f in glob.glob(os.path.join(out, "**", "*.png"), recursive=True):
                     if f not in seen and time.time() - os.path.getmtime(f) > 5:
                         seen.add(f)
-                        self.emit("image", {"file": os.path.relpath(f, self.images_dir).replace("\\", "/")})
+                        if not imgcheck.discard_if_blank(f):
+                            self.emit("image", {"file": os.path.relpath(f, self.images_dir).replace("\\", "/")})
                 time.sleep(10)
         threading.Thread(target=run, name="goes-images", daemon=True).start()
 

@@ -8,3 +8,4 @@ sgp4>=2.22         # satellite pass prediction (ISS SSTV, Meteor-M, GOES)
 #   conda install -c conda-forge soapysdr soapysdr-module-rtlsdr
 # SDRplay receivers only need SDRplay's API installer from sdrplay.com.
 certifi
+pillow>=10.0       # spots blank pictures so they are not saved

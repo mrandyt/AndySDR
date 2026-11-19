@@ -35,7 +35,7 @@ jobs:
           for m in soapysdr-module-rtlsdr soapysdr-module-airspy soapysdr-module-airspyhf soapysdr-module-hackrf soapysdr-module-remote soapysdr-module-lms7 soapysdr-module-plutosdr; do
             conda install -y "$m" || echo "skipped $m"
           done
-          python -m pip install pywebview pyinstaller meshcore pyserial bleak sgp4 certifi
+          python -m pip install pywebview pyinstaller meshcore pyserial bleak sgp4 certifi pillow
           python -c "import meshcore, serial, bleak; print(\"MeshCore library\", meshcore.__name__, \"OK\")"
           python -c "import SoapySDR; print('SoapySDR', SoapySDR.getAPIVersion(), SoapySDR.listModules())"
           # RTL-SDR (Nooelec etc.) support is essential - fail the build if its driver module is missing
@@ -56,7 +56,7 @@ jobs:
       - name: New-feature self-tests (informational)
         continue-on-error: true
         run: |
-          for t in test_aircraftinfo test_satpass test_satsched test_ft8 test_bandwidth test_dsdcond test_tetra; do python tests/$t.py || echo "::warning::$t failed"; done
+          for t in test_aircraftinfo test_satpass test_satsched test_ft8 test_bandwidth test_imgcheck test_dsdcond test_tetra; do python tests/$t.py || echo "::warning::$t failed"; done
 
       - name: Build AndySDR.exe
         run: |
