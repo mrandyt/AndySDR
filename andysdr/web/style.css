@@ -719,3 +719,5 @@ body.cr .knob { transform: scale(.85); }
   --grille: radial-gradient(circle, #bdb29b 38%, transparent 42%) 0 0 / 9px 9px, #efe9dc;
   --scope-line: #e0b878; --scope-fill: rgba(224, 184, 120, .2); --ok: #2f7a4f; --warn: #a86a10;
 }
+
+html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spectrum, not the window */

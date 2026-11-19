@@ -76,6 +76,25 @@ class FirDecimator:
         return out
 
 
+class RationalDecimator(FirDecimator):
+    """Polyphase resampler by up/down (e.g. 1 MS/s -> 240 kS/s = 6/25) with filter history carried between blocks."""
+
+    def __init__(self, up, down, cutoff_hz, fs, ntaps=401):
+        self.U, self.D = int(up), int(down)
+        self.h = (signal.firwin(ntaps, cutoff_hz, fs=fs * self.U) * self.U).astype(np.float32)
+        need = int(np.ceil((len(self.h) - 1) / self.U))
+        self.H = int(np.ceil(need / self.D)) * self.D          # history, a multiple of `down` so the phase lines up
+        self.hist = np.zeros(self.H, np.complex64)
+
+    def process(self, x):
+        buf = np.concatenate((self.hist, x))
+        y = signal.upfirdn(self.h, buf, self.U, self.D)
+        start = self.H * self.U // self.D
+        out = y[start:start + len(x) * self.U // self.D]
+        self.hist = buf[-self.H:]
+        return out
+
+
 class StatefulFIR:
     def __init__(self, taps):
         self.b = np.asarray(taps)
@@ -105,9 +124,12 @@ class Mixer:
     def process(self, x, freq, fs):
         if freq == 0:
             return x
-        n = np.arange(len(x))
         w = -2 * np.pi * freq / fs
-        osc = np.exp(1j * (self.phase + w * n)).astype(np.complex64)
+        key = (len(x), w)
+        if getattr(self, "_key", None) != key:            # the ramp only depends on tune offset and block size: reuse it
+            self._ramp = np.exp(1j * (w * np.arange(len(x)))).astype(np.complex64)
+            self._key = key
+        osc = self._ramp * np.complex64(np.exp(1j * self.phase))
         self.phase = (self.phase + w * len(x)) % (2 * np.pi)
         return x * osc
 
@@ -137,14 +159,35 @@ class Spectrum:
         return self.avg
 
 
+class _Chain:
+    def __init__(self, *stages):
+        self.stages = [s for s in stages if s is not None]
+
+    def process(self, x):
+        for s in self.stages:
+            x = s.process(x)
+        return x
+
+
 class Receiver:
     """One channel receiver: tuned offset -> 48 kHz audio + side outputs for decoders."""
 
     def __init__(self, fs):
         self.fs = int(fs)
-        self.D1 = max(1, int(round(self.fs / IF_RATE)))
         self.mixer = Mixer()
-        self.stage1 = FirDecimator(self.D1, 100000, self.fs)
+        if self.fs % IF_RATE == 0:
+            self.D1 = self.fs // IF_RATE
+            self.stage1 = FirDecimator(self.D1, 100000, self.fs)
+        else:
+            # rates such as 10 MS/s are not a whole multiple of 240 kS/s: decimate to 1 MS/s, then resample 6/25
+            from math import gcd
+            pre = next(d for d in (10, 8, 5, 4, 2, 1) if self.fs % d == 0 and (self.fs // d) % 1000 == 0)
+            mid = self.fs // pre
+            g = gcd(IF_RATE, mid)
+            self.D1 = pre
+            first = FirDecimator(pre, 350000, self.fs, ntaps=41) if pre > 1 else None
+            second = RationalDecimator(IF_RATE // g, mid // g, 100000, mid)
+            self.stage1 = _Chain(first, second)
         self.stage2 = FirDecimator(IF_RATE // AUDIO_RATE, 20000, IF_RATE, ntaps=61)
         self.mode = None
         self.bw = 0                      # chosen channel width in Hz (0 = the mode's default)

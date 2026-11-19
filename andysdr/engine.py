@@ -153,13 +153,13 @@ class Radio:
         try:
             # pick a sample rate the DSP chain divides evenly
             want = int(self.s.get("sample_rate") or 0)
-            dev.sample_rate = want if (want and want % 240000 == 0 and want in dev.sample_rates()) else 2400000
+            dev.sample_rate = want if (want and want in dev.sample_rates()) else 2400000
             dev.center = self._hw_center_for(self.freq, 2400000)
             dev.gain = float(self.s["rf_gain"])
             dev.agc = bool(self.s["agc"])
             dev.open()
             rates = dev.sample_rates()
-            sr = want if want in rates and want % 240000 == 0 else pick_sample_rate(rates)
+            sr = want if want in rates else pick_sample_rate(rates)
             if sr != dev.sample_rate:
                 dev.set_sample_rate(sr)
             dev.set_ppm(self.s["ppm"])

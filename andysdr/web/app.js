@@ -992,10 +992,9 @@ function crEnable(on) {
 }
 function crAuto() {
   const mode = $("layoutSel").value;
-  crEnable(mode === "control" || (mode === "auto" && window.innerWidth >= 1700 && window.innerHeight >= 950));
+  crEnable(false);          // the Control room layout was withdrawn - the classic layout is the only one
 }
-try { $("layoutSel").value = localStorage.getItem("andysdr_layout") || "auto"; } catch (e) {}
-$("layoutSel").onchange = () => { try { localStorage.setItem("andysdr_layout", $("layoutSel").value); } catch (e) {} crAuto(); };
+$("layoutSel").onchange = crAuto;
 window.addEventListener("resize", () => { clearTimeout(CR.t); CR.t = setTimeout(crAuto, 200); });
 document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => showTab(t.dataset.tab)));
 
@@ -1656,7 +1655,7 @@ function renderDevice() {
   applyDeviceBandplan();
   if (knobs.gain) { knobs.gain.min = DEV.gain_min; knobs.gain.max = DEV.gain_max; knobs.gain.render(); }
   [...$("devSel").options].forEach((o) => (o.selected = o.value === DEV.key));
-  $("rateSel").innerHTML = (DEV.rates || []).filter((r) => r % 240000 === 0).map((r) => `<option value="${r}" ${r === DEV.sample_rate ? "selected" : ""}>${(r / 1e6).toFixed(2)} MS/s</option>`).join("");
+  $("rateSel").innerHTML = (DEV.rates || []).filter((r) => r >= 960000).map((r) => `<option value="${r}" ${r === DEV.sample_rate ? "selected" : ""}>${(r / 1e6).toFixed(2)} MS/s</option>`).join("");
   $("antSel").innerHTML = (DEV.antennas || []).map((a) => `<option>${esc(a)}</option>`).join("") || "<option>default</option>";
   const box = $("devSettings");
   box.innerHTML = (DEV.settings || []).map((s, i) => {
@@ -2551,3 +2550,8 @@ setBpSize(bpSize, false);
 renderLCD();
 connect();
 setTimeout(crAuto, 0);
+
+/* pinch / Ctrl+wheel must zoom the SPECTRUM, never the whole browser window */
+window.addEventListener("wheel", (e) => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
+["gesturestart", "gesturechange", "gestureend"].forEach((g) => document.addEventListener(g, (e) => e.preventDefault()));
+window.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && ["+", "=", "-", "_", "0"].includes(e.key)) { e.preventDefault(); if (typeof setZoom === "function" && spec) { if (e.key === "0") $("zoomFit").click(); else (e.key === "-" || e.key === "_" ? $("zoomOut") : $("zoomIn")).click(); } } });
