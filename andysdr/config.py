@@ -6,7 +6,7 @@ import sys
 import threading
 
 APP_NAME = "AndySDR"
-VERSION = "1.14.0"
+VERSION = "1.15.0"
 GITHUB_REPO = "mrandyt/AndySDR"   # where updates are published (GitHub Releases)
 
 
@@ -69,7 +69,7 @@ DEFAULTS = {
     "decoder": "",                # active decoder id
     "decoder_paths": {},          # user overrides of external decoder exe paths
     "window_open_browser": False,
-    "theme": "pro2045",           # pro2045 | ubcd260 | trx2
+    "theme": "pro2045",           # pro2045 | ubcd260 | trx2 | sdrpp | bluedark | bluelight | softdark | softlight
     "auto_decoder": True,         # start a memory channel's decoder automatically
     "auto_identify": True,        # identify signals and start the right decoder by itself
     "schedule": [],               # timed captures (WEFAX, SSTV, LRPT, recordings)

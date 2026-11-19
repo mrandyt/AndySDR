@@ -11,6 +11,10 @@ const THEME_TEXT = {
   ubcd260: ["DIGITAL BASE/MOBILE · DMR · P25 · NXDN", "SDR DIGITAL SCANNER"],
   trx2: ["DIGITAL TRUNKING · DMR · NXDN · P25", "SDR SCANNER-RECEIVER"],
   sdrpp: ["RADIO", ""],
+  bluedark: ["1000 CHANNEL · PROGRAMMABLE", "SDR SCANNER"],
+  bluelight: ["1000 CHANNEL · PROGRAMMABLE", "SDR SCANNER"],
+  softdark: ["1000 CHANNEL · PROGRAMMABLE", "SDR SCANNER"],
+  softlight: ["1000 CHANNEL · PROGRAMMABLE", "SDR SCANNER"],
 };
 const UK_PRESETS = [
   ["Airband", 118, 137, 8330, "AM"], ["2m Amateur", 144, 146, 12500, "NFM"],
@@ -111,6 +115,7 @@ function onHello(h) {
   S = h.state; MEM = h.memory; DEV = h.device; applyDeviceBandplan(); decoders = h.decoders; BWS = h.bandwidths || BWS;
   renderDevices(h.devices); renderDevice(); renderMemory(); renderActivity(h.activity);
   renderDecoders(); renderImages(h.images); renderState();
+  if (CR.on) Object.values(CR.docks).forEach((d) => d.page && tabEffects(d.page));
   if (h.schedule) { SCH = h.schedule; renderSchedule(); }
   if (h.mesh) { MESH = h.mesh; MESHMSG = h.mesh_history || []; renderMesh(); }
   if (h.meshsdr) onMeshSdr(h.meshsdr);
@@ -897,9 +902,7 @@ $("pkMem").onclick = () => {
 fillBands("amateur");
 
 /* ======================================================= tabs */
-function showTab(name) {
-  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === name));
-  document.querySelectorAll(".tabpage").forEach((p) => p.classList.toggle("active", p.id === "tab-" + name));
+function tabEffects(name) {
   if (name === "img") send({ cmd: "images" });
   if (name === "rec") send({ cmd: "recordings" });
   if (name === "eibi") eibiSearch();
@@ -912,6 +915,82 @@ function showTab(name) {
   if (name === "adsb") setTimeout(() => { adsbBadge(); renderAdsbTable(); adsbStat(); adsDraw(); }, 0);
   sizeCanvases();
 }
+function showTab(name) {
+  if (CR.on) { crShow(name); return; }
+  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === name));
+  document.querySelectorAll(".tabpage").forEach((p) => p.classList.toggle("active", p.id === "tab-" + name));
+  tabEffects(name);
+}
+/* ----- control-room layout: the tab pages can sit in docks around the spectrum, several visible at once ----- */
+const CR = { on: false, docks: {}, home: [], names: {}, focus: "B2",
+  def: { L1: "mem", B1: "dec", B2: "img", B3: "sch", R1: "rec", R2: "act", R3: "pag" } };
+(function crInit() {
+  const tabs = document.querySelector("section.tabs");
+  CR.home = [...document.querySelectorAll(".tabpage")];
+  document.querySelectorAll(".tab").forEach((t) => (CR.names[t.dataset.tab] = t.textContent.replace(/\s+\d*\s*$/, "").trim()));
+  let saved = {}; try { saved = JSON.parse(localStorage.getItem("andysdr_docks") || "{}"); } catch (e) {}
+  const main = document.querySelector("main.wrap"), radio = $("radio");
+  const mk = (id, parent) => {
+    const d = document.createElement("div"); d.className = "dock"; d.id = "dock" + id;
+    d.innerHTML = `<div class="dock-head"><select title="Choose what this panel shows"></select><button class="btn small" title="Make this panel big / small">⤢</button></div><div class="dock-body"></div>`;
+    d.querySelector("select").innerHTML = Object.entries(CR.names).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
+    d.querySelector("select").onchange = (e) => { CR.focus = id; crPut(id, e.target.value); };
+    d.querySelector("button").onclick = () => { d.classList.toggle("max"); setTimeout(() => { sizeCanvases(); window.dispatchEvent(new Event("resize")); }, 30); };
+    parent.appendChild(d); CR.docks[id] = { el: d, page: null };
+  };
+  const bottom = document.createElement("div"); bottom.id = "crBottom";
+  const right = document.createElement("div"); right.id = "crRight";
+  main.appendChild(bottom); main.appendChild(right);
+  mk("L1", radio); ["B1", "B2", "B3"].forEach((i) => mk(i, bottom)); ["R1", "R2", "R3"].forEach((i) => mk(i, right));
+  CR.saved = Object.assign({}, CR.def, saved);
+  CR.tabs = tabs;
+})();
+function crPut(id, name) {
+  const page = $("tab-" + name), dock = CR.docks[id];
+  if (!page || !dock) return;
+  const other = Object.entries(CR.docks).find(([k, v]) => k !== id && v.page === name);
+  const prev = dock.page && dock.page !== name ? dock.page : null;
+  dock.page = name;
+  dock.el.querySelector(".dock-body").appendChild(page);
+  if (other) {                                              // that page was in another dock: swap, so no panel is left empty
+    const [oid, o] = other; o.page = null;
+    if (prev) crPut(oid, prev);
+  } else if (prev) {                                        // the page it replaces goes back to the (hidden) store
+    const old = $("tab-" + prev); if (old) { CR.tabs.appendChild(old); old.classList.remove("active"); }
+  }
+  page.classList.add("active");
+  dock.el.querySelector("select").value = name;
+  const st = {}; Object.entries(CR.docks).forEach(([k, v]) => (st[k] = v.page)); try { localStorage.setItem("andysdr_docks", JSON.stringify(st)); } catch (e) {}
+  tabEffects(name);
+}
+function crShow(name) {                                      // quick keys / jobs ask for a page: show it in a dock (swap if it is not shown yet)
+  const have = Object.entries(CR.docks).find(([, v]) => v.page === name);
+  if (have) { have[1].el.animate([{ outline: "3px solid var(--accent)" }, { outline: "0 solid transparent" }], { duration: 900 }); tabEffects(name); return; }
+  crPut(CR.focus, name);
+}
+function crEnable(on) {
+  if (on === CR.on) return;
+  CR.on = on; document.body.classList.toggle("cr", on);
+  if (on) {
+    const pick = Object.assign({}, CR.def, CR.saved);
+    const used = new Set();
+    Object.entries(CR.docks).forEach(([id]) => { let n = pick[id]; if (!n || used.has(n) || !$("tab-" + n)) n = null; if (n) used.add(n); pick[id] = n; });
+    Object.entries(pick).forEach(([id, n]) => { if (n) crPut(id, n); });
+  } else {
+    CR.home.forEach((p) => { CR.tabs.appendChild(p); p.classList.remove("active"); });
+    Object.values(CR.docks).forEach((d) => { d.page = null; d.el.classList.remove("max"); });
+    showTab(document.querySelector(".tab.active") ? document.querySelector(".tab.active").dataset.tab : "mem");
+  }
+  document.documentElement.style.setProperty("--topbar-h", (document.querySelector(".topbar").offsetHeight + 2) + "px");
+  setTimeout(() => { sizeCanvases(); window.dispatchEvent(new Event("resize")); }, 50);
+}
+function crAuto() {
+  const mode = $("layoutSel").value;
+  crEnable(mode === "control" || (mode === "auto" && window.innerWidth >= 1300 && window.innerHeight >= 800));
+}
+try { $("layoutSel").value = localStorage.getItem("andysdr_layout") || "auto"; } catch (e) {}
+$("layoutSel").onchange = () => { try { localStorage.setItem("andysdr_layout", $("layoutSel").value); } catch (e) {} crAuto(); };
+window.addEventListener("resize", () => { clearTimeout(CR.t); CR.t = setTimeout(crAuto, 200); });
 document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => showTab(t.dataset.tab)));
 
 /* ----- memory ----- */
@@ -2364,6 +2443,7 @@ const HELP = {
   k_e: ["E (Enter)", "Tunes the frequency you typed (in MHz). Keyboard Enter does the same."],
   k_arrows: ["▲ ▼", "Step up/down by the STEP size. While scanning or searching they set the direction / skip to the next channel."],
   k_clr: ["CLR", "Clears what you were typing (keyboard: Backspace or Esc)."],
+  layout: ["Layout", "Control room puts the radio on the left, a big spectrum in the middle and seven panels around it (memory, decoder log, pictures, scheduler, recordings with instant replay, live activity, pager messages) so you can see everything at once. Each panel has a drop-down to choose what it shows – every tab is available – and a ⤢ button to make it full size. Classic is the original tabbed page; Auto uses Control room on big screens only."],
   zoom: ["Zoom", "Magnify the spectrum. On a touch screen stretch two fingers apart to zoom in and pinch to zoom out; on a laptop touchpad do the same pinch gesture; with a mouse hold Ctrl and scroll. When zoomed in, scroll the wheel (or two-finger swipe on the touchpad) up/down to slide the view left/right, or drag it. Click a signal to tune it. Follow keeps the view centred on the frequency you are tuned to; Fit shows everything. Shift+scroll still steps the tuning frequency."],
   scope: ["Spectrum & waterfall", "Live picture of the radio band around you. The top graph shows signal strength across the received bandwidth; the waterfall below shows history – transmissions appear as bright streaks. Click anywhere to tune there; pinch or Ctrl+scroll to zoom (see Zoom). The red line and shading show the channel you are listening to. 'Range' and 'Top' set the display contrast."],
   banks: ["Memory banks", "10 banks × 100 channels = 1000 memories. Click a bank to view it, right-click to include/exclude it from scanning. In the table: click a frequency or ▶ to listen, click the name to rename, change mode/decoder in the drop-downs, tick L/O to lock out, PRI to make it the priority channel, ✕ to delete."],
@@ -2464,3 +2544,4 @@ document.querySelectorAll("[data-help]").forEach((el) => { const h = HELP[el.dat
 setBpSize(bpSize, false);
 renderLCD();
 connect();
+setTimeout(crAuto, 0);
