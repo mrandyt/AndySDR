@@ -108,7 +108,7 @@ function onHello(h) {
   if (h.token) { token = h.token; sessionStorage.setItem("andysdr_token", token); }
   isLocal = h.local;
   document.querySelectorAll(".local-only").forEach((e) => (e.style.display = isLocal ? "" : "none"));
-  S = h.state; MEM = h.memory; DEV = h.device; decoders = h.decoders; BWS = h.bandwidths || BWS;
+  S = h.state; MEM = h.memory; DEV = h.device; applyDeviceBandplan(); decoders = h.decoders; BWS = h.bandwidths || BWS;
   renderDevices(h.devices); renderDevice(); renderMemory(); renderActivity(h.activity);
   renderDecoders(); renderImages(h.images); renderState();
   if (h.schedule) { SCH = h.schedule; renderSchedule(); }
@@ -620,7 +620,7 @@ const BP_FONT = [0, 10, 13, 17, 23];       // band names on the strip (CSS px)
 const BP_LABEL = [0, 0, 0, 12, 16];        // key-frequency labels under the strip (0 = none)
 const BP_MAP = [0, 22, 34, 56, 76];        // overview band map height
 const BP_MAPFONT = [0, 9.5, 10.5, 13, 16]; // overview band map text
-const MAP_LO = 9e3, MAP_HI = 6.5e9;        // overview covers 9 kHz – 6.5 GHz on a log scale
+let MAP_LO = 9e3, MAP_HI = 6.5e9;        // overview covers 9 kHz – 6.5 GHz on a log scale
 let bpSize = +(localStorage.getItem("andysdr_bpsize") ?? 2);
 let bpHidden = new Set();
 try { bpHidden = new Set(JSON.parse(localStorage.getItem("andysdr_bphide") || "[]")); } catch (e) { /* first run */ }
@@ -1535,8 +1535,19 @@ $("recRefresh").onclick = () => send({ cmd: "recordings" });
 function renderDevices(list) {
   $("devSel").innerHTML = (list || []).map((d) => `<option value="${esc(d.key)}" ${d.key === DEV.key ? "selected" : ""}>${esc(d.label)} (${d.kind})</option>`).join("");
 }
+function applyDeviceBandplan() {
+  if (!DEV || !DEV.freq_max) return;
+  if (!limitBandplan(DEV.freq_min, DEV.freq_max)) return;       // the band plan only lists what this receiver can tune
+  MAP_HI = Math.min(6.5e9, Math.max(3e7, DEV.freq_max * 1.12));
+  const keep = $("pkPlan").value;
+  $("pkPlan").innerHTML = Object.entries(BANDPLAN_CATS).filter(([k]) => mainBands(k).length).map(([k, c]) => `<option value="${k}">${esc(c.label)} (${mainBands(k).length})</option>`).join("");
+  if ([...$("pkPlan").options].some((o) => o.value === keep)) $("pkPlan").value = keep;
+  fillBands($("pkPlan").value);
+  renderBandPlan(); drawBandMap(); queueDraw();
+}
 function renderDevice() {
   if (!DEV || !DEV.key) return;
+  applyDeviceBandplan();
   if (knobs.gain) { knobs.gain.min = DEV.gain_min; knobs.gain.max = DEV.gain_max; knobs.gain.render(); }
   [...$("devSel").options].forEach((o) => (o.selected = o.value === DEV.key));
   $("rateSel").innerHTML = (DEV.rates || []).filter((r) => r % 240000 === 0).map((r) => `<option value="${r}" ${r === DEV.sample_rate ? "selected" : ""}>${(r / 1e6).toFixed(2)} MS/s</option>`).join("");
@@ -1713,6 +1724,13 @@ function suggestBw() {
   }
   // analogue FM voice never needs less than the mode's normal width (the band plan's 6.25 kHz is only a grid)
   const fm = (hz) => ["NFM", "FM"].includes(mode) ? Math.max(hz, def) : hz;
+  // broadcast stations and CW have a well-known width of their own
+  const bb = S.freq ? bandsAt(S.freq).filter((x) => !x.point)[0] : null;
+  if (mode === "AM" && bb && bb.cat === "broadcast") {
+    const lw = S.freq < 1.7e6;
+    return { hz: nearestBw(mode, lw ? 6000 : 8000), why: lw ? "long/medium-wave station (9 kHz channel spacing)" : "shortwave broadcast station" };
+  }
+  if (mode === "CW") return { hz: nearestBw(mode, 500), why: "standard Morse filter" };
   // 2. what Auto ID measured / recognised
   const sg = S.signal;
   if (sg && sg.stable !== false) {
@@ -2339,8 +2357,8 @@ const HELP = {
   bppick: ["Plan › Band › Section", "Drill down through the UK band plan: pick a Plan (amateur, aviation, marine, PMR…), then a Band in it, then a Section (sub-band or key frequency). Tune goes there in the right mode and step; Search section loads it into the Live Activity search; 'Add key frequencies to bank' stores every key frequency in that band (e.g. marine Ch 16/70/AIS, airband 121.5/123.1) into the memory bank you choose. Clicking a coloured strip on the spectrum or a band name in the list also selects it here. Tap the coloured plan buttons underneath to show or hide each plan on the spectrum."],
   bandplan: ["Band plan size", "Shows the UK band plan as coloured strips across the top of the spectrum and in the band map above it. Off hides it; Small shows main allocations only; Medium adds sub-bands (e.g. 2 m FM simplex) and markers for key frequencies (Ch 16, 121.5, APRS…); Large makes the strips bigger and names the key frequencies. Each computer remembers its own choice."],
   vfo: ["VFO bar", "The VFO is the frequency you are tuned to. This bar shows it, which UK band and sub-band it is in, and – if the band normally uses a different mode or step – a 'Use' button that sets them for you. The red line and red VFO flag on the spectrum mark the same frequency."],
-  bandmap: ["Band map", "The whole radio spectrum from 9 kHz to 6.5 GHz on one strip, coloured by who uses it (see the legend in the UK BAND PLAN tab). The red needle is your VFO and the white box is the part the spectrum display is showing. Hover to see a band's name; click a band to jump there in the right mode and step."],
-  bptab: ["UK band plan list", "Every UK allocation, amateur sub-band and key frequency from 9 kHz to 6.5 GHz. Type a name or a frequency (e.g. 156.8) to find it, pick a category or click the coloured legend, untick sub-bands for the big picture. Tune goes straight there in the right mode; Search loads the band into the Live Activity search so you can find everything active in it. 'Where am I?' lists the bands your VFO is in."],
+  bandmap: ["Band map", "The whole radio spectrum the receiver can tune (e.g. RSP2 Pro: 1 kHz to 2 GHz) on one strip, coloured by who uses it (see the legend in the UK BAND PLAN tab). The red needle is your VFO and the white box is the part the spectrum display is showing. Hover to see a band's name; click a band to jump there in the right mode and step."],
+  bptab: ["UK band plan list", "Every UK allocation, amateur sub-band and key frequency the receiver can tune (e.g. RSP2 Pro: 1 kHz to 2 GHz). Type a name or a frequency (e.g. 156.8) to find it, pick a category or click the coloured legend, untick sub-bands for the big picture. Tune goes straight there in the right mode; Search loads the band into the Live Activity search so you can find everything active in it. 'Where am I?' lists the bands your VFO is in."],
   mesh: ["MeshCore messaging", "Text chat over the MeshCore LoRa mesh. Your SDRs can only receive, so AndySDR sends and receives through a MeshCore companion board (Heltec V3/V4, RAK4631, T-Deck, T-Beam, Xiao…) flashed with Companion firmware from flasher.meshcore.co.uk – USB Serial firmware for a cable, Bluetooth or Wi-Fi firmware otherwise. Plug it in, pick its COM port (★ = looks like a radio board) and press Connect; AndySDR reconnects by itself next time. Channels on the left: Public and any #hashtag channel anyone can join (+ Join, e.g. #uk), or private channels with a shared key. Contacts are nodes heard advertising – click one for a private, end-to-end encrypted message (✓ = sent, ✓✓ = delivered). Send advert announces you to nearby nodes. UK users normally use the UK/EU narrow preset (869.618 MHz, 62.5 kHz, SF8, CR8) – licence-exempt, the board keeps to the power and duty-cycle limits. Watch on SDR tunes your receiver to the mesh frequency so you can see the packets on the waterfall. Messages are kept in %APPDATA%\\AndySDR\\meshcore_messages.jsonl and work from remote PCs and phones too."],
   adsb: ["ADS-B aircraft (1090 MHz)", "Tracks aircraft that broadcast ADS-B (nearly every airliner and many smaller aircraft). Press ▶ Start ADS-B: AndySDR tunes to 1090 MHz, centres the receiver exactly on it and decodes the aircraft messages itself – no other program is needed. The table shows callsign, hex address (ICAO), airline and country (from the callsign/address), altitude, speed, heading, climb rate, squawk, distance from you and how long ago it was heard; click a heading to sort. The map shows each aircraft as a plane pointing the way it is flying, coloured by height (orange = low, green = middle, blue = high) with a trail behind it. Squawks 7500, 7600 and 7700 flash red and pop up a warning. You need a receiver running at 2 MS/s or more (any SDRplay RSP, RTL-SDR, Airspy, HackRF) and an antenna that works at 1090 MHz – a short 6.9 cm whip or a proper 1090 MHz collinear, as high and clear of buildings as you can get it. Use the RSP's Antenna A/B (50 Ω) socket, not Hi-Z. Turn RF GAIN up fairly high; if you see lots of messages but few aircraft, turn it down a little. Press Stop (or tune somewhere else) to go back to normal scanning. With the Simulator receiver you get ten practice aircraft."],
   adsbopts: ["ADS-B options", "My position: type your latitude/longitude (decimal degrees, e.g. 51.5074 and -0.1278) or press 📍 Use my location. With it set the map shows range rings, the table shows each aircraft's distance, and positions come out faster and more reliably. Units: aviation (feet, knots, nautical miles) or metric. Street map downloads OpenStreetMap tiles from the internet (the radar-style map works offline). Trails and Labels switch the track lines and text on the map; 'Only with position' hides aircraft that have not sent a position yet; Find dims the others on the map."],

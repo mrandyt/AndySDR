@@ -272,6 +272,17 @@ const BANDPLAN = [
   point: a === b,
 }));
 BANDPLAN.sort((x, y) => x.start - y.start || x.level - y.level);
+const BANDPLAN_ALL = BANDPLAN.slice();
+
+/* Show only what the selected receiver can actually tune (e.g. SDRplay RSP2 Pro: 1 kHz – 2 GHz).
+   Works in place, so everything that already uses BANDPLAN sees the shorter list. Returns true if the list changed. */
+function limitBandplan(minHz, maxHz) {
+  const lo = minHz > 0 ? minHz : 0, hi = maxHz > 0 ? maxHz : Infinity;
+  const keep = BANDPLAN_ALL.filter((b) => b.stop >= lo && b.start <= hi);
+  if (keep.length === BANDPLAN.length && keep.every((b, i) => b === BANDPLAN[i])) return false;
+  BANDPLAN.length = 0; BANDPLAN.push(...keep);
+  return true;
+}
 
 /* Bands containing f, most specific first (points, then sub-bands, then allocations). */
 function bandsAt(f, tol = 0) {
