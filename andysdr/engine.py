@@ -5,6 +5,8 @@ import queue
 import threading
 import time
 import wave
+import io
+from collections import deque
 
 import numpy as np
 
@@ -24,6 +26,7 @@ from .sstv import SstvDecoder
 log = logging.getLogger("andysdr.engine")
 
 SPEC_MIN_DB, SPEC_MAX_DB = -130.0, -10.0
+REPLAY_MAX_S = 120                    # the replay buffer remembers up to two minutes of what you heard
 
 
 class Radio:
@@ -60,6 +63,7 @@ class Radio:
         self.last_spec = None
         self.spec_fresh = False
         self.rec = None
+        self.replay = deque(maxlen=int(REPLAY_MAX_S / BLOCK_SECONDS))   # (time, pcm, freq, mode) of every block that had sound
         self.priority = None              # (bank, ch)
         self._last_state = 0
         self.level_db = -120.0
@@ -731,6 +735,46 @@ class Radio:
             self._push_state(True)
         self.call(do)
 
+    def replay_pcm(self, secs):
+        """Sound heard in the last `secs` seconds (silences squeezed out), as (pcm bytes, freq, mode) or None."""
+        secs = max(5, min(REPLAY_MAX_S, float(secs or 30)))
+        t_from = time.time() - secs
+        parts, last_t, freq, mode = [], None, 0, ""
+        gap = b"\0\0" * int(AUDIO_RATE * 0.5)
+        for t, pcm, f, m in list(self.replay):
+            if t < t_from:
+                continue
+            if last_t is not None and t - last_t > 0.4:
+                parts.append(gap)                          # a pause between two transmissions
+            parts.append(pcm)
+            last_t, freq, mode = t, f, m
+        return (b"".join(parts), freq, mode) if parts else None
+
+    def replay_wav(self, secs):
+        got = self.replay_pcm(secs)
+        if not got:
+            return None
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as w:
+            w.setnchannels(1); w.setsampwidth(2); w.setframerate(AUDIO_RATE)
+            w.writeframes(got[0])
+        return buf.getvalue()
+
+    def replay_save(self, secs):
+        """Keep the replay buffer as a normal recording. Returns the file name or None."""
+        got = self.replay_pcm(secs)
+        if not got:
+            return None
+        pcm, freq, mode = got
+        name = time.strftime("audio_%Y%m%d_%H%M%S_") + f"{freq / 1e6:.4f}MHz.wav"
+        path = os.path.join(data_dir(), "recordings", name)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with wave.open(path, "wb") as w:
+            w.setnchannels(1); w.setsampwidth(2); w.setframerate(AUDIO_RATE)
+            w.writeframes(pcm)
+        capturemeta.note("record", freq, f"Replay of the last {int(secs)} s", mode)
+        return name
+
     def record(self, on):
         def do():
             if on and not self.rec:
@@ -1044,6 +1088,8 @@ class Radio:
                 self._emit("audio", pcm)
                 if self.rec:
                     self.rec.writeframes(pcm)
+                if np.any(audio):
+                    self.replay.append((time.time(), pcm, self.freq, self.mode))
             self._push_state()
 
     def _priority_check(self, spec_db):

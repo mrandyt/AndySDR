@@ -117,6 +117,7 @@
         <div class="q-group" data-help="qtog"><span class="q-lab">AUDIO</span><div class="q-row" id="qTog"></div></div>
         <div class="q-group" data-help="qfiles"><span class="q-lab">FILES</span><div class="q-row" id="qFiles">
           <button class="key q" data-f="images" title="Show the received weather pictures and captures (WEFAX, SSTV, satellite images) with a Download button on each">IMAGES</button>
+          <button class="key q" data-f="replay" title="Play back what you heard in the last 30 seconds (length is set in the RECORDINGS tab) - for stations you just missed">⏪ REPLAY</button>
           <button class="key q" data-f="recordings" title="Show the sound recordings (REC and scheduled recordings) - play or download them">RECORDINGS</button></div></div>
       </div>
     </div>
@@ -475,6 +476,11 @@
 
   <!-- RECORDINGS -->
   <div class="tabpage" id="tab-rec">
+    <div class="row wrapline" data-help="replay"><b>Instant replay</b>
+      <label>Last <select id="replaySecs"><option value="15">15 s</option><option value="30" selected>30 s</option><option value="60">60 s</option><option value="120">2 min</option></select></label>
+      <button class="btn primary" id="replayPlay">⏪ Replay</button>
+      <button class="btn" id="replaySave">💾 Keep as recording</button>
+      <audio id="replayAudio" controls style="height:32px;max-width:100%"></audio></div>
     <div class="row"><b>Sound recordings</b><span class="grow"></span>
       <button class="btn" id="recRefresh">Refresh</button></div>
     <div class="reclist" id="recList"></div>

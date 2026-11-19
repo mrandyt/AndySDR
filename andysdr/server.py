@@ -156,6 +156,17 @@ class Server:
             if not self._token_ok(ip, (query.get("token") or [""])[0]):
                 await self._send(writer, 403, b"Password required", "text/plain")
                 return
+        if path == "/api/replay.wav":
+            try:
+                secs = float((query.get("secs") or ["30"])[0])
+            except ValueError:
+                secs = 30
+            data = self.radio.replay_wav(secs)
+            if not data:
+                await self._send(writer, 404, b"Nothing heard in that time", "text/plain")
+            else:
+                await self._send(writer, 200, data, "audio/wav", extra={"Cache-Control": "no-store"})
+            return
         if path == "/api/export.csv":
             data = self.radio.memory.export_csv().encode("utf-8-sig")
             await self._send(writer, 200, data, "text/csv",
@@ -547,6 +558,12 @@ class Server:
                 self.s.save()
                 if not m.get("quiet"):
                     self._reply(c, "event", {"level": "info", "text": "Settings saved"})
+            elif cmd == "replay_save":
+                name = r.replay_save(m.get("secs") or 30)
+                self._reply(c, "event", {"level": "info" if name else "warn",
+                                         "text": f"Saved the last {int(m.get('secs') or 30)} s as a recording ({name})" if name else "Nothing was heard in that time"})
+                if name:
+                    self._reply(c, "recordings", self._recordings())
             elif cmd == "delete_capture":
                 self._delete_capture(c, m.get("kind"), m.get("f"))
             elif cmd == "save_download":

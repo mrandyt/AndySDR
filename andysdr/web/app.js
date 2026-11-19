@@ -1519,6 +1519,18 @@ document.addEventListener("click", (e) => {
   send({ cmd: "save_download", kind: a.dataset.kind, f: a.dataset.f, name: a.getAttribute("download") });
 }, true);
 
+/* ----- instant replay: what you heard in the last few seconds, for stations you just missed ----- */
+try { const v = localStorage.getItem("andysdr_replay_secs"); if (v) $("replaySecs").value = v; } catch (e) {}
+$("replaySecs").onchange = () => { try { localStorage.setItem("andysdr_replay_secs", $("replaySecs").value); } catch (e) {} };
+function doReplay() {
+  const a = $("replayAudio"), secs = $("replaySecs").value;
+  a.onerror = () => toast("Nothing was heard in the last " + secs + " seconds", "warn");
+  a.src = `/api/replay.wav?secs=${secs}&token=${encodeURIComponent(token)}&t=${Date.now()}`;
+  a.play().then(() => toast(`Replaying the last ${secs} s of what you heard`)).catch(() => {});
+}
+$("replayPlay").onclick = doReplay;
+$("replaySave").onclick = () => send({ cmd: "replay_save", secs: +$("replaySecs").value });
+
 function deleteCapture(kind, f) {
   if (confirm(`Delete ${f.split("/").pop()}? This cannot be undone.`)) send({ cmd: "delete_capture", kind, f });
 }
@@ -1672,6 +1684,7 @@ function buildQuick() {
       else if (k === "clr") send({ cmd: "lockout_clear" });
       else send({ cmd: "lockout_temp", minutes: +k.slice(1) });
     }
+    else if (b.dataset.f === "replay") doReplay();
     else if (b.dataset.f) showTab(b.dataset.f === "images" ? "img" : "rec");
     else if (b.dataset.t === "agc") send({ cmd: "agc", on: !S.agc });
     else if (b.dataset.t === "mute") { player.muted = !player.muted; player.setVolume(player.vol); renderQuick(); }
@@ -2379,6 +2392,7 @@ const HELP = {
   qband: ["Band buttons", "Jump straight to a popular UK band with the right mode and tuning step already set: AIR (121.500 MHz), MARINE (channel 16), PMR446, 2M, 70CM, CB, FM BC, PAGER and weather SATS. Then step with ▲ ▼, press SCAN, or use SRCH to find what is active. The button for the band you are in stays lit."],
   qdec: ["Decoder buttons", "Start a decoder with one click: DMR, P25, NXDN, dPMR, M17 (digital voice), TETRA (network, call and message signalling), PAGER (POCSAG/FLEX), APRS (also DTMF/ZVEI/EAS), WEFAX, SSTV, LRPT (Meteor-M) and ADS-B (aircraft). AUTO (Auto ID) lets AndySDR identify signals and pick the decoder itself. OFF stops the decoder. A dimmed button means its program is not installed yet – see the DECODERS tab."],
   qlock: ["Skip / lock out", "Stops the scanner dwelling on something you don't want to hear. While it is stopped on a transmission (or searching) press SKIP 10 MIN, SKIP 1 HOUR or SKIP TODAY and it carries straight on; the channel is scanned again when the time is up (or when AndySDR is restarted). LOCK OUT is the permanent version (the L/O key): a memory channel stays locked out until you untick L/O in the MEMORY tab. UNSKIP clears all temporary skips and search lockouts at once – the number shows how many are being ignored and hovering lists them. Keyboard: I = skip for 10 minutes."],
+  replay: ["Instant replay", "AndySDR keeps the last two minutes of everything you heard (silences left out). Press ⏪ REPLAY under the display, or Replay here, to hear the last 15 s, 30 s, 60 s or 2 minutes again – handy when the scanner passes a conversation you wanted. Keep as recording saves it as a normal sound file in the list below. Only what came through the speaker is remembered, so turn SQUELCH up just enough to hear stations, not noise."],
   qfiles: ["Files buttons", "IMAGES – shows the WEATHER IMAGES tab: every received picture (WEFAX charts, SSTV, satellite images) with the satellite or station name, frequency and time, and a Download button that saves it to the device you are using. RECORDINGS – shows the RECORDINGS tab: your sound recordings with Play and Download buttons. Both work the same on the radio PC and on remote PCs, tablets and phones."],
   meshsdr: ["MeshCore with just the SDR", "Receive-only MeshCore using your SDR – no LoRa board. Press Start listening (UK/EU narrow is 869.618 MHz, 62.5 kHz, SF8). NODES lists every repeater, room server, companion and sensor heard advertising, with its position (click it for a map). MESSAGES shows channel messages for the Public channel and any #hashtag channel you add (or a 32-digit key). PACKET LOG lists everything heard including encrypted direct messages (which cannot be read) and damaged frames. Needs a decent 869 MHz antenna; the SDR must run at 250 kS/s or more."],
   qtog: ["Audio & step buttons", "AGC – automatic RF gain. MUTE – silences this screen without touching the VOLUME knob. MONITOR – holds the squelch open so you can hear the background noise and set up the antenna or gain; press again to return to your squelch setting. STEP − / STEP + – smaller or larger tuning step (shown on the LCD)."],
@@ -2402,7 +2416,7 @@ function openHelp() {
     <li>Press <b>SRCH</b> to hunt for live transmissions across a band.</li>
   </ol>
   <h3>KNOBS &amp; DISPLAY</h3>${ctl(["volume", "squelch", "gain", "power", "leds", "lcd", "topstatus"])}
-  <h3>QUICK BUTTONS (under the display)</h3>${ctl(["qmode", "qbw", "qband", "qdec", "qlock", "qtog", "qfiles"])}
+  <h3>QUICK BUTTONS (under the display)</h3>${ctl(["qmode", "qbw", "qband", "qdec", "qlock", "qtog", "qfiles", "replay"])}
   <h3>KEYPAD &amp; FUNCTION KEYS</h3>${ctl(["k_scan", "k_man", "k_srch", "k_pgm", "k_lo", "k_pri", "k_mode", "k_step", "k_bank", "k_dly", "k_rec", "k_dec", "k_dot", "k_e", "k_arrows", "k_clr"])}
   <p class="small">Keyboard: digits and <code>.</code> type, <code>Enter</code> tunes, <code>↑ ↓</code> step, <code>S</code> scan, <code>M</code> manual, <code>P</code> program, <code>L</code> lockout, <code>I</code> skip 10 min, <code>H</code> help, <code>Esc</code> clear.</p>
   <h3>SCREENS</h3>${ctl(["scope", "zoom", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "satauto", "eibitab", "ft8tab", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "updates", "receiver", "remote", "theme", "conn"])}
