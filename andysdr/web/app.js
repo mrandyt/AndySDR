@@ -81,6 +81,7 @@ function onJSON(m) {
     case "decoders": decoders = d; renderDecoders(); break;
     case "image": addImage(d.file); break;
     case "ft8": onFt8(d); break;
+    case "morse": onMorse(d); break;
     case "signal": S.signal = d; renderSignal(); break;
     case "schedule": SCH = d; renderSchedule(); break;
     case "images": renderImages(d); break;
@@ -124,6 +125,7 @@ function onHello(h) {
   $("adsbExport").href = `/api/adsb.csv?token=${encodeURIComponent(token)}`;
   if (h.adsb) adsbHello(h.adsb);
   FT8.msgs = h.ft8 || []; renderFt8();
+  if (h.morse) { MORSE_TXT = h.morse.text || ""; renderMorse(); if (h.morse.status) morseStatus(h.morse.status); }
   const st = h.settings || {};
   $("updAuto").checked = st.update_check !== false; $("updDl").checked = !!st.update_auto_download;
   if (h.update) onUpdate(h.update, true);
@@ -219,6 +221,7 @@ function renderLCD() {
 
 function renderState() {
   renderLCD();
+  if (typeof morseOpen === "function" && !$("morseBox").hidden) renderMorse();
   renderVfo();
   renderSignal();
   $("autoId").checked = $("autoId2").checked = S.auto_identify !== false;
@@ -1731,13 +1734,13 @@ const Q_BANDS = [
 const Q_DECS = [
   ["DMR", "dsd", "dmr"], ["P25", "dsd", "p25p1"], ["NXDN", "dsd", "nxdn48"], ["dPMR", "dsd", "dpmr"], ["M17", "dsd", "m17"],
   ["TETRA", "tetra", ""], ["PAGER", "pager", ""], ["APRS", "data", ""], ["WEFAX", "wefax", ""], ["SSTV", "sstv", ""],
-  ["LRPT", "lrpt", ""], ["GOES", "goes", ""], ["ADS-B", "adsb", ""], ["FT8", "ft8", "ft8"], ["FT4", "ft8", "ft4"],
+  ["LRPT", "lrpt", ""], ["GOES", "goes", ""], ["ADS-B", "adsb", ""], ["FT8", "ft8", "ft8"], ["FT4", "ft8", "ft4"], ["MORSE", "morse", ""],
 ];
 const Q_DEC_TIPS = { dmr: "DMR digital voice", p25p1: "P25 Phase 1 digital voice", nxdn48: "NXDN 4800 digital voice", dpmr: "dPMR digital voice",
   m17: "M17 digital voice", tetra: "TETRA network and call signalling (25 kHz, DIG25)", pager: "POCSAG / FLEX pagers – messages appear in PAGER MESSAGES",
   data: "APRS, DTMF, ZVEI, EAS", wefax: "Weather fax charts (USB mode)", sstv: "SSTV pictures", lrpt: "Meteor-M satellite pictures",
   adsb: "Aircraft tracking on 1090 MHz – opens the ADS-B tab data", goes: "GOES-East/West HRIT images on 1694.1 MHz (needs a dish and LNA)",
-  ft8: "FT8 weak-signal digital (USB, 15 s slots) – messages appear in the FT8 tab", ft4: "FT4 (USB, 7.5 s slots)" };
+  ft8: "FT8 weak-signal digital (USB, 15 s slots) – messages appear in the FT8 tab", ft4: "FT4 (USB, 7.5 s slots)", morse: "Morse code (CW) decoder – opens a box with a ticker tape and the most popular Morse frequencies" };
 let sqPrev = -60;
 
 function buildQuick() {
@@ -1762,7 +1765,11 @@ function buildQuick() {
     else if (b.dataset.b !== undefined) { const q = Q_BANDS[+b.dataset.b]; send({ cmd: "tune", freq: q[1], mode: q[2] }); send({ cmd: "stepsize", hz: q[3] }); }
     else if (b.dataset.d === "autoid") send({ cmd: "auto_identify", on: !(S.auto_identify !== false) });
     else if (b.dataset.d === "off") send({ cmd: "decoder", id: "" });
-    else if (b.dataset.d !== undefined) { const d = Q_DECS[+b.dataset.d]; send({ cmd: "decoder", id: d[1], sub: d[2] || "auto" }); }
+    else if (b.dataset.d !== undefined) {
+      const d = Q_DECS[+b.dataset.d];
+      if (d[1] === "morse") { morseOpen(true); return; }
+      send({ cmd: "decoder", id: d[1], sub: d[2] || "auto" });
+    }
     else if (b.dataset.l) {
       const k = b.dataset.l;
       if (k === "perm") send({ cmd: "lockout" });
@@ -2460,6 +2467,7 @@ const HELP = {
   receiver: ["Receiver", "Choose which SDR to use: every SoapySDR device (RTL-SDR/Nooelec, SDRplay RSP1A/RSP2/RSP2pro/RSPdx/RSPduo, Airspy, HackRF, LimeSDR, Pluto…), rtl_tcp servers on other machines, or the Simulator for practice. Sample rate sets how wide the waterfall is. Antenna picks the input (RSP2: Antenna A, B or Hi-Z). Device switches (bias-T, notch filters, direct sampling) appear underneath automatically."],
   autoid: ["Auto ID (automatic signal identification)", "When ticked, AndySDR analyses whatever you are listening to and shows what it is next to the VFO: DMR (it spots the 30 ms TDMA bursts), P25, NXDN, dPMR, pagers (POCSAG/FLEX), APRS, DTMF, SSTV, WEFAX, TETRA or analogue voice (with any CTCSS tone). It then switches to the right mode and starts the matching decoder by itself, and stops it again when the channel goes back to voice. SSTV pictures are caught from their very first line. A decoder you pick yourself, or one stored on a memory channel, is never overridden. Untick to turn it off."],
   eibitab: ["Shortwave (EiBi)", "The EiBi shortwave broadcast schedule: press Get latest schedule once (or Import file…), then search by station, language or frequency. Tick On air now to see only what is being broadcast right now (UTC). Tune goes to the frequency in AM; ★ stores it in memory; ⏰ schedules an automatic tune-in every time that broadcast is on."],
+  morsebox: ["Morse code decoder", "Press the MORSE key (DECODE row) to open this box. AndySDR switches to CW mode and reads Morse from the audio: it finds the pitch of the tone by itself, follows the sending speed (about 5-50 WPM) and prints the letters on the ticker tape, newest on the right; the box underneath keeps everything decoded. SPEED, TONE and SIGNAL show what it hears and the green light flashes with the keying. Click a popular frequency to tune it – most activity is near the QRP spots (7.030, 14.060 MHz), the IARU beacons (14.100, 28.200 MHz) and aviation NDB beacons (190-530 kHz). Weak or very fast signals decode with mistakes (shown as ¿); a clean tone with the signal 15 dB or more above the noise works best. ✕ hides the box but decoding carries on; ■ Stop ends it."],
   ft8tab: ["FT8 / FT4", "Weak-signal amateur digital modes. Pick a band and press ▶ FT8 (or ▶ FT4): AndySDR tunes USB to the dial frequency and decodes every 15 s UTC slot (FT4: 7.5 s). It also starts by itself when you tune or scan onto an FT8/FT4 channel from the band plan and something is on the air. The PC clock must be accurate. CQ only hides everything except stations calling CQ. From/Grid are read from the message."],
   satauto: ["Satellite auto-capture", "Tick Record on a satellite and AndySDR predicts every pass over your position for the next 4 days (listed day by day) (set it with My position or 📍), tunes at acquisition of signal, follows the Doppler shift if Track is ticked, runs the right decoder and stops when the satellite sets – then puts the radio back as it was. ISS SSTV listens on 145.800 MHz FM (limit it to the ARISS event dates with the date boxes); Meteor-M N2-3 and N2-4 are LRPT on 137.900 MHz (switch to 137.100 if the satellite moves); GOES-19/18 are 1694.1 MHz HRIT from geostationary orbit – AndySDR says honestly when the satellite is below your horizon. Tick the days of the week you want (none ticked = every day) – you never type a time, AndySDR starts each capture only when the satellite is actually above your horizon. Min elevation hides low, weak passes. Orbit data (TLEs) is downloaded from CelesTrak and refreshed automatically. A capture you add by hand always takes priority."],
   sched: ["Scheduler", "Captures that run by themselves at set times – ideal for weather fax charts, ISS SSTV events and Meteor-M satellite passes. Pick a station from Quick pick (or type a frequency), choose what to do (WEFAX, SSTV, LRPT, record…), the start time on this PC's clock and how long, and either tick days of the week or pick a single date. At the start time AndySDR stops scanning, tunes, runs the decoder; at the end it saves the pictures and puts the radio back exactly as it was. ▶ Now runs one straight away. AndySDR must be running (it can run as a server in the background)."],
@@ -2506,7 +2514,7 @@ function openHelp() {
   <h3>QUICK BUTTONS (under the display)</h3>${ctl(["qmode", "qbw", "qband", "qdec", "qlock", "qtog", "qfiles", "replay"])}
   <h3>KEYPAD &amp; FUNCTION KEYS</h3>${ctl(["k_scan", "k_man", "k_srch", "k_pgm", "k_lo", "k_pri", "k_mode", "k_step", "k_bank", "k_dly", "k_rec", "k_dec", "k_dot", "k_e", "k_arrows", "k_clr"])}
   <p class="small">Keyboard: digits and <code>.</code> type, <code>Enter</code> tunes, <code>↑ ↓</code> step, <code>S</code> scan, <code>M</code> manual, <code>P</code> program, <code>L</code> lockout, <code>I</code> skip 10 min, <code>H</code> help, <code>Esc</code> clear.</p>
-  <h3>SCREENS</h3>${ctl(["scope", "zoom", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "satauto", "eibitab", "ft8tab", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "updates", "receiver", "remote", "theme", "conn"])}
+  <h3>SCREENS</h3>${ctl(["scope", "zoom", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "satauto", "eibitab", "ft8tab", "morsebox", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "updates", "receiver", "remote", "theme", "conn"])}
   <h3>DECODER PROGRAMS</h3>
   <p>AndySDR has WEFAX and SSTV built in (SSTV: Martin, Scottie, Robot and PD modes – ISS 145.800 NFM, 2 m 144.500 NFM, 20 m 14.230 USB). DSD-FME, multimon-ng and SatDump now come bundled in the <code>decoders</code> folder next to <code>AndySDR.exe</code>. If one shows ✖ in the DECODERS tab, press <b>⬇ Download missing decoders</b> and AndySDR fetches it from GitHub into <code>%APPDATA%\\AndySDR\\decoders</code>. You can also unzip your own copy into either folder (any sub-folder is fine – AndySDR finds the .exe):</p>
   <dl><dt>DSD-FME</dt><dd>github.com/lwvmobile/dsd-fme – DMR, P25 1/2, NXDN, dPMR, YSF, M17. AndySDR feeds it like SDR++'s network sink (TCP 127.0.0.1:7355, 48 kHz); DSD-FME plays decoded voice on your speakers itself (AndySDR starts the PulseAudio sound server that comes with it).</dd>
@@ -2557,3 +2565,53 @@ setTimeout(crAuto, 0);
 window.addEventListener("wheel", (e) => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
 ["gesturestart", "gesturechange", "gestureend"].forEach((g) => document.addEventListener(g, (e) => e.preventDefault()));
 window.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && ["+", "=", "-", "_", "0"].includes(e.key)) { e.preventDefault(); if (typeof setZoom === "function" && spec) { if (e.key === "0") $("zoomFit").click(); else (e.key === "-" || e.key === "_" ? $("zoomOut") : $("zoomIn")).click(); } } });
+
+/* ======================================================= Morse code decoder box */
+const MORSE_FREQS = [
+  ["80 m CW QRP", 3560000, "Low-power calling area"], ["40 m CW QRP", 7030000, "Busiest QRP spot"], ["40 m CW", 7020000, "Everyday CW activity"],
+  ["30 m CW", 10116000, "CW only band (10.106–10.130)"], ["20 m CW QRP", 14060000, "Busiest QRP spot"], ["20 m CW", 14030000, "Everyday CW activity"],
+  ["15 m CW QRP", 21060000, "QRP calling"], ["10 m CW QRP", 28060000, "QRP calling"],
+  ["20 m beacons", 14100000, "IARU / NCDXF beacons send callsigns in Morse"], ["10 m beacons", 28200000, "IARU / NCDXF beacons"],
+  ["6 m CW calling", 50090000, "Morse calling frequency"], ["4 m CW (UK)", 70090000, "UK 70 MHz CW"], ["2 m CW calling", 144050000, "Morse calling frequency"],
+  ["70 cm CW calling", 432050000, "Morse calling frequency"],
+  ["NDB beacons", 375000, "Aviation non-directional beacons (190–530 kHz) repeat their ID in Morse"],
+];
+let MORSE_TXT = "";
+const morseOpen = (start) => {
+  $("morseBox").hidden = false;
+  if (start) morseStart();
+  renderMorse();
+};
+function morseStart() {
+  if (S.mode !== "CW") send({ cmd: "mode", mode: "CW" });
+  setTimeout(() => send({ cmd: "decoder", id: "morse", sub: "auto" }), 200);
+}
+function renderMorse() {
+  const t = MORSE_TXT.slice(-3000);
+  $("mPage").textContent = t; $("mPage").scrollTop = $("mPage").scrollHeight;
+  $("mTape").textContent = t.slice(-26).replace(/\n/g, " ");
+  $("mFreq").textContent = S.freq ? (S.freq / 1e6).toFixed(S.freq < 1e6 ? 4 : 3) + " MHz" : "--";
+  $("mFreqs").querySelectorAll("button").forEach((b) => b.classList.toggle("on", Math.abs(+b.dataset.f - (S.freq || 0)) < 600));
+  $("mStart").disabled = S.decoder === "morse";
+}
+function morseStatus(st) {
+  $("mWpm").textContent = st.ok ? Math.round(st.wpm) : "--";
+  $("mTone").textContent = st.ok ? st.tone : "--";
+  $("mSnr").textContent = Math.round(st.snr);
+  $("mKey").classList.toggle("on", !!st.key && st.ok);
+}
+function onMorse(d) {
+  if (d.text) { MORSE_TXT = (MORSE_TXT + d.text).slice(-4000); if (!$("morseBox").hidden) renderMorse(); }
+  if (d.status) { morseStatus(d.status); }
+}
+$("mFreqs").innerHTML = MORSE_FREQS.map((f) => `<button data-f="${f[1]}" title="${f[2]}"><b>${(f[1] / 1e6).toFixed(f[1] < 1e6 ? 3 : 3)} MHz</b>${f[0]}</button>`).join("");
+$("mFreqs").onclick = (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  send({ cmd: "tune", freq: +b.dataset.f, mode: "CW" });
+  if (S.decoder !== "morse") setTimeout(morseStart, 150);
+};
+$("mClose").onclick = () => { $("morseBox").hidden = true; };
+$("mStart").onclick = morseStart;
+$("mStop").onclick = () => send({ cmd: "decoder", id: "" });
+$("mClear").onclick = () => { MORSE_TXT = ""; renderMorse(); };
+$("mCopy").onclick = () => { try { navigator.clipboard.writeText(MORSE_TXT); } catch (e) { /* ignore */ } };

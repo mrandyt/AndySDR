@@ -700,6 +700,30 @@
   </div>
 </div>
 
+<div class="morse-box" id="morseBox" hidden>
+  <div class="morse-head" data-help="morsebox">
+    <b>MORSE CODE DECODER</b>
+    <span class="mled" id="mKey" title="Lit while a Morse tone is being received"></span>
+    <span class="grow"></span>
+    <button class="btn" id="mClose" title="Hide this box (decoding carries on)">✕</button>
+  </div>
+  <div class="morse-stats">
+    <div><span class="muted">SPEED</span> <b id="mWpm">--</b> WPM</div>
+    <div><span class="muted">TONE</span> <b id="mTone">--</b> Hz</div>
+    <div><span class="muted">SIGNAL</span> <b id="mSnr">--</b> dB</div>
+    <div><span class="muted">FREQ</span> <b id="mFreq">--</b></div>
+  </div>
+  <div class="ticker" id="mTicker" title="Live ticker tape – newest letters appear on the right"><span id="mTape"></span></div>
+  <div class="morse-page" id="mPage" title="Everything decoded so far"></div>
+  <div class="row wrapline">
+    <button class="btn" id="mStart" title="Switch to CW mode and start decoding">▶ Start</button>
+    <button class="btn danger" id="mStop">■ Stop</button>
+    <button class="btn" id="mClear">Clear</button>
+    <button class="btn" id="mCopy" title="Copy the decoded text">Copy text</button>
+  </div>
+  <div class="morse-freqs-h"><b>Popular Morse frequencies</b> <span class="muted small">click one to tune it (CW mode)</span></div>
+  <div class="morse-freqs" id="mFreqs"></div>
+</div>
 <div class="toasts" id="toasts"></div>
 <script src="bandplan.js"></script>
 <script src="app.js"></script>

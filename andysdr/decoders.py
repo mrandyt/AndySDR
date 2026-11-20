@@ -33,6 +33,7 @@ from scipy import signal
 from .config import app_dir, data_dir
 from .iqbridge import IqBridge
 from .ft8 import Ft8Decoder, match_freq
+from .morse import MorseDecoder
 from . import capturemeta, imgcheck
 from .sstv import SstvDecoder
 from .wefax import WefaxDecoder
@@ -64,6 +65,8 @@ DECODERS = {
                "help": "Records the pass, then SatDump makes the images. 137.9 MHz, DIG25 mode."},
     "ft8":    {"name": "FT8 / FT4 weak-signal digital (ft8_lib)", "exe": "decode_ft8",
                "help": "Decodes FT8 (15 s) or FT4 (7.5 s) in USB mode – tune the dial frequency (e.g. 14.074 MHz). Starts by itself on FT8/FT4 channels from the band plan."},
+    "morse":  {"name": "Morse code / CW (built in)", "exe": None,
+               "help": "Reads Morse from the audio: finds the tone, follows the speed (5-50 WPM) and prints the text on a ticker tape. Use CW mode on the HF bands. Press the MORSE key to open it."},
     "goes":   {"name": "GOES HRIT weather satellite (SatDump)", "exe": "satdump",
                "help": "1694.1 MHz GOES-East/West images and EMWIN. Needs a dish + L-band LNA; the receiver is shared with SatDump over a local rtl_tcp link."},
     "adsb":   {"name": "ADS-B aircraft 1090 MHz (built in)", "exe": None,
@@ -251,6 +254,9 @@ class DecoderManager:
         self.job_fn = None         # set by the radio: () -> running scheduled job (dict) or None
         self.dial_fn = None        # set by the radio: () -> FT8 dial frequency of the tuned channel (Hz)
         self.ft8_history = []
+        self.morse = None
+        self.morse_text = ""
+        self.morse_status = {}
         self.bridge = None         # IqBridge (rtl_tcp server) while the GOES decoder runs
         self.rate_fn = lambda: 2400000   # set by the radio: current receiver sample rate
         self._watch_stop = True
@@ -298,6 +304,14 @@ class DecoderManager:
         self.emit(kind, {"t": time.strftime("%H:%M:%S"), "text": text, "decoder": self.active})
 
     # ------------------------------------------------------------------
+    def _morse_text(self, t):
+        self.morse_text = (self.morse_text + t)[-4000:]
+        self.emit("morse", {"text": t})
+
+    def _morse_status(self, st):
+        self.morse_status = st
+        self.emit("morse", {"status": st})
+
     def _ft8_msg(self, m):
         self.ft8_history = (self.ft8_history + [m])[-300:]
         self.emit("ft8", m)
@@ -395,6 +409,9 @@ class DecoderManager:
                 self.log("Recording Meteor LRPT pass (240 kS/s IQ). Press the decoder OFF "
                          "when the pass ends to make the pictures." +
                          ("" if exe else " SatDump not found – recording only."))
+            elif dec_id == "morse":
+                self.morse = MorseDecoder(on_text=self._morse_text, on_status=self._morse_status)
+                self.log("Morse decoder running – the text appears on the ticker tape in the MORSE box")
             elif dec_id == "ft8":
                 exe = find_exe("decode_ft8", ov)
                 if not exe:
@@ -690,6 +707,7 @@ class DecoderManager:
         if self.ft8:
             self.ft8.stop()
             self.ft8 = None
+        self.morse = None
         if self.active:
             self.log("Decoder stopped")
         self.active = None
@@ -765,6 +783,8 @@ class DecoderManager:
                 self.sstv.process(out["audio_ungated"])
             elif a == "ft8" and self.ft8:
                 self.ft8.process(out["audio_ungated"])
+            elif a == "morse" and self.morse:
+                self.morse.process(out["audio_ungated"])
             elif a == "dsd" and self.tcp:
                 d = out["disc"]
                 if self.settings.get("dsd_dc_remove", True) and getattr(self, "dsd_cond", None):

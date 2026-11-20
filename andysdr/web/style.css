@@ -726,3 +726,22 @@ html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spec
 @media (min-width: 2000px) {
   .wrap > .radio { width: 100%; max-width: 1800px; align-self: center; }
 }
+
+/* ---- Morse decoder box ---- */
+.morse-box { position: fixed; right: 16px; bottom: 16px; width: min(560px, calc(100vw - 32px)); z-index: 40; background: var(--panel2); color: var(--text);
+  border: 1px solid var(--accent); border-radius: 12px; box-shadow: 0 16px 50px rgba(0,0,0,.65); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; max-height: calc(100vh - 32px); overflow: auto; }
+.morse-box[hidden] { display: none; }
+.morse-head { display: flex; align-items: center; gap: 10px; letter-spacing: .08em; }
+.mled { width: 14px; height: 14px; border-radius: 50%; background: #2a2f36; border: 1px solid #555; }
+.mled.on { background: #3ddc84; box-shadow: 0 0 10px #3ddc84; }
+.morse-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; font-size: 13px; }
+.morse-stats b { font-variant-numeric: tabular-nums; }
+.ticker { height: 54px; border-radius: 8px; background: #05080b; border: 1px solid var(--accent); display: flex; align-items: center; justify-content: flex-end; overflow: hidden; padding: 0 10px; }
+.ticker span { font: 700 30px/1 "Consolas", "Courier New", monospace; color: #ffbf47; white-space: pre; letter-spacing: .08em; text-shadow: 0 0 8px rgba(255,191,71,.5); }
+.morse-page { height: 110px; overflow-y: auto; font: 14px/1.5 "Consolas", "Courier New", monospace; background: var(--bg, #0b0f14); border: 1px solid #2c3540; border-radius: 8px; padding: 6px 8px; white-space: pre-wrap; word-break: break-word; }
+.morse-freqs-h { margin-top: 2px; }
+.morse-freqs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.morse-freqs button { text-align: left; padding: 5px 8px; border-radius: 7px; background: var(--panel, #161c24); color: inherit; border: 1px solid #2c3540; cursor: pointer; font-size: 12px; line-height: 1.25; }
+.morse-freqs button:hover { border-color: var(--accent); }
+.morse-freqs button b { display: block; font-size: 13px; }
+.morse-freqs button.on { border-color: var(--accent); background: rgba(80,160,255,.18); }

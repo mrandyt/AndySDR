@@ -343,6 +343,7 @@ class Server:
             "pager": r.pager.snapshot(),
             "adsb": r.adsb.snapshot(),
             "ft8": r.decoders.ft8_history[-300:],
+            "morse": {"text": r.decoders.morse_text[-2000:], "status": r.decoders.morse_status},
             "bandwidths": {k: [[hz, lab] for hz, lab in v] for k, v in BANDWIDTHS.items()},
             "update": self.updater.status(),
             "settings": {k: self.s[k] for k in ("scan_delay", "scan_dwell", "search_threshold_db",
