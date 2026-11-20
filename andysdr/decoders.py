@@ -183,6 +183,7 @@ class TcpAudioServer(threading.Thread):
         super().__init__(daemon=True)
         self.port = port
         self.clients = []
+        self.backlog = []            # audio that arrived before the decoder connected (its start-up takes a second or two)
         self.srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.srv.bind(("127.0.0.1", port))
@@ -194,11 +195,17 @@ class TcpAudioServer(threading.Thread):
             try:
                 c, _ = self.srv.accept()
                 c.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                for b in self.backlog:
+                    c.sendall(b)
+                self.backlog = []
                 self.clients.append(c)
             except OSError:
                 break
 
     def send(self, pcm):
+        if not self.clients:
+            self.backlog = (self.backlog + [pcm])[-100:]     # at most ~5 s
+            return
         for c in list(self.clients):
             try:
                 c.sendall(pcm)

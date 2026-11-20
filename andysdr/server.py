@@ -549,7 +549,7 @@ class Server:
             elif cmd == "settings":
                 allowed = {"scan_delay": float, "scan_dwell": float, "search_threshold_db": float,
                            "require_password_local": bool, "deemphasis_us": int, "theme": str,
-                           "password": str, "update_check": bool, "update_auto_download": bool}
+                           "password": str, "mute_digital_audio": bool, "update_check": bool, "update_auto_download": bool}
                 for k, v in m.get("values", {}).items():
                     if k in allowed:
                         if k == "password" and (not self._is_local(c.peer) or len(str(v)) < 4):

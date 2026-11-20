@@ -82,7 +82,7 @@ button, select, input { font-family: inherit; font-size: 13px; }
 .theme-pick { display: flex; align-items: center; gap: 6px; color: var(--muted); }
 .help-btn { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px; padding: 7px 14px; font-weight: 700; cursor: pointer; letter-spacing: .5px; }
 
-.wrap { max-width: 1500px; margin: 0 auto; padding: 14px 16px 30px; display: flex; flex-direction: column; gap: 14px; }
+.wrap { max-width: none; margin: 0; padding: 14px 16px 30px; display: flex; flex-direction: column; gap: 14px; }
 
 /* ============================================================
    THE RADIO
@@ -721,3 +721,8 @@ body.cr .knob { transform: scale(.85); }
 }
 
 html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spectrum, not the window */
+
+/* wide monitors: the spectrum, waterfall and tables use the whole screen; the scanner body stays a sensible size in the middle */
+@media (min-width: 2000px) {
+  .wrap > .radio { width: 100%; max-width: 1800px; align-self: center; }
+}

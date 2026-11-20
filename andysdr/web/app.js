@@ -222,6 +222,7 @@ function renderState() {
   renderVfo();
   renderSignal();
   $("autoId").checked = $("autoId2").checked = S.auto_identify !== false;
+  $("muteDig").checked = S.mute_digital_audio !== false;
   $("devname").textContent = S.device ? `· ${S.device}` : "";
   $("listeners").textContent = S.listeners ? `· ${S.listeners} connected` : "";
   if (!knobs.sq.dragging) knobs.sq.set(S.squelch, false);
@@ -2018,6 +2019,7 @@ function renderSignal() {
   }
   if (r && r.stable !== false && !S.decoder) $("lcdDecode").textContent = "ID: " + r.label;
 }
+$("muteDig").onchange = (e) => send({ cmd: "settings", values: { mute_digital_audio: e.target.checked }, quiet: true });
 for (const id of ["autoId", "autoId2"]) $(id).onchange = (e) => { send({ cmd: "auto_identify", on: e.target.checked }); $("autoId").checked = $("autoId2").checked = e.target.checked; };
 
 /* ======================================================= scheduler */

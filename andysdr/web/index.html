@@ -282,6 +282,7 @@
     <div class="row wrapline auto-box" data-help="autoid">
       <label><input type="checkbox" id="autoId2" checked> <b>Auto-identify signals</b></label>
       <span class="muted small">AndySDR listens to whatever you are tuned to and works out what it is – DMR, P25, NXDN, dPMR, pagers, APRS, DTMF, SSTV, WEFAX, TETRA or plain voice – then switches mode and starts the right decoder by itself. Choosing a decoder yourself always takes priority.</span>
+      <label class="small" title="Silences the raw data noise while DMR / P25 / TETRA / pager decoding is running. The decoder still plays the decoded voice."><input type="checkbox" id="muteDig" checked> Mute coded noise while decoding</label>
       <span class="grow"></span><span id="sigNow" class="sig-chip" hidden></span>
     </div>
     <div class="declist" id="decStatus"></div>

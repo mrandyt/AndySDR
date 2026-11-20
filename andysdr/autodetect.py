@@ -19,6 +19,7 @@ from scipy import signal
 
 FS = 48000
 WIN = 48000            # analyse one second at a time
+HOP = 19200            # ...and again every 0.4 s
 CTCSS = [67.0, 69.3, 71.9, 74.4, 77.0, 79.7, 82.5, 85.4, 88.5, 91.5, 94.8, 97.4, 100.0, 103.5, 107.2, 110.9,
          114.8, 118.8, 123.0, 127.3, 131.8, 136.5, 141.3, 146.2, 151.4, 156.7, 162.2, 167.9, 173.8, 179.9,
          186.2, 192.8, 203.5, 210.7, 218.1, 225.7, 233.6, 241.8, 250.3]
@@ -69,23 +70,29 @@ class SignalClassifier:
         self.iq = []
         self.audio = []
         self.n = 0
+        self.new = 0
+        self.primed = False
         self.history = []       # recent kinds, for a stable decision
         self.last = None
 
     # ------------------------------------------------------------------
     def collect(self, out):
-        """Add one 50 ms block. Returns (iq, audio) once a full second has been gathered."""
+        """Add one 50 ms block. Once a second of signal is held, returns (iq, audio) – and again every 0.4 s after
+        that (sliding window), so a transmission is recognised about a second after it starts, not two."""
         iq = out.get("iq48")
         if iq is None:                      # WFM broadcast – nothing to identify
             return None
         self.iq.append(np.asarray(iq, np.complex64))
         self.audio.append(np.asarray(out["audio_ungated"], np.float32))
         self.n += len(iq)
-        if self.n < WIN:
+        self.new += len(iq)
+        have = sum(len(a) for a in self.iq)
+        if have < WIN or (self.primed and self.new < HOP):
             return None
         iq = np.concatenate(self.iq)[-WIN:]
         audio = np.concatenate(self.audio)[-WIN:]
-        self.iq, self.audio, self.n = [], [], 0
+        self.iq, self.audio = [iq], [audio]          # keep the last second for the next, overlapping analysis
+        self.new, self.primed = 0, True
         return iq, audio
 
     def feed(self, out, mode, freq):
@@ -102,7 +109,7 @@ class SignalClassifier:
             return None
         self.history = (self.history + [res["kind"]])[-3:]
         # report a kind once it has been seen twice running (one second is enough for strong data)
-        stable = self.history.count(res["kind"]) >= 2 or res.get("conf", 0) > 0.9
+        stable = self.history.count(res["kind"]) >= 2 or res.get("conf", 0) > 0.88
         res["stable"] = stable
         self.last = res
         return res

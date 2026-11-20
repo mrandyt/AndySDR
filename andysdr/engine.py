@@ -26,6 +26,7 @@ from .sstv import SstvDecoder
 log = logging.getLogger("andysdr.engine")
 
 SPEC_MIN_DB, SPEC_MAX_DB = -130.0, -10.0
+MUTE_WHEN_DECODING = ("dsd", "tetra", "pager", "data")
 REPLAY_MAX_S = 120                    # the replay buffer remembers up to two minutes of what you heard
 
 
@@ -77,6 +78,7 @@ class Radio:
         self.auto_gen = 0                 # bumps on every retune so late results are ignored
         self.auto_busy = False
         self.auto_mode_prev = None        # mode before auto-identify switched it
+        self.pre = deque(maxlen=60)       # last ~3 s of demodulated blocks, replayed into a decoder auto-identify starts
         self.auto_q = queue.Queue(maxsize=1)
         threading.Thread(target=self._auto_worker, name="autoid", daemon=True).start()
         self.job = None                   # scheduled capture in progress
@@ -279,7 +281,10 @@ class Radio:
             return
         if not self.sq_open:
             self.classifier.reset()
+            self.pre.clear()
             return
+        if self.decoders.active in (None, ""):
+            self.pre.append(out)
         # SSTV pictures start with a VIS header – watch for it continuously so none are missed
         recording_sound = self.rec is not None or bool(self.job and self.job.get("action") == "record")
         if self.decoders.active in (None, "") or (self.auto_owned and self.decoders.active != "sstv"):
@@ -357,6 +362,10 @@ class Radio:
                                                               "program is missing – see Help › Decoders"})
                 return
             self.auto_owned = True
+            if dec in ("dsd", "pager", "data", "tetra"):
+                for past in list(self.pre):          # hand over what was heard while the signal was being identified
+                    self.decoders.feed(past)
+            self.pre.clear()
             if self.mode != mode_before and not self.auto_mode_prev:
                 self.auto_mode_prev = mode_before
             self._emit("event", {"level": "info", "text": f"Auto: {r['label']} – decoder started"})
@@ -1001,6 +1010,7 @@ class Radio:
             "priority": self.priority,
             "lockouts": self.lockout_info(),
             "auto_identify": bool(self.s.get("auto_identify", True)),
+            "mute_digital_audio": bool(self.s.get("mute_digital_audio", True)),
             "bw": self.rx.bandwidth() if self.rx else 0, "bw_auto": bool(self.s.get("bw_auto", True)),
             "auto_owned": self.auto_owned,
             "signal": self.signal,
@@ -1084,6 +1094,8 @@ class Radio:
                     log.exception("auto-identify")
                 self.decoders.feed(out)
                 audio = out["audio"]
+                if self.decoders.active in MUTE_WHEN_DECODING and self.s.get("mute_digital_audio", True):
+                    audio = np.zeros_like(audio)         # the decoder plays the decoded voice itself - no coded noise
                 pcm = np.clip(audio * 32767, -32767, 32767).astype("<i2").tobytes()
                 self._emit("audio", pcm)
                 if self.rec:

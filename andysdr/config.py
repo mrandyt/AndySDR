@@ -6,7 +6,7 @@ import sys
 import threading
 
 APP_NAME = "AndySDR"
-VERSION = "1.16.0"
+VERSION = "1.17.0"
 GITHUB_REPO = "mrandyt/AndySDR"   # where updates are published (GitHub Releases)
 
 
@@ -78,6 +78,7 @@ DEFAULTS = {
     "tetra_udp_port": 42000,
     "dsd_extra_args": "",
     "dsd_dc_remove": True,           # centre the discriminator audio before DSD-FME (cures tuning-error decode failures)
+    "mute_digital_audio": True,       # silence the raw data noise while a digital decoder (DSD, TETRA, pager) runs
     "dsd_gain": 6000,                # discriminator -> 16-bit scale for DSD-FME
     "pager_aliases": {},          # capcode -> name shown in the Pager Messages tab
     "pager_highlight": [],        # capcodes to highlight (and pop up a notice for)
