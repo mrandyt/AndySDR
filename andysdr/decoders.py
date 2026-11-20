@@ -12,6 +12,7 @@ External (free programs, put them in the 'decoders' folder next to AndySDR.exe):
 AndySDR feeds DSD-FME exactly like SDR++'s network audio sink (TCP, 48 kHz, 16-bit mono),
 so `dsd-fme -i tcp:127.0.0.1:7355` works unchanged.
 """
+from collections import deque
 import glob
 import logging
 import math
@@ -355,17 +356,15 @@ class DecoderManager:
                 if not exe:
                     raise FileNotFoundError("dsd-fme.exe not found – see Help > Decoders")
                 _ensure_pulse(exe, self.log)
-                self.tcp = TcpAudioServer(7355)
-                self.tcp.start()
+                self.dsd_exe = exe
                 self.dsd_cond = DiscConditioner()
-                args = [exe, "-i", "tcp:127.0.0.1:7355"] + DSD_MODES.get(sub, ["-ft"])
-                extra = self.settings.get("dsd_extra_args", "")
-                if extra:
-                    args += extra.split()
-                self.proc = _popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                   stdin=subprocess.DEVNULL)
-                _Reader(self.proc.stdout, self.log, self._dsd_filter).start()
-                self.log("DSD-FME started: " + " ".join(os.path.basename(a) for a in args))
+                self.dsd_ring = deque(maxlen=100)
+                self.dsd_gen = getattr(self, "dsd_gen", 0) + 1
+                self.dsd_try = 0
+                self.dsd_restarts = 0
+                self._launch_dsd(sub)
+                if sub == "auto":
+                    threading.Thread(target=self._dsd_cycle, args=(self.dsd_gen,), name="dsd-cycle", daemon=True).start()
             elif dec_id in ("pager", "data"):
                 exe = find_exe("multimon-ng", ov)
                 if not exe:
@@ -561,7 +560,66 @@ class DecoderManager:
                      "Check you are on the exact carrier centre in DIG25 mode, the gain, and that the network is "
                      "a TETRA downlink.")
 
+    # Frame types tried in turn while the signal is unknown ("Auto"): -ft covers DMR + P25 (phase 1 and 2) + YSF,
+    # the others cover NXDN 12.5 / 6.25 kHz and the legacy detector (dPMR, ProVoice, D-STAR ...).
+    DSD_CYCLE = [["-ft"], ["-fn"], ["-fi"], ["-fa"]]
+    DSD_TRY_S = 3.5
+
+    def _launch_dsd(self, sub, args=None):
+        """(Re)start DSD-FME and its audio feed; audio from the last few seconds is handed over so nothing is lost."""
+        old_proc = self.proc
+        if self.tcp is None:
+            self.tcp = TcpAudioServer(7355)
+            self.tcp.start()
+        elif old_proc:                               # keep the listening socket, drop the old decoder's connection
+            for c in list(self.tcp.clients):
+                try:
+                    c.close()
+                except OSError:
+                    pass
+            self.tcp.clients = []
+            try:
+                old_proc.terminate()
+                old_proc.wait(timeout=2)
+            except Exception:
+                pass
+        self.tcp.backlog = list(self.dsd_ring)
+        flags = args if args is not None else DSD_MODES.get(sub, ["-ft"])
+        argv = [self.dsd_exe, "-i", "tcp:127.0.0.1:7355"] + flags
+        extra = self.settings.get("dsd_extra_args", "")
+        if extra:
+            argv += extra.split()
+        self.dsd_t0 = time.time()
+        self.dsd_sync_t = 0.0
+        self.proc = _popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+        _Reader(self.proc.stdout, self.log, self._dsd_filter).start()
+        self.log("DSD-FME started: " + " ".join(os.path.basename(a) for a in argv))
+
+    def _dsd_cycle(self, gen):
+        """Auto mode: if DSD-FME has not locked onto anything after a few seconds, try the next frame type."""
+        while self.active == "dsd" and self.dsd_gen == gen and self.sub == "auto":
+            time.sleep(0.5)
+            if self.dsd_sync_t or time.time() - self.dsd_t0 < self.DSD_TRY_S:
+                continue
+            if not (self.tcp and self.tcp.clients):          # still starting up
+                if time.time() - self.dsd_t0 < 8:
+                    continue
+            self.dsd_restarts = getattr(self, "dsd_restarts", 0) + 1
+            if self.dsd_restarts > 8:                       # give up rotating; stay on the last choice
+                return
+            self.dsd_try = (self.dsd_try + 1) % len(self.DSD_CYCLE)
+            flags = self.DSD_CYCLE[self.dsd_try]
+            self.log("DSD-FME: no sync yet – trying " + " ".join(flags))
+            try:
+                self._launch_dsd("auto", flags)
+            except Exception as e:
+                self.log(f"DSD-FME restart failed: {e}")
+                return
+
     def _dsd_filter(self, line):
+        low = line.lower()
+        if ("sync:" in low and "no sync" not in low) or "voice" in low or " slot " in low or "tg:" in low or "nac:" in low:
+            self.dsd_sync_t = time.time()
         return not line.startswith(("Digital Speech Decoder", "Build", "mbelib", "Audio In",
                                     "Audio Out", "TCP"))
 
@@ -713,6 +771,7 @@ class DecoderManager:
                     d = self.dsd_cond.process(d, bool(out.get("squelch_open", True)))
                 gain = float(self.settings.get("dsd_gain", 6000) or 6000)
                 pcm = np.clip(d * gain, -32767, 32767).astype("<i2").tobytes()
+                self.dsd_ring.append(pcm)
                 self.tcp.send(pcm)
             elif a in ("pager", "data") and self.feed_q:
                 d = out["disc"]
