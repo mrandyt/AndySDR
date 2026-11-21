@@ -8,7 +8,9 @@
 import argparse
 import asyncio
 import logging
+import logging.handlers
 import os
+import socket
 import sys
 import threading
 import time
@@ -21,7 +23,12 @@ from .server import Server, lan_addresses
 
 def setup_logging():
     logfile = os.path.join(data_dir(), "logs", "andysdr.log")
-    handlers = [logging.FileHandler(logfile, encoding="utf-8")]
+    try:
+        if os.path.getsize(logfile) > 20 * 1024 * 1024:          # a runaway log from an older version: start afresh
+            os.remove(logfile)
+    except OSError:
+        pass
+    handlers = [logging.handlers.RotatingFileHandler(logfile, maxBytes=5 * 1024 * 1024, backupCount=2, encoding="utf-8")]
     if sys.stdout and sys.stdout.isatty():
         handlers.append(logging.StreamHandler())
     logging.basicConfig(level=logging.INFO, handlers=handlers,
@@ -29,12 +36,31 @@ def setup_logging():
     return logfile
 
 
-def run_server_thread(server):
+def port_in_use(port, wait=0.0):
+    """True if something is already listening on this PC's `port` (waits up to `wait` s for it to be released)."""
+    end = time.time() + wait
+    while True:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as c:
+            c.settimeout(0.5)
+            busy = c.connect_ex(("127.0.0.1", int(port))) == 0
+        if not busy or time.time() >= end:
+            return busy
+        time.sleep(0.5)
+
+
+def run_server_thread(server, radio=None):
     def run():
         try:
             asyncio.run(server.serve())
         except Exception:
             logging.getLogger("andysdr").exception("server stopped")
+            # no server means no way to use this copy - and its radio thread would keep the receiver locked
+            # so that the copy that IS working cannot find it. Let go of the receiver and quit.
+            try:
+                if radio is not None:
+                    radio.stop()
+            finally:
+                os._exit(1)
     t = threading.Thread(target=run, name="server", daemon=True)
     t.start()
     return t
@@ -82,10 +108,16 @@ def main():
     settings.save()
     log.info("%s %s starting. Data folder: %s", APP_NAME, VERSION, data_dir())
 
+    if port_in_use(settings["server_port"], wait=6.0):              # a restart after an update gives the old copy a few seconds to go
+        log.warning("AndySDR is already running on port %s - not starting a second copy", settings["server_port"])
+        if not args.server:
+            webbrowser.open(f"http://127.0.0.1:{settings['server_port']}/")
+        return
+
     radio = Radio(settings)
     server = Server(radio, settings)
     radio.start()
-    run_server_thread(server)
+    run_server_thread(server, radio)
     time.sleep(0.6)
     url = f"http://127.0.0.1:{settings['server_port']}/"
 

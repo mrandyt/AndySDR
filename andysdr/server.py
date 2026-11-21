@@ -105,7 +105,10 @@ class Server:
     def _from_radio(self, kind, payload):
         if self.loop is None:
             return
-        self.loop.call_soon_threadsafe(self._broadcast, kind, payload)
+        try:
+            self.loop.call_soon_threadsafe(self._broadcast, kind, payload)
+        except RuntimeError:                 # the server loop has stopped: stop sending (and stop flooding the log)
+            self.loop = None
 
     def _broadcast(self, kind, payload):
         if kind == "spectrum":
