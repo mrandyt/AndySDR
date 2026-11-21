@@ -106,8 +106,8 @@ function onJSON(m) {
     case "update_progress": UPD.progress = d.progress; renderUpdateBar(); break;
     case "event": toast(d.text, d.level); if (d.level === "error") decLine("! " + d.text); break;
     case "import_result":
-      $("csvResult").textContent = `Imported ${d.added} channels` + (d.talkgroups ? `, ${d.talkgroups} talkgroups` : "") +
-        (d.skipped ? `, skipped ${d.skipped} rows` : "") + (d.overflow ? `, ${d.overflow} did not fit` : "");
+      $("csvResult").textContent = `Imported ${d.added} channels` + (d.file ? ` from ${d.file}` : "") + (d.talkgroups ? `, ${d.talkgroups} talkgroups` : "") +
+        (d.skipped ? `, skipped ${d.skipped} rows` : "") + (d.overflow ? `, ${d.overflow} did not fit – raise "using … bank(s)" (only empty banks are used) or split the file` : "");
       toast($("csvResult").textContent);
       break;
   }
@@ -1026,6 +1026,8 @@ function renderMemory() {
     b.oncontextmenu = (e) => { e.preventDefault(); toggleBank(+b.dataset.b); };
   });
   $("bankName").value = MEM.banks[curBank].name;
+  const src = MEM.banks[curBank].source;
+  $("bankSource").textContent = src && src.file ? `Database: ${src.file}` + (src.file_date ? ` · file dated ${src.file_date}` : "") + (src.imported ? ` · imported ${src.imported}` : "") : "";
   const pb = $("pkBank").value;
   $("pkBank").innerHTML = Array.from({ length: 10 }, (_, b) => `<option value="${b}">Bank ${b} – ${esc(MEM.banks[b].name)} (${Object.keys(MEM.banks[b].channels).length})</option>`).join("");
   $("pkBank").value = pb || "9";
@@ -1072,7 +1074,7 @@ $("csvImport").onclick = () => {
   const f = $("csvFile").files[0];
   if (!f) { toast("Choose a RadioReference CSV file first", "warn"); return; }
   const rd = new FileReader();
-  rd.onload = () => send({ cmd: "import_csv", text: rd.result, bank: +$("csvBank").value, replace: $("csvReplace").checked, bank_name: $("csvName").value || f.name.replace(/\.\w+$/, "").slice(0, 16) });
+  rd.onload = () => send({ cmd: "import_csv", text: rd.result, bank: +$("csvBank").value, banks: +$("csvBanks").value || 1, filename: f.name, file_date: f.lastModified ? new Date(f.lastModified).toISOString().slice(0, 10) : "", replace: $("csvReplace").checked, bank_name: $("csvName").value || f.name.replace(/\.\w+$/, "").slice(0, 16) });
   rd.readAsText(f);
 };
 
@@ -2509,7 +2511,7 @@ const HELP = {
   zoom: ["Zoom", "Magnify the spectrum. On a touch screen stretch two fingers apart to zoom in and pinch to zoom out; on a laptop touchpad do the same pinch gesture; with a mouse hold Ctrl and scroll. When zoomed in, scroll the wheel (or two-finger swipe on the touchpad) up/down to slide the view left/right, or drag it. Click a signal to tune it. Follow keeps the view centred on the frequency you are tuned to; Fit shows everything. Shift+scroll still steps the tuning frequency."],
   scope: ["Spectrum & waterfall", "Live picture of the radio band around you. The top graph shows signal strength across the received bandwidth; the waterfall below shows history – transmissions appear as bright streaks. Click anywhere to tune there; pinch or Ctrl+scroll to zoom (see Zoom). The red line and shading show the channel you are listening to. 'Range' and 'Top' set the display contrast."],
   banks: ["Memory banks", "10 banks × 100 channels = 1000 memories. Click a bank to view it, right-click to include/exclude it from scanning. In the table: click a frequency or ▶ to listen, click the name to rename, change mode/decoder in the drop-downs, tick L/O to lock out, PRI to make it the priority channel, ✕ to delete."],
-  import: ["RadioReference UK import", "On radioreference.com open a UK county/agency database page and use its CSV download (premium) – or select the frequency table on the page, copy it and save it as a .txt file. Choose the file, pick the bank, and Import. AndySDR recognises Frequency, Alpha Tag, Description, Mode, Tag and Tone columns, converts FMN/AM/DMR/P25/NXDN/TETRA modes, and attaches the right decoder. Talkgroup lists (Decimal/Alpha Tag) are stored as talkgroups. Banks overflow into the next free bank."],
+  import: ["RadioReference UK import", "On radioreference.com open a UK county/agency database page and use its CSV download (premium) – or select the frequency table on the page, copy it and save it as a .txt file. Choose the file, pick the bank, and Import. AndySDR recognises Frequency, Alpha Tag, Description, Mode, Tag and Tone columns, converts FMN/AM/DMR/P25/NXDN/TETRA modes, and attaches the right decoder. Talkgroup lists (Decimal/Alpha Tag) are stored as talkgroups. Only the chosen bank is filled (100 channels) unless you raise 'using … bank(s)', which carries on into the following empty banks - banks you already use are never touched. The bank then shows the database file name, the file's date and when it was imported."],
   search: ["Search", "Set From/To in MHz, the channel step, mode and sensitivity (lower dB = finds weaker signals but more false hits), then Search. UK quick ranges fill the boxes for you. Results list each active frequency with hit count and strength – click a frequency to listen, Store to save it to the selected bank."],
   decoders: ["Decoders", "Pick what to decode on the current frequency. Digital voice uses DSD-FME (choose DMR, P25, NXDN, dPMR, YSF, M17, D-STAR or Auto; if a DMR or dPMR signal shows sync but only garbage, try the Inverted entry). AndySDR also centres the signal for the decoder automatically so a dongle's tuning error doesn't break decoding; pagers use multimon-ng (POCSAG & FLEX); WEFAX, SSTV and ADS-B aircraft tracking (1090 MHz, see the ADS-B tab) are built in; Meteor-M LRPT records the satellite pass and hands it to SatDump. Decoded text appears in the log and on the LCD bottom line; pager messages are also listed in the PAGER MESSAGES tab. Memory channels can start their decoder automatically."],
   biaspanel: ["Bias-T panel", "Shows whether the bias-T (antenna power) is on and can reach your antenna (RSP2: Antenna B only), the receiver noise floor over the last two minutes, and receiver overloads. No SDR can measure the current it supplies, so a drop in noise floor is used to spot lost power. 'Run power check' switches bias-T off for 6 s then on for 8 s and tells you how many dB the powered antenna or LNA adds - if there is no change, nothing is being powered. Do not run it during a scheduled capture."],

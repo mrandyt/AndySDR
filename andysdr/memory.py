@@ -2,6 +2,7 @@
 import csv
 import io
 import json
+import time
 import os
 import re
 import threading
@@ -238,6 +239,7 @@ class MemoryBank:
 
     def clear_bank(self, bank):
         self.data["banks"][str(int(bank))]["channels"] = {}
+        self.data["banks"][str(int(bank))].pop("source", None)
         self.save()
 
     def free_slot(self, bank, start=0):
@@ -247,28 +249,47 @@ class MemoryBank:
                 return i
         return None
 
-    def import_channels(self, bank, channels, replace=False, bank_name=None):
-        bank = str(int(bank))
+    def import_channels(self, bank, channels, replace=False, bank_name=None, max_banks=1, source=None):
+        """Put `channels` into `bank` (100 channels per bank).  By default that is all it uses: whatever does not
+        fit is counted as overflow.  With max_banks > 1 it carries on into the following banks, but only into
+        banks that are completely empty (or are being replaced), so banks you have set up are never touched."""
+        first = int(bank)
+        max_banks = max(1, min(BANKS, int(max_banks or 1)))
+        allowed = list(range(first, min(BANKS, first + max_banks)))
         if replace:
-            self.data["banks"][bank]["channels"] = {}
+            for k in allowed:
+                self.data["banks"][str(k)]["channels"] = {}
         if bank_name:
-            self.data["banks"][bank]["name"] = bank_name[:16]
+            self.data["banks"][str(first)]["name"] = bank_name[:16]
         added, overflow = 0, 0
-        b = int(bank)
+        stamp = None
+        if source:                                       # which file this came from, and when - shown beside the bank
+            stamp = {"file": str(source.get("file") or "")[:120], "file_date": source.get("file_date") or "",
+                     "imported": time.strftime("%Y-%m-%d %H:%M")}
+            self.data["banks"][str(first)]["source"] = stamp
+        pos = 0                                          # index into `allowed`
         for c in channels:
-            slot = self.free_slot(b)
+            slot = self.free_slot(allowed[pos])
+            while slot is None:                          # this bank is full: move on to the next empty allowed bank
+                pos += 1
+                while pos < len(allowed) and self.data["banks"][str(allowed[pos])]["channels"]:
+                    pos += 1
+                if pos >= len(allowed):
+                    break
+                nb = allowed[pos]
+                if bank_name:
+                    self.data["banks"][str(nb)]["name"] = f"{bank_name[:13]} {pos + 1}"
+                if stamp:
+                    self.data["banks"][str(nb)]["source"] = stamp
+                slot = self.free_slot(nb)
             if slot is None:
-                # spill into next banks with free space
-                nb = next((k for k in range(BANKS) if self.free_slot(k) is not None), None)
-                if nb is None:
-                    overflow += 1
-                    continue
-                b = nb
-                slot = self.free_slot(b)
+                overflow += 1
+                pos = len(allowed) - 1
+                continue
             entry = dict(c)
             entry.setdefault("lockout", False)
             entry.setdefault("delay", True)
-            self.data["banks"][str(b)]["channels"][str(slot)] = entry
+            self.data["banks"][str(allowed[pos])]["channels"][str(slot)] = entry
             added += 1
         self.save()
         return added, overflow

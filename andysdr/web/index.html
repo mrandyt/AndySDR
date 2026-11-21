@@ -219,10 +219,12 @@
       <button class="btn" id="bankRename">Rename</button>
       <button class="btn danger" id="bankClear">Clear bank</button>
     </div>
+    <div class="small muted" id="bankSource"></div>
     <div class="row wrapline import-box" data-help="import">
       <b>RadioReference UK import</b>
       <input type="file" id="csvFile" accept=".csv,.txt,.tsv">
       <label>into bank <select id="csvBank"></select></label>
+      <label title="1 = fill only this bank (100 channels); more banks continue into the following EMPTY banks">using <input type="number" id="csvBanks" class="inp" min="1" max="10" value="1" style="width:3.5em"> bank(s)</label>
       <input id="csvName" class="inp" placeholder="Bank name (optional)" style="width:12em">
       <label><input type="checkbox" id="csvReplace"> replace bank</label>
       <button class="btn primary" id="csvImport">Import CSV</button>

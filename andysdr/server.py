@@ -541,11 +541,12 @@ class Server:
                 from .memory import parse_radioreference_csv
                 res = parse_radioreference_csv(m["text"])
                 added, overflow = r.memory.import_channels(int(m.get("bank", 1)), res["channels"],
-                                                           bool(m.get("replace")), m.get("bank_name"))
+                                                           bool(m.get("replace")), m.get("bank_name"), m.get("banks", 1),
+                                                           {"file": m.get("filename"), "file_date": m.get("file_date")} if m.get("filename") else None)
                 if res["talkgroups"]:
                     r.memory.import_talkgroups(res["talkgroups"])
                 self._broadcast("memory", r.memory.all())
-                self._reply(c, "import_result", {"added": added, "overflow": overflow,
+                self._reply(c, "import_result", {"added": added, "overflow": overflow, "file": m.get("filename") or "",
                                                  "skipped": res["skipped"],
                                                  "talkgroups": len(res["talkgroups"])})
             elif cmd == "clear_activity":
