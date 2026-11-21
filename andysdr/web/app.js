@@ -42,7 +42,11 @@ function connect() {
   const proto = location.protocol === "https:" ? "wss" : "ws";
   ws = new WebSocket(`${proto}://${location.host}/ws`);
   ws.binaryType = "arraybuffer";
-  ws.onopen = () => setConn(true);
+  ws.onopen = () => {
+    setConn(true);
+    // after a dropped link (server restart, update, Wi-Fi blip) the server has forgotten this screen wants sound
+    if (typeof player !== "undefined" && player.on && $("myAudio").checked) send({ cmd: "audio", on: true });
+  };
   ws.onclose = () => { setConn(false); setTimeout(connect, 2000); };
   ws.onmessage = (ev) => {
     if (typeof ev.data === "string") { onJSON(JSON.parse(ev.data)); return; }
@@ -368,7 +372,10 @@ const player = {
     this.node.onaudioprocess = (ev) => this.pull(ev.outputBuffer.getChannelData(0));
     this.node.connect(this.gain).connect(this.ctx.destination);
     this.on = true;
+    this.wake();
   },
+  // browsers / WebView2 can leave the audio engine "suspended" (autoplay rules, minimised window, PC sleep): wake it
+  wake() { if (this.on && this.ctx && this.ctx.state !== "running" && this.ctx.state !== "closed") this.ctx.resume().catch(() => {}); },
   stop() { if (this.ctx) this.ctx.close(); this.ctx = null; this.on = false; },
   muted: false,
   setVolume(v) { this.vol = v; if (this.gain) this.gain.gain.value = this.muted ? 0 : v * v * 1.6; },
@@ -394,6 +401,8 @@ const player = {
   },
 };
 player.setVolume(knobs.vol.value / 100);
+setInterval(() => player.wake(), 1500);
+for (const ev of ["click", "keydown", "touchstart", "focus", "visibilitychange"]) window.addEventListener(ev, () => player.wake(), true);
 $("pwrBtn").addEventListener("click", () => {
   if (explainOn) return;
   if (player.on) player.stop(); else { player.start(); player.setVolume(knobs.vol.value / 100); }
