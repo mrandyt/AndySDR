@@ -530,16 +530,18 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 .adsb-stat .run { color: #4ddb7a; }
 #adsbStart.on { outline: 2px solid #4ddb7a; outline-offset: 1px; }
 .adsb-wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; margin-top: 8px; }
-.adsb-map { position: relative; height: 540px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #dfe8ee; touch-action: none; }
+.adsb-map { position: relative; height: clamp(540px, calc(100vh - 230px), 860px); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #dfe8ee; touch-action: none; }
 .adsb-map canvas { display: block; cursor: grab; }
 .adsb-map canvas.drag { cursor: grabbing; }
 .adsb-maptools { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; }
 .adsb-maphint { position: absolute; left: 8px; bottom: 6px; pointer-events: none; background: rgba(0,0,0,.55); color: #e8edf3; padding: 1px 6px; border-radius: 4px; }
-.adsb-detail { position: absolute; left: 8px; top: 8px; max-width: 15em; background: color-mix(in srgb, var(--panel) 92%, transparent); border: 1px solid var(--line);
-  border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.5; }
+.adsb-detail { position: absolute; left: 8px; top: 8px; width: 17em; max-width: calc(100% - 90px); max-height: calc(100% - 44px); overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box;
+  background: color-mix(in srgb, var(--panel) 94%, transparent); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.5; scrollbar-width: thin; }
+.adsb-detail { z-index: 5; }
 .adsb-detail b.big { font-size: 15px; color: var(--accent); }
-.adsb-detail .x { float: right; background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 14px; }
-.adsbtab { max-height: 540px; }
+.adsb-detail .x { position: sticky; top: 0; float: right; background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 14px; }
+.adsbtab { max-height: clamp(540px, calc(100vh - 230px), 860px); }
 #adsbTable th { cursor: pointer; white-space: nowrap; user-select: none; position: sticky; top: 0; }
 #adsbTable th.sorted::after { content: " ▾"; color: var(--accent); }
 #adsbTable th.sorted.asc::after { content: " ▴"; }
