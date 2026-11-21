@@ -567,14 +567,16 @@
       <label>Do <select id="schAction"></select></label>
       <label>Start <input class="inp" id="schStart" type="time" value="12:00"></label>
       <label>for <input class="inp" id="schDur" type="number" min="1" max="1440" value="20" style="width:5em"> min</label>
+      <label title="If two captures overlap only one can run: the higher priority takes over the radio">Priority <select id="schPrio"><option value="2">High</option><option value="1" selected>Normal</option><option value="0">Low</option></select></label>
       <div class="sch-days" id="schDays"></div>
       <label>or once on <input class="inp" id="schDate" type="date"></label>
       <button class="btn primary" id="schAdd">Add capture</button>
       <button class="btn" id="schClear">New</button>
     </div>
+    <div class="card sch-clash" id="schClash" hidden></div>
     <div class="tablewrap">
       <table class="grid" id="schTable">
-        <thead><tr><th>On</th><th>When</th><th>Name</th><th>Frequency</th><th>Mode</th><th>Do</th><th>Length</th><th>Next</th><th></th></tr></thead>
+        <thead><tr><th>On</th><th>When</th><th>Name</th><th>Frequency</th><th>Mode</th><th>Do</th><th>Length</th><th>Priority</th><th>Next</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>

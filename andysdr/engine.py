@@ -397,6 +397,7 @@ class Radio:
             if act in ("wefax", "sstv", "lrpt", "goes") and self.rec:
                 self.rec.close()               # picture jobs keep the picture only, not the sound
                 self.rec = None
+            self.decoders.pass_northbound = bool(job.get("northbound"))      # LRPT: which way the satellite is heading
             if act in ("wefax", "sstv", "lrpt", "goes", "pager", "data", "dsd"):
                 self.decoders.start(act, "auto")
             elif act == "record" and not self.rec:
@@ -426,6 +427,7 @@ class Radio:
             self.job, self.job_prev = None, None
             if job and job.get("action") in ("wefax", "sstv", "lrpt", "goes", "pager", "data", "dsd"):
                 self.decoders.stop()
+            self.decoders.pass_northbound = False
             if job and job.get("action") == "record" and self.rec and not prev.get("recording"):
                 self.rec.close()
                 self.rec = None

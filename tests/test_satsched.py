@@ -91,7 +91,7 @@ check("GOES HRIT preset and action exist", "goes" in stt["actions"] and any(p["a
 sch2 = Scheduler(FakeRadio(), S(obs_lat=51.5, obs_lon=-0.12, schedule=[])); sch2.alive = False
 sch2.sats.tle["59051"] = {"l1": L1, "l2": L2, "t": real_now}; sch2._tle_check = time.time()
 sch2.sats.set_cfg("meteor_m24", enabled=True)
-sch2.running = {"id": "x", "name": "manual", "until": dt.datetime.fromtimestamp(real_now + 99999), "action": "record", "freq": 1}
+sch2.running = {"id": "x", "name": "manual", "until": dt.datetime.fromtimestamp(real_now + 99999), "action": "record", "freq": 1, "prio": 3}   # prio 3 = started by hand
 sch2.tick(dt.datetime.fromtimestamp(sch2.sats.passes("meteor_m24", real_now)[0]["aos"] + 10))
 check("manual capture keeps priority", not sch2.radio.started)
 print("FAILED" if fails else "ALL OK", fails)

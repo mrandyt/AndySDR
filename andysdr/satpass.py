@@ -367,6 +367,9 @@ class SatPlanner:
         job = {"id": key, "name": f"{d['name']} pass (max {p['max_el']:.0f}°)" if not p.get("geo") else d["name"],
                "freq": self.tuned_freq(sid, now), "nominal": c["freq"], "sat": sid, "mode": d["mode"], "action": d["action"],
                "duration": max(1, int((until - now) / 60) + 1)}
+        if not p.get("geo") and "az_aos" in p and "az_los" in p:
+            # heading north (ends further north than it began): Meteor pictures come out upside down
+            job["northbound"] = math.cos(math.radians(p["az_los"])) > math.cos(math.radians(p["az_aos"]))
         return sid, p, key, job, until
 
     def upcoming(self, now=None, limit=60):

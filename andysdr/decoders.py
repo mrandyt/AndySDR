@@ -721,6 +721,7 @@ class DecoderManager:
         args = [exe, "meteor_m2-x_lrpt", "baseband", path, out,
                 "--samplerate", "240000", "--baseband_format", "s16"]
         self.log("Running SatDump – pictures will appear in the Images tab when done")
+        flip = bool(getattr(self, "pass_northbound", False)) and bool(self.settings.get("auto_north", True))
 
         def run():
             p = _popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -734,8 +735,12 @@ class DecoderManager:
                 rel = os.path.relpath(f, self.images_dir).replace("\\", "/")
                 if imgcheck.discard_if_blank(f):
                     continue
+                if flip and "project" not in rel.lower():
+                    imgcheck.rotate_180(f)       # a northbound pass is scanned south-to-north: turn it so north is at the top
                 shown += 1
                 self.emit("image", {"file": rel})
+            if flip and shown:
+                self.log("Northbound pass: pictures turned round so north is at the top")
             self.log(f"{shown} picture(s) kept" + (f", {len(pngs) - shown} blank one(s) discarded" if len(pngs) > shown else ""))
             # the pictures are the product: drop the huge raw IQ recording once SatDump has made them
             if pngs and not self.settings.get("keep_iq", False):

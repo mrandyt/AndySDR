@@ -39,3 +39,16 @@ def discard_if_blank(path):
             return False
         return True
     return False
+
+
+def rotate_180(path):
+    """Turn a picture upside down in place (north-up for Meteor passes heading north). True if done."""
+    if Image is None:
+        return False
+    try:
+        with Image.open(path) as im:
+            out = im.rotate(180)
+            out.save(path)
+        return True
+    except Exception:
+        return False

@@ -747,3 +747,7 @@ html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spec
 .morse-freqs button:hover { border-color: var(--accent); }
 .morse-freqs button b { display: block; font-size: 13px; }
 .morse-freqs button.on { border-color: var(--accent); background: rgba(80,160,255,.18); }
+
+.sch-clash { border-color: var(--warn, #ffb020); margin: 8px 0; padding: 6px 10px; }
+.sch-clash ul { margin: 4px 0 0 18px; padding: 0; }
+.warnmark { color: var(--warn, #ffb020); cursor: help; }

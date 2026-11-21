@@ -2053,13 +2053,17 @@ function renderSchedule() {
   $("schRunning").hidden = $("schStop").hidden = !run;
   if (run) { $("schRunning").textContent = `● Capturing: ${run.name} until ${run.until}`; $("schRunning").className = "sig-chip pic"; }
   const next = Object.fromEntries((SCH.next || []).map((n) => [n.id, n.at]));
+  const clashes = SCH.conflicts || [], PRIO = ["Low", "Normal", "High"];
+  const clashOf = (id) => clashes.filter((c) => c.a_id === id || c.b_id === id);
+  $("schClash").hidden = !clashes.length;
+  $("schClash").innerHTML = clashes.length ? `<b>⚠ ${clashes.length} overlapping capture${clashes.length > 1 ? "s" : ""}</b> <span class="muted small">– only one capture can run at a time, so the radio does what it says here:</span><ul class="small">${clashes.map((c) => `<li>${esc(c.text)}</li>`).join("")}</ul>` : "";
   $("schTable").querySelector("tbody").innerHTML = SCH.jobs.map((j) => `<tr data-id="${esc(j.id)}" class="${run && run.id === j.id ? "playing" : ""}">
     <td><input type="checkbox" data-act="en" ${j.enabled ? "checked" : ""}></td>
     <td>${esc(j.start)} ${j.date ? "on " + esc(j.date) : j.days.length ? j.days.map((d) => DAYS[d]).join(" ") : "daily"}</td>
-    <td>${esc(j.name)}</td><td class="f" data-act="tune">${fmtMHz(j.freq, j.freq < 3e7 ? 4 : 4)}</td><td>${j.mode}</td>
-    <td>${esc(SCH.actions[j.action] || j.action)}</td><td>${j.duration} min</td><td class="muted">${j.enabled ? esc(next[j.id] || "–") : "off"}</td>
+    <td>${j.enabled && clashOf(j.id).length ? `<span class="warnmark" title="${esc(clashOf(j.id).map((c) => c.text).join("\n"))}">⚠</span> ` : ""}${esc(j.name)}</td><td class="f" data-act="tune">${fmtMHz(j.freq, j.freq < 3e7 ? 4 : 4)}</td><td>${j.mode}</td>
+    <td>${esc(SCH.actions[j.action] || j.action)}</td><td>${j.duration} min</td><td>${PRIO[j.priority == null ? 1 : j.priority]}</td><td class="muted">${j.enabled ? esc(next[j.id] || "–") : "off"}</td>
     <td><button class="btn sm" data-act="run">▶ Now</button> <button class="btn sm" data-act="edit">Edit</button> <button class="btn sm danger" data-act="del">✕</button></td></tr>`).join("") ||
-    '<tr><td colspan="9" class="muted">No captures yet. Pick a station from Quick pick, set the start time and length, then Add capture.</td></tr>';
+    '<tr><td colspan="10" class="muted">No captures yet. Pick a station from Quick pick, set the start time and length, then Add capture.</td></tr>';
   $("schTable").querySelectorAll("tr[data-id]").forEach((tr) => {
     const j = SCH.jobs.find((x) => x.id === tr.dataset.id);
     tr.querySelector("[data-act=en]").onchange = (e) => send({ cmd: "schedule_save", job: { ...j, enabled: e.target.checked } });
@@ -2201,6 +2205,7 @@ function fillSchForm(j) {
   $("schName").value = j ? j.name : ""; $("schFreq").value = j ? (j.freq / 1e6).toString() : "";
   $("schMode").value = j ? j.mode : "USB"; $("schAction").value = j ? j.action : "wefax";
   $("schStart").value = j ? j.start : "12:00"; $("schDur").value = j ? j.duration : 20; $("schDate").value = j ? j.date : "";
+  $("schPrio").value = j && j.priority != null ? j.priority : 1;
   $("schDays").querySelectorAll("input").forEach((c) => (c.checked = !!(j && j.days.includes(+c.value))));
   $("schAdd").textContent = j ? "Save changes" : "Add capture";
 }
@@ -2213,6 +2218,7 @@ $("schAdd").onclick = () => {
   if (!(f > 0)) { toast("Enter the frequency in MHz", "warn"); return; }
   const job = { id: schEdit || undefined, name: $("schName").value || `${f} MHz`, freq: Math.round(f * 1e6), mode: $("schMode").value,
     action: $("schAction").value, start: $("schStart").value || "12:00", duration: +$("schDur").value || 10, date: $("schDate").value,
+    priority: +$("schPrio").value,
     days: [...$("schDays").querySelectorAll("input:checked")].map((c) => +c.value), enabled: true };
   send({ cmd: "schedule_save", job }); fillSchForm(null); $("schPreset").value = "";
   toast(`Capture saved: ${job.name} at ${job.start}`);
@@ -2476,7 +2482,7 @@ const HELP = {
   morsebox: ["Morse code decoder", "Press the MORSE key (DECODE row) to open this box. AndySDR switches to CW mode and reads Morse from the audio: it finds the pitch of the tone by itself, follows the sending speed (about 5-50 WPM) and prints the letters on the ticker tape, newest on the right; the box underneath keeps everything decoded. SPEED, TONE and SIGNAL show what it hears and the green light flashes with the keying. Click a popular frequency to tune it – most activity is near the QRP spots (7.030, 14.060 MHz), the IARU beacons (14.100, 28.200 MHz) and aviation NDB beacons (190-530 kHz). Weak or very fast signals decode with mistakes (shown as ¿); a clean tone with the signal 15 dB or more above the noise works best. ✕ hides the box but decoding carries on; ■ Stop ends it."],
   ft8tab: ["FT8 / FT4", "Weak-signal amateur digital modes. Pick a band and press ▶ FT8 (or ▶ FT4): AndySDR tunes USB to the dial frequency and decodes every 15 s UTC slot (FT4: 7.5 s). It also starts by itself when you tune or scan onto an FT8/FT4 channel from the band plan and something is on the air. The PC clock must be accurate. CQ only hides everything except stations calling CQ. From/Grid are read from the message."],
   satauto: ["Satellite auto-capture", "Tick Record on a satellite and AndySDR predicts every pass over your position for the next 4 days (listed day by day) (set it with My position or 📍), tunes at acquisition of signal, follows the Doppler shift if Track is ticked, runs the right decoder and stops when the satellite sets – then puts the radio back as it was. ISS SSTV listens on 145.800 MHz FM (limit it to the ARISS event dates with the date boxes); Meteor-M N2-3 and N2-4 are LRPT on 137.900 MHz (switch to 137.100 if the satellite moves); GOES-19/18 are 1694.1 MHz HRIT from geostationary orbit – AndySDR says honestly when the satellite is below your horizon. Tick the days of the week you want (none ticked = every day) – you never type a time, AndySDR starts each capture only when the satellite is actually above your horizon. Min elevation hides low, weak passes. Orbit data (TLEs) is downloaded from CelesTrak and refreshed automatically. A capture you add by hand always takes priority."],
-  sched: ["Scheduler", "Captures that run by themselves at set times – ideal for weather fax charts, ISS SSTV events and Meteor-M satellite passes. Pick a station from Quick pick (or type a frequency), choose what to do (WEFAX, SSTV, LRPT, record…), the start time on this PC's clock and how long, and either tick days of the week or pick a single date. At the start time AndySDR stops scanning, tunes, runs the decoder; at the end it saves the pictures and puts the radio back exactly as it was. ▶ Now runs one straight away. AndySDR must be running (it can run as a server in the background)."],
+  sched: ["Scheduler", "Captures that run by themselves at set times – ideal for weather fax charts, ISS SSTV events and Meteor-M satellite passes. Pick a station from Quick pick (or type a frequency), choose what to do (WEFAX, SSTV, LRPT, record…), the start time on this PC's clock and how long, and either tick days of the week or pick a single date. At the start time AndySDR stops scanning, tunes, runs the decoder; at the end it saves the pictures and puts the radio back exactly as it was. Only one capture can run at a time: if two overlap, the one with the higher Priority takes over the radio (satellite passes count as High) and an interrupted capture carries on afterwards if time is left; overlaps are flagged with ⚠ and listed above the table. ▶ Now runs one straight away. AndySDR must be running (it can run as a server in the background)."],
   bppick: ["Plan › Band › Section", "Drill down through the UK band plan: pick a Plan (amateur, aviation, marine, PMR…), then a Band in it, then a Section (sub-band or key frequency). Tune goes there in the right mode and step; Search section loads it into the Live Activity search; 'Add key frequencies to bank' stores every key frequency in that band (e.g. marine Ch 16/70/AIS, airband 121.5/123.1) into the memory bank you choose. Clicking a coloured strip on the spectrum or a band name in the list also selects it here. Tap the coloured plan buttons underneath to show or hide each plan on the spectrum."],
   bandplan: ["Band plan size", "Shows the UK band plan as coloured strips across the top of the spectrum and in the band map above it. Off hides it; Small shows main allocations only; Medium adds sub-bands (e.g. 2 m FM simplex) and markers for key frequencies (Ch 16, 121.5, APRS…); Large makes the strips bigger and names the key frequencies. Each computer remembers its own choice."],
   vfo: ["VFO bar", "The VFO is the frequency you are tuned to. This bar shows it, which UK band and sub-band it is in, and – if the band normally uses a different mode or step – a 'Use' button that sets them for you. The red line and red VFO flag on the spectrum mark the same frequency."],
