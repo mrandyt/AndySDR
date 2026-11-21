@@ -89,6 +89,8 @@ class Radio:
         self._bias_emit = 0.0
         from .meshlink import MeshLink
         self.mesh = MeshLink(settings, self._emit)   # MeshCore messaging via a companion board
+        from .gps import GpsLink
+        self.gps = GpsLink(settings, self._emit, self._gps_position)   # USB GPS unit -> my position
 
     # ------------------------------------------------------------------ plumbing
     def add_listener(self, fn):
@@ -111,8 +113,23 @@ class Radio:
         self.thread.start()
         self.scheduler.start()
         self.mesh.autoconnect()
+        self.gps.autostart()
+
+    def _gps_position(self, lat, lon, alt):
+        """A GPS fix arrived (or the unit moved): update satellite passes and the ADS-B reference position."""
+        try:
+            if self.scheduler.sats.set_observer(lat, lon, alt):
+                self.scheduler.sats.refresh_tles()
+                self.scheduler._emit()
+            self.adsb.set_position(lat, lon)
+        except Exception:
+            log.exception("gps position")
 
     def stop(self):
+        try:
+            self.gps.stop()
+        except Exception:
+            pass
         self.scheduler.stop()
         try:
             self.mesh.stop()

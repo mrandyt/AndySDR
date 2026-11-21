@@ -557,6 +557,15 @@
         <button class="btn sm" id="satRefresh" title="Download fresh orbit data (TLEs) from CelesTrak">⟳ Update orbits</button>
         <span class="muted small" id="satMsg"></span>
       </div>
+      <div class="row wrapline gps-row" data-help="gps">
+        <label><input type="checkbox" id="gpsOn"> 📡 Use a USB GPS unit for my position</label>
+        <label>Port <select id="gpsPort"><option value="auto">Auto-find</option></select></label>
+        <label>Speed <select id="gpsBaud"><option value="0">Auto</option><option value="4800">4800</option><option value="9600">9600</option><option value="38400">38400</option><option value="115200">115200</option></select></label>
+        <label>Check <select id="gpsHours"><option value="24">once a day</option><option value="6">every 6 hours</option><option value="1">every hour</option><option value="0">all the time (follows movement)</option></select></label>
+        <button class="btn sm" id="gpsScan" title="Look for GPS units plugged in now">⟳ Find units</button>
+        <span class="sig-chip ana" id="gpsChip">GPS off</span>
+        <span class="muted small" id="gpsMsg"></span>
+      </div>
       <div class="tablewrap"><table class="grid" id="satTable">
         <thead><tr><th>Record</th><th>Satellite</th><th>Frequency</th><th title="Follow the Doppler shift during each pass">Track</th><th>Min elev.</th><th>Days</th><th>Only between dates</th><th>Orbit data</th><th>Notes</th></tr></thead><tbody></tbody></table></div>
       <div class="row"><b>Pass schedule – recording starts and stops by itself on each pass</b></div>

@@ -86,6 +86,10 @@ DEFAULTS = {
     "pager_log": True,            # write pager messages to %APPDATA%\\AndySDR\\pager\\pager_YYYY-MM-DD.csv
     "adsb_lat": None,             # receiver position (decimal degrees) - gives distance/bearing and faster fixes
     "adsb_lon": None,
+    "gps_enabled": False,         # take my position from a USB GPS unit
+    "gps_port": "auto",           # COM port of the GPS unit, or auto to find it
+    "gps_check_hours": 24,        # look for a new position this often (0 = keep listening and follow movement)
+    "gps_baud": 0,                # 0 = try the usual speeds
     "adsb_log": True,             # one CSV line per aircraft every 30 s in %APPDATA%\\AndySDR\\adsb
     "adsb_lookup": True,          # look up registration / type / owner / photo online (sends the hex code only)
     "adsb_share": False,          # re-broadcast as SBS (30003) and raw AVR (30002) for other programs

@@ -83,6 +83,7 @@ function onJSON(m) {
     case "activity": renderActivity(d); break;
     case "device": DEV = d; renderDevice(); break;
     case "bias": renderBias(d); break;
+    case "gps": renderGps(d); break;
     case "devices": renderDevices(d); break;
     case "decoder": decLine(d.text, d.t); break;
     case "decoders": decoders = d; renderDecoders(); break;
@@ -121,6 +122,7 @@ function onHello(h) {
   isLocal = h.local;
   document.querySelectorAll(".local-only").forEach((e) => (e.style.display = isLocal ? "" : "none"));
   if (h.bias) renderBias(h.bias);
+  if (h.gps) renderGps(h.gps);
   S = h.state; MEM = h.memory; DEV = h.device; applyDeviceBandplan(); decoders = h.decoders; BWS = h.bandwidths || BWS;
   renderDevices(h.devices); renderDevice(); renderMemory(); renderActivity(h.activity);
   renderDecoders(); renderImages(h.images); renderState();
@@ -2243,6 +2245,34 @@ $("satPosGps").onclick = () => {
   navigator.geolocation.getCurrentPosition((p) => send({ cmd: "sat_observer", lat: p.coords.latitude.toFixed(5), lon: p.coords.longitude.toFixed(5), alt: Math.round(p.coords.altitude || 30) }),
     () => toast("Could not get your location – type it in instead", "warn"), { timeout: 10000 });
 };
+/* ----- USB GPS unit ----- */
+let GPSPORTS = [];
+function renderGps(g) {
+  if (g.ports) GPSPORTS = g.ports;
+  const sel = $("gpsPort");
+  if (document.activeElement !== sel) {
+    const keep = g.cfg_port || "auto";
+    sel.innerHTML = '<option value="auto">Auto-find</option>' + GPSPORTS.map((p) => `<option value="${p.port}">${p.port} – ${p.desc}${p.likely ? " ★" : ""}</option>`).join("");
+    if (keep !== "auto" && !GPSPORTS.some((p) => p.port === keep)) sel.insertAdjacentHTML("beforeend", `<option value="${keep}">${keep} (not plugged in)</option>`);
+    sel.value = keep;
+  }
+  if (document.activeElement !== $("gpsBaud")) $("gpsBaud").value = String(g.cfg_baud || 0);
+  if (document.activeElement !== $("gpsHours")) $("gpsHours").value = String(g.cfg_hours ?? 24);
+  $("gpsOn").checked = !!g.enabled;
+  const chip = $("gpsChip");
+  const map = { off: ["GPS off", "ana"], searching: ["Looking for GPS…", "ana"], no_fix: [`No fix yet · ${g.sats || 0} satellites`, "ana"], fix: [`Fix · ${g.sats || 0} satellites`, "dig"], error: ["GPS problem", "ana"], no_port: ["No GPS found", "ana"], no_data: ["No GPS data", "ana"], waiting: [`Position set · next check ${g.next_check ? new Date(g.next_check * 1000).toLocaleString([], { dateStyle: "short", timeStyle: "short" }) : ""}`, "dig"] };
+  const [txt, cls] = map[g.status] || map.off;
+  chip.textContent = txt; chip.className = "sig-chip " + cls;
+  let msg = "";
+  if (g.status === "fix") msg = `${g.lat.toFixed(5)}, ${g.lon.toFixed(5)}${g.alt != null ? " · " + Math.round(g.alt) + " m" : ""} on ${g.port}`;
+  else if (g.status === "waiting") msg = `${g.lat != null ? g.lat.toFixed(5) + ", " + g.lon.toFixed(5) : ""}${g.alt != null ? " · " + Math.round(g.alt) + " m" : ""} – the unit is released between checks`;
+  else if (g.status === "no_fix") msg = "Put the unit near a window or outside – the first fix can take a few minutes.";
+  else if (g.error) msg = g.error;
+  $("gpsMsg").textContent = msg;
+}
+const gpsSend = () => send({ cmd: "gps_set", enabled: $("gpsOn").checked, port: $("gpsPort").value, baud: Number($("gpsBaud").value), hours: Number($("gpsHours").value) });
+$("gpsOn").onchange = gpsSend; $("gpsPort").onchange = gpsSend; $("gpsBaud").onchange = gpsSend; $("gpsHours").onchange = gpsSend;
+$("gpsScan").onclick = () => send({ cmd: "gps_ports" });
 $("satRefresh").onclick = () => send({ cmd: "sat_refresh" });
 function fillSchForm(j) {
   schEdit = j ? j.id : null;
@@ -2526,6 +2556,7 @@ const HELP = {
   eibitab: ["Shortwave (EiBi)", "The EiBi shortwave broadcast schedule: press Get latest schedule once (or Import file…), then search by station, language or frequency. Tick On air now to see only what is being broadcast right now (UTC). Tune goes to the frequency in AM; ★ stores it in memory; ⏰ schedules an automatic tune-in every time that broadcast is on."],
   morsebox: ["Morse code decoder", "Press the MORSE key (DECODE row) to open this box. AndySDR switches to CW mode and reads Morse from the audio: it finds the pitch of the tone by itself, follows the sending speed (about 5-50 WPM) and prints the letters on the ticker tape, newest on the right; the box underneath keeps everything decoded. SPEED, TONE and SIGNAL show what it hears and the green light flashes with the keying. Click a popular frequency to tune it – most activity is near the QRP spots (7.030, 14.060 MHz), the IARU beacons (14.100, 28.200 MHz) and aviation NDB beacons (190-530 kHz). Weak or very fast signals decode with mistakes (shown as ¿); a clean tone with the signal 15 dB or more above the noise works best. ✕ hides the box but decoding carries on; ■ Stop ends it."],
   ft8tab: ["FT8 / FT4", "Weak-signal amateur digital modes. Pick a band and press ▶ FT8 (or ▶ FT4): AndySDR tunes USB to the dial frequency and decodes every 15 s UTC slot (FT4: 7.5 s). It also starts by itself when you tune or scan onto an FT8/FT4 channel from the band plan and something is on the air. The PC clock must be accurate. CQ only hides everything except stations calling CQ. From/Grid are read from the message."],
+  gps: ["USB GPS unit", "Plug in a USB GPS unit (a GPS 'puck' or dongle that appears as a COM port), tick the box and AndySDR fills in My position by itself – for satellite passes and the ADS-B distance and bearing. Leave Port on Auto-find, or pick the unit from the list (★ marks likely GPS units). The chip shows Fix and the number of satellites once it has a position; the first fix can take a few minutes, and it works best near a window or outdoors. By default it checks once a day (then lets go of the unit); the Check menu can make it every hour, or all the time so it follows you if you move. While this is ticked it replaces any position you typed in."],
   satauto: ["Satellite auto-capture", "Tick Record on a satellite and AndySDR predicts every pass over your position for the next 4 days (listed day by day) (set it with My position or 📍), tunes at acquisition of signal, follows the Doppler shift if Track is ticked, runs the right decoder and stops when the satellite sets – then puts the radio back as it was. ISS SSTV listens on 145.800 MHz FM (limit it to the ARISS event dates with the date boxes); Meteor-M N2-3 and N2-4 are LRPT on 137.900 MHz (switch to 137.100 if the satellite moves); GOES-19/18 are 1694.1 MHz HRIT from geostationary orbit – AndySDR says honestly when the satellite is below your horizon. Tick the days of the week you want (none ticked = every day) – you never type a time, AndySDR starts each capture only when the satellite is actually above your horizon. Min elevation hides low, weak passes. Orbit data (TLEs) is downloaded from CelesTrak and refreshed automatically. A capture you add by hand always takes priority."],
   sched: ["Scheduler", "Captures that run by themselves at set times – ideal for weather fax charts, ISS SSTV events and Meteor-M satellite passes. Pick a station from Quick pick (or type a frequency), choose what to do (WEFAX, SSTV, LRPT, record…), the start time on this PC's clock and how long, and either tick days of the week or pick a single date. At the start time AndySDR stops scanning, tunes, runs the decoder; at the end it saves the pictures and puts the radio back exactly as it was. Only one capture can run at a time: if two overlap, the one with the higher Priority takes over the radio (satellite passes count as High) and an interrupted capture carries on afterwards if time is left; overlaps are flagged with ⚠ and listed above the table. ▶ Now runs one straight away. AndySDR must be running (it can run as a server in the background)."],
   bppick: ["Plan › Band › Section", "Drill down through the UK band plan: pick a Plan (amateur, aviation, marine, PMR…), then a Band in it, then a Section (sub-band or key frequency). Tune goes there in the right mode and step; Search section loads it into the Live Activity search; 'Add key frequencies to bank' stores every key frequency in that band (e.g. marine Ch 16/70/AIS, airband 121.5/123.1) into the memory bank you choose. Clicking a coloured strip on the spectrum or a band name in the list also selects it here. Tap the coloured plan buttons underneath to show or hide each plan on the spectrum."],
@@ -2571,7 +2602,7 @@ function openHelp() {
   <h3>QUICK BUTTONS (under the display)</h3>${ctl(["qmode", "qbw", "qband", "qdec", "qlock", "qtog", "qfiles", "replay"])}
   <h3>KEYPAD &amp; FUNCTION KEYS</h3>${ctl(["k_scan", "k_man", "k_srch", "k_pgm", "k_lo", "k_pri", "k_mode", "k_step", "k_bank", "k_dly", "k_rec", "k_dec", "k_dot", "k_e", "k_arrows", "k_clr"])}
   <p class="small">Keyboard: digits and <code>.</code> type, <code>Enter</code> tunes, <code>↑ ↓</code> step, <code>S</code> scan, <code>M</code> manual, <code>P</code> program, <code>L</code> lockout, <code>I</code> skip 10 min, <code>H</code> help, <code>Esc</code> clear.</p>
-  <h3>SCREENS</h3>${ctl(["scope", "zoom", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "satauto", "eibitab", "ft8tab", "morsebox", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "updates", "receiver", "remote", "theme", "conn"])}
+  <h3>SCREENS</h3>${ctl(["scope", "zoom", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "satauto", "gps", "eibitab", "ft8tab", "morsebox", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "updates", "receiver", "remote", "theme", "conn"])}
   <h3>DECODER PROGRAMS</h3>
   <p>AndySDR has WEFAX and SSTV built in (SSTV: Martin, Scottie, Robot and PD modes – ISS 145.800 NFM, 2 m 144.500 NFM, 20 m 14.230 USB). DSD-FME, multimon-ng and SatDump now come bundled in the <code>decoders</code> folder next to <code>AndySDR.exe</code>. If one shows ✖ in the DECODERS tab, press <b>⬇ Download missing decoders</b> and AndySDR fetches it from GitHub into <code>%APPDATA%\\AndySDR\\decoders</code>. You can also unzip your own copy into either folder (any sub-folder is fine – AndySDR finds the .exe):</p>
   <dl><dt>DSD-FME</dt><dd>github.com/lwvmobile/dsd-fme – DMR, P25 1/2, NXDN, dPMR, YSF, M17. AndySDR feeds it like SDR++'s network sink (TCP 127.0.0.1:7355, 48 kHz); DSD-FME plays decoded voice on your speakers itself (AndySDR starts the PulseAudio sound server that comes with it).</dd>

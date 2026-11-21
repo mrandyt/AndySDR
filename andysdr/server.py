@@ -126,7 +126,7 @@ class Server:
                 payload = dict(payload, listeners=len(self.clients))
             frame = _ws_frame(json.dumps({"type": kind, "data": payload}).encode(), 1)
             for c in self.clients:
-                c.push(frame, droppable=(kind in ("state", "adsb", "meshsdr", "update_progress", "bias")))
+                c.push(frame, droppable=(kind in ("state", "adsb", "meshsdr", "update_progress", "bias", "gps")))
 
     # ---------------------------------------------------------------- HTTP
     async def handle(self, reader, writer):
@@ -337,7 +337,7 @@ class Server:
             "version": VERSION, "local": self._is_local(c.peer), "token": token or "",
             "state": r.state(), "memory": r.memory.all(),
             "devices": [{"key": d.key, "label": d.label, "kind": d.kind} for d in r.dev_list],
-            "device": r.device_info(), "bias": r.bias_snapshot(), "decoders": r.decoders.available(),
+            "device": r.device_info(), "bias": r.bias_snapshot(), "gps": r.gps.snapshot(with_ports=True), "decoders": r.decoders.available(),
             "activity": sorted(r.activity.values(), key=lambda x: -x["count"])[:300],
             "images": self._images(),
             "schedule": r.scheduler.status(),
@@ -510,6 +510,10 @@ class Server:
                 r.set_decoder(m.get("id", ""), m.get("sub", "auto"))
             elif cmd == "device":
                 r.set_device(m["key"])
+            elif cmd == "gps_set":
+                r.gps.configure(enabled=m.get("enabled"), port=m.get("port"), baud=m.get("baud"), hours=m.get("hours"))
+            elif cmd == "gps_ports":
+                r._emit("gps", r.gps.snapshot(with_ports=True))
             elif cmd == "bias_test":
                 r.bias_test()
             elif cmd == "device_setting":
