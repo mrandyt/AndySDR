@@ -2112,7 +2112,7 @@ $("eibiTable").querySelector("tbody").addEventListener("click", (e) => {
 /* ======================================================= FT8 / FT4 */
 const FT8 = { msgs: [], unseen: 0 };
 const FT8_BANDS = [["160 m", 1840000], ["80 m", 3573000], ["60 m", 5357000], ["40 m", 7074000], ["30 m", 10136000], ["20 m", 14074000], ["17 m", 18100000],
-  ["15 m", 21074000], ["12 m", 24915000], ["10 m", 28074000], ["6 m", 50313000], ["4 m", 70154000], ["2 m", 144174000]];
+  ["15 m", 21074000], ["12 m", 24915000], ["10 m", 28074000], ["6 m", 50313000], ["6 m DX", 50323000], ["4 m", 70154000], ["2 m", 144174000]];
 $("ft8Band").insertAdjacentHTML("beforeend", FT8_BANDS.map((b, i) => `<option value="${b[1]}">${b[0]} – ${(b[1] / 1e6).toFixed(3)} MHz</option>`).join(""));
 function onFt8(m) {
   FT8.msgs.push(m); if (FT8.msgs.length > 300) FT8.msgs.shift();
