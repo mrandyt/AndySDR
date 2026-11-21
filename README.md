@@ -9,6 +9,12 @@ network server so any other PC, laptop, tablet or phone in the house can use the
 
 ![logo](andysdr/web/logo.png)
 
+## Screenshots
+
+**ADS-B aircraft map** – live aircraft on a map with distance rings, flight levels, and a detail card showing the aircraft photo, type, owner, route, distance to go and more.
+
+![ADS-B map with aircraft detail card](docs/screenshots/adsb-map.png)
+
 ## What's in it
 
 | Area | Details |
