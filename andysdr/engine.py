@@ -607,6 +607,12 @@ class Radio:
         if not on:
             self._emit("event", {"level": "warn", "text": "Bias-T check: switch bias-T on first (it compares power on and off)."})
             return
+        if self.s["agc"] or getattr(self.dev, "agc", False):
+            m.result = {"state": "blocked", "text": "Power check not run: Hardware AGC is on, and it turns the gain down when an LNA lifts the signal, "
+                                                    "so the change would be hidden. Untick Hardware AGC (Receiver tab), set a fixed RF gain, then run it again."}
+            self._emit("event", {"level": "warn", "text": "Bias-T check: untick Hardware AGC first (it hides the change)."})
+            self._emit("bias", self.bias_snapshot())
+            return
         if self.job is not None:
             self._emit("event", {"level": "warn", "text": "Bias-T check: wait until the scheduled capture has finished (power is cut for a few seconds)."})
             return
