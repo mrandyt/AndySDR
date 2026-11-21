@@ -43,6 +43,18 @@ check("CW 100 Hz: passes 0, blocks 300 Hz", level(r, 0) > -3 and level(r, 300) <
 r.set_mode("WFM"); r.set_bandwidth(5000)
 check("WFM width is fixed", r.bandwidth() == 200000)
 
+# narrow widths 0.5 / 1 / 2 / 3 kHz exist for the voice and digital modes, and each one really filters
+for m in ("NFM", "FM", "AM", "USB", "LSB", "DIG"):
+    have = {h for h, t in BANDWIDTHS[m]}
+    check(f"{m}: 0.5, 1, 2 and 3 kHz are selectable", {500, 1000, 2000, 3000} <= have, sorted(have))
+for m in ("NFM", "AM", "USB"):
+    rr = Receiver(FS); rr.set_mode(m)
+    for w in (500, 1000, 2000, 3000):
+        rr.set_bandwidth(w)
+        lo, hi = (200, w + 1500) if m == "USB" else (w * 0.25, w * 0.5 + 1500)
+        check(f"{m} {w} Hz: passes a tone inside, blocks one {w // 2 + 1500} Hz out",
+              level(rr, lo) > -6 and level(rr, hi) < -25, (level(rr, lo), level(rr, hi)))
+
 mem = {"AM": 5000}
 r2 = Receiver(FS); r2.bw_lookup = lambda m: mem.get(m, 0)
 r2.set_mode("AM"); check("remembered width is applied when the mode is selected", r2.bandwidth() == 5000)

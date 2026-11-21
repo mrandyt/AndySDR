@@ -26,18 +26,22 @@ MODES = {
 # Selectable channel-filter widths (total Hz) per mode: (Hz, label).  The first entry marked default=True
 # is what the mode uses when nothing is chosen (twice the half-bandwidth in MODES above).
 BANDWIDTHS = {
-    "NFM":   [(6000, "6 kHz – 6.25 kHz channels"), (8000, "8 kHz"), (10000, "10 kHz"), (12000, "12 kHz – standard narrow (default)"),
+    "NFM":   [(500, "0.5 kHz – very narrow"), (1000, "1 kHz"), (2000, "2 kHz"), (3000, "3 kHz"),
+              (6000, "6 kHz – 6.25 kHz channels"), (8000, "8 kHz"), (10000, "10 kHz"), (12000, "12 kHz – standard narrow (default)"),
               (15000, "15 kHz"), (20000, "20 kHz")],
-    "FM":    [(12500, "12.5 kHz"), (15000, "15 kHz"), (17000, "17 kHz – 25 kHz channels (default)"), (20000, "20 kHz"),
+    "FM":    [(500, "0.5 kHz – very narrow"), (1000, "1 kHz"), (2000, "2 kHz"), (3000, "3 kHz"),
+              (12500, "12.5 kHz"), (15000, "15 kHz"), (17000, "17 kHz – 25 kHz channels (default)"), (20000, "20 kHz"),
               (25000, "25 kHz"), (30000, "30 kHz")],
-    "AM":    [(4000, "4 kHz – narrow"), (6000, "6 kHz"), (8000, "8 kHz – 8.33 kHz airband"), (9000, "9 kHz – broadcast (default)"),
+    "AM":    [(500, "0.5 kHz – very narrow"), (1000, "1 kHz"), (2000, "2 kHz"), (3000, "3 kHz"),
+              (4000, "4 kHz – narrow"), (6000, "6 kHz"), (8000, "8 kHz – 8.33 kHz airband"), (9000, "9 kHz – broadcast (default)"),
               (12000, "12 kHz"), (15000, "15 kHz – 25 kHz airband"), (20000, "20 kHz")],
-    "USB":   [(1800, "1.8 kHz – narrow"), (2400, "2.4 kHz – communications"), (2700, "2.7 kHz – standard SSB"),
+    "USB":   [(500, "0.5 kHz – very narrow"), (1000, "1 kHz"), (1800, "1.8 kHz"), (2000, "2 kHz"), (2400, "2.4 kHz – communications"), (2700, "2.7 kHz – standard SSB"),
               (3000, "3 kHz (default)"), (3600, "3.6 kHz – wide"), (4500, "4.5 kHz")],
-    "LSB":   [(1800, "1.8 kHz – narrow"), (2400, "2.4 kHz – communications"), (2700, "2.7 kHz – standard SSB"),
+    "LSB":   [(500, "0.5 kHz – very narrow"), (1000, "1 kHz"), (1800, "1.8 kHz"), (2000, "2 kHz"), (2400, "2.4 kHz – communications"), (2700, "2.7 kHz – standard SSB"),
               (3000, "3 kHz (default)"), (3600, "3.6 kHz – wide"), (4500, "4.5 kHz")],
     "CW":    [(100, "100 Hz – very narrow"), (200, "200 Hz"), (300, "300 Hz"), (500, "500 Hz (default)"), (800, "800 Hz"), (1200, "1.2 kHz")],
-    "DIG":   [(8000, "8 kHz"), (9000, "9 kHz – M17"), (10000, "10 kHz"), (12500, "12.5 kHz (default)"), (15000, "15 kHz")],
+    "DIG":   [(500, "0.5 kHz – very narrow"), (1000, "1 kHz"), (2000, "2 kHz"), (3000, "3 kHz"),
+              (8000, "8 kHz"), (9000, "9 kHz – M17"), (10000, "10 kHz"), (12500, "12.5 kHz (default)"), (15000, "15 kHz")],
     "DIG25": [(20000, "20 kHz"), (25000, "25 kHz (default)"), (30000, "30 kHz"), (36000, "36 kHz")],
     "WFM":   [(200000, "200 kHz – broadcast FM (fixed)")],
 }
@@ -249,7 +253,7 @@ class Receiver:
         half = width / 2.0
         if mode in ("USB", "LSB"):
             # complex band-pass from 150 Hz up to 150 Hz + width (mirrored for LSB)
-            n_taps = 129 if width >= 2000 else 257
+            n_taps = 129 if width >= 2000 else (257 if width >= 1500 else 1023)
             lp = signal.firwin(n_taps, half, fs=AUDIO_RATE)
             shift = (150 + half) * (1 if mode == "USB" else -1)
             n = np.arange(len(lp))
