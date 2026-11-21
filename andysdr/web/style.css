@@ -931,3 +931,7 @@ html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spec
 }
 :is([data-theme="modern"], [data-theme="modernlight"]) .q-row { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
 :is([data-theme="modern"], [data-theme="modernlight"]) .key.q { white-space: normal; line-height: 1.2; overflow: visible; text-overflow: clip; }
+
+/* Modern: Morse decoder in the theme colour instead of amber */
+:is([data-theme="modern"], [data-theme="modernlight"]) .ticker span { color: var(--accent); text-shadow: none; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .ticker { border-color: var(--line); background: var(--lcd); }

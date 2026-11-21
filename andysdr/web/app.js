@@ -419,7 +419,10 @@ const sctx = specC.getContext("2d"), wctx = wfC.getContext("2d");
 let palette = [];
 let autoLo = null;
 function makePalette() {
-  const stops = [[0, [0, 0, 8]], [0.25, [10, 30, 110]], [0.45, [0, 140, 200]], [0.62, [60, 210, 90]], [0.78, [250, 220, 40]], [0.9, [250, 110, 20]], [1, [255, 255, 255]]];
+  const modern = /^modern/.test(document.body.dataset.theme || "");
+  const stops = modern
+    ? [[0, [0, 0, 10]], [0.25, [10, 30, 120]], [0.5, [20, 120, 220]], [0.72, [60, 200, 235]], [0.88, [170, 235, 250]], [1, [255, 255, 255]]]
+    : [[0, [0, 0, 8]], [0.25, [10, 30, 110]], [0.45, [0, 140, 200]], [0.62, [60, 210, 90]], [0.78, [250, 220, 40]], [0.9, [250, 110, 20]], [1, [255, 255, 255]]];
   palette = [];
   for (let i = 0; i < 256; i++) {
     const p = i / 255; let k = 0;
@@ -1753,6 +1756,7 @@ function setTheme(t, save = true) {
   $("themeSel").value = t;
   $("modelTag").textContent = THEME_TEXT[t][0];
   $("modelSub").textContent = THEME_TEXT[t][1];
+  makePalette();
   if (save) { localStorage.setItem("andysdr_theme", t); send({ cmd: "settings", values: { theme: t }, quiet: true }); }
 }
 $("themeSel").onchange = () => setTheme($("themeSel").value);
