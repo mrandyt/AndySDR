@@ -13,6 +13,8 @@ const THEME_TEXT = {
   sdrpp: ["RADIO", ""],
   bluedark: ["1000 CHANNEL · PROGRAMMABLE", "SDR SCANNER"],
   bluelight: ["1000 CHANNEL · PROGRAMMABLE", "SDR SCANNER"],
+  modern: ["1000 CHANNEL · PROGRAMMABLE", "SDR SCANNER"],
+  modernlight: ["1000 CHANNEL · PROGRAMMABLE", "SDR SCANNER"],
   softdark: ["1000 CHANNEL · PROGRAMMABLE", "SDR SCANNER"],
   softlight: ["1000 CHANNEL · PROGRAMMABLE", "SDR SCANNER"],
 };
@@ -1754,7 +1756,7 @@ function setTheme(t, save = true) {
   if (save) { localStorage.setItem("andysdr_theme", t); send({ cmd: "settings", values: { theme: t }, quiet: true }); }
 }
 $("themeSel").onchange = () => setTheme($("themeSel").value);
-setTheme(localStorage.getItem("andysdr_theme") || "pro2045", false);
+setTheme(localStorage.getItem("andysdr_theme") || "modern", false);
 
 /* ----- toasts ----- */
 function toast(text, level = "info") {

@@ -756,3 +756,178 @@ html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spec
 .bias-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(11em, 1fr)); gap: 8px; margin: 6px 0; }
 .bias-spark { width: 100%; height: 46px; color: var(--accent); background: color-mix(in srgb, var(--panel) 80%, transparent); border-radius: 6px; }
 .sig-chip.warn { background: color-mix(in srgb, #ffb020 35%, transparent); }
+
+/* ============================================================
+   MODERN style – flat, roomy, big readable controls.
+   Same controls as every other style, just laid out with space to breathe.
+   ============================================================ */
+[data-theme="modern"], [data-theme="modernlight"] {
+  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --radius: 16px; --radio-radius: 20px; --radius-sm: 10px;
+  --key-edge: transparent; --knob-mark: var(--accent);
+  --lcd-frame: transparent; --ok: #4cd08a; --warn: #ffb454;
+}
+[data-theme="modern"] {
+  --page: #0d1015; --panel: #161a21; --panel2: #1d222b; --line: #272d38;
+  --text: #e8ecf2; --muted: #8a95a6; --accent: #5aa9ff; --accent-ink: #04111f;
+  --top: transparent; --top-ink: #e8ecf2; --top-ink2: #8a95a6;
+  --body: #161a21; --body-edge: #272d38;
+  --key: #232a35; --key-ink: #e8ecf2; --key-hot: #5aa9ff; --key-hot-ink: #04111f;
+  --lcd: #0b0e13; --lcd-on: #f3f6fb; --lcd-off: rgba(255,255,255,.07);
+  --knob: #232a35; --knob-ring: #3a4352; --grille: #161a21;
+  --scope-line: #7cc0ff; --scope-fill: rgba(90,169,255,.22);
+}
+[data-theme="modernlight"] {
+  --page: #eef1f6; --panel: #ffffff; --panel2: #f3f5f9; --line: #dde2ea;
+  --text: #1a2230; --muted: #667388; --accent: #2a6fdb; --accent-ink: #ffffff;
+  --top: transparent; --top-ink: #1a2230; --top-ink2: #667388;
+  --body: #ffffff; --body-edge: #dde2ea;
+  --key: #eef1f6; --key-ink: #1a2230; --key-hot: #2a6fdb; --key-hot-ink: #fff;
+  --lcd: #f3f5f9; --lcd-on: #121a28; --lcd-off: rgba(18,26,40,.07);
+  --knob: #e4e9f1; --knob-ring: #c4ccd9; --grille: #fff;
+  --scope-line: #2a6fdb; --scope-fill: rgba(42,111,219,.18);
+}
+:is([data-theme="modern"], [data-theme="modernlight"]) {
+  font-size: 15px;
+}
+:is([data-theme="modern"], [data-theme="modernlight"]) .topbar { padding: 12px 24px; gap: 22px; background: var(--panel); box-shadow: 0 1px 0 var(--line); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .brand-name { font-size: 22px; font-weight: 700; letter-spacing: 0; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .help-btn { border-radius: 999px; padding: 9px 20px; letter-spacing: 0; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .pill { padding: 5px 12px; letter-spacing: .5px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) select, :is([data-theme="modern"], [data-theme="modernlight"]) .inp { border-radius: var(--radius-sm); padding: 9px 12px; font-size: 14px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) button, :is([data-theme="modern"], [data-theme="modernlight"]) select, :is([data-theme="modern"], [data-theme="modernlight"]) input { font-size: 14px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .btn { border-radius: var(--radius-sm); padding: 9px 16px; font-weight: 600; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .btn.sm { padding: 5px 12px; }
+
+/* page: controls card on the left, big spectrum + waterfall on the right, tables underneath */
+:is([data-theme="modern"], [data-theme="modernlight"]) .wrap { display: grid; grid-template-columns: 440px minmax(0, 1fr); grid-template-areas: "radio scope" "tabs tabs"; align-items: start; gap: 24px; padding: 24px; max-width: 2200px; margin: 0 auto; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .radio { grid-area: radio; width: auto; max-width: none; align-self: start; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .scope { grid-area: scope; position: sticky; top: 84px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .tabs { grid-area: tabs; }
+@media (max-width: 1100px) {
+  :is([data-theme="modern"], [data-theme="modernlight"]) .wrap { grid-template-columns: 1fr; grid-template-areas: "scope" "radio" "tabs"; padding: 14px; gap: 16px; }
+  :is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .scope { position: static; }
+}
+
+/* the controls card */
+:is([data-theme="modern"], [data-theme="modernlight"]) .radio { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radio-radius); box-shadow: 0 10px 30px rgba(0,0,0,.18); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .radio-top { background: none; border: 0; padding: 20px 24px 0; display: block; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .model-badge { display: none; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .model-sub { display: none; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .top-status { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .top-status .tchip:nth-child(n+5) { display: inline-flex; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .tchip { flex-direction: column; align-items: flex-start; gap: 3px; padding: 9px 12px; border-radius: 12px; background: var(--panel2); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .tchip small { font-size: 10px; letter-spacing: 1.2px; color: var(--muted); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .tchip b { font-size: 14px; color: var(--text); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .radio-body { grid-template-columns: 1fr; grid-template-areas: "center" "left" "right"; gap: 22px; padding: 22px 24px 26px; }
+
+/* the big display */
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd { border: 1px solid var(--line); border-radius: 18px; padding: 20px 22px; gap: 12px; width: 100%; max-width: none; box-shadow: none; font-family: var(--mono); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd::after { display: none; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-flags { flex-wrap: wrap; gap: 6px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-flags span { font-size: 11px; padding: 2px 8px; border-radius: 999px; letter-spacing: .5px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-flags span.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-banks { font-size: 12px; gap: 5px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-banks span { width: 18px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-main { gap: 14px; padding: 6px 0; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-ch small { font-size: 10px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-ch .seg { height: 26px; width: auto; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-freq { height: 78px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-freq .seg { height: 74px; width: auto; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-unit { font-size: 15px; padding-bottom: 8px; color: var(--muted); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-mode { font-size: 14px; padding: 3px 12px; border-width: 0; border-radius: 999px; background: var(--accent); color: var(--accent-ink); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-tag { font-size: 20px !important; letter-spacing: .5px; text-transform: none; font-family: var(--font); font-weight: 600; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-step, :is([data-theme="modern"], [data-theme="modernlight"]) .lcd-meter { font-size: 13px; color: var(--muted); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .smeter { height: 12px; gap: 3px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .smeter i { border-radius: 3px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .smeter i.on { background: var(--accent); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .smeter i.sq { box-shadow: 0 -4px 0 0 var(--muted); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-decode { font-size: 13px; min-height: 18px; color: var(--muted); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .radio-center { align-items: stretch; justify-content: flex-start; gap: 18px; }
+
+/* knobs: three roomy dials */
+:is([data-theme="modern"], [data-theme="modernlight"]) .radio-left { gap: 18px; padding: 0; background: none; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .grille { display: none; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .knobs { justify-content: space-around; background: var(--panel2); border-radius: 18px; padding: 18px 10px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .knob-wrap { width: 100px; gap: 7px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .knob-wrap label { font-size: 11px; letter-spacing: 1.3px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .knob-wrap output { font-size: 13px; min-height: 18px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .knob { width: 76px; height: 76px; background: conic-gradient(from 225deg, var(--accent) 0 0deg, var(--knob-ring) 0 270deg, transparent 0); border: 3px solid var(--knob-ring); box-shadow: none; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .knob-cap { inset: 5px; background: var(--knob); box-shadow: 0 3px 8px rgba(0,0,0,.35); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .knob-cap i { width: 5px; height: 15px; margin-left: -2.5px; top: 6px; box-shadow: none; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .leds { background: var(--panel2); border-radius: 14px; padding: 12px 10px; gap: 8px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .ledbox { font-size: 10px; gap: 6px; }
+
+/* buttons: flat, pill-shaped, big enough to hit */
+:is([data-theme="modern"], [data-theme="modernlight"]) .key { background: var(--key); color: var(--key-ink); border: 1px solid var(--line); border-radius: 12px; box-shadow: none; letter-spacing: .3px; font-size: 14px; font-weight: 600; padding: 12px 8px; min-height: 46px; transition: background .12s, border-color .12s; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .key:hover { border-color: var(--accent); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .key:active, :is([data-theme="modern"], [data-theme="modernlight"]) .key.pressed { transform: none; background: var(--accent); color: var(--accent-ink); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .key.on, :is([data-theme="modern"], [data-theme="modernlight"]) .key.q.on, :is([data-theme="modern"], [data-theme="modernlight"]) .key-hot { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); outline: 0; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .key-power { min-height: 52px; font-size: 15px; border-radius: 14px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .fkeys { grid-template-columns: repeat(4, 1fr); gap: 10px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .numkeys { gap: 10px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .numkeys .num { font-size: 20px; padding: 12px 0; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .arrows { gap: 10px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .radio-right { gap: 14px; padding: 0; }
+
+/* quick groups: one calm card per group with a clear label */
+:is([data-theme="modern"], [data-theme="modernlight"]) .quick { max-width: none; display: flex; flex-direction: column; gap: 12px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .q-group { display: flex; flex-direction: column; align-items: stretch; gap: 8px; background: var(--panel2); border: 0; border-radius: 14px; padding: 12px 14px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .q-lab { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: 1.4px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .q-row { grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .key.q { font-size: 13px; padding: 9px 6px; min-height: 40px; border-radius: 10px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .bw-row { grid-template-columns: 1fr auto; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .bw-why { font-size: 12px; }
+
+/* spectrum + waterfall: big and calm */
+:is([data-theme="modern"], [data-theme="modernlight"]) .scope { padding: 18px 20px 20px; gap: 12px; border-radius: var(--radio-radius); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .scope-bar { flex-wrap: wrap; gap: 14px 22px; padding: 0 2px 4px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .scope-title { font-size: 13px; letter-spacing: 1.5px; color: var(--muted); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .mini { font-size: 13px; gap: 8px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .mini input[type=range] { width: 110px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .vfo-bar { gap: 14px; padding: 4px 2px 8px; min-height: 36px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .vfo-chip { background: var(--accent); color: var(--accent-ink); border-radius: 999px; padding: 6px 16px; font-size: 15px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .vfo-band { font-size: 14px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .sig-chip { padding: 5px 12px; border-radius: 999px; font-size: 13px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) #bandmap { height: 40px; border-radius: 10px; margin-bottom: 8px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) #spec { height: calc(300px + var(--bp-strip, 30px)); border-radius: 12px 12px 0 0; }
+:is([data-theme="modern"], [data-theme="modernlight"]) #wf { height: max(380px, calc(100vh - 560px)); border-radius: 0 0 12px 12px; }
+
+/* tabs + tables: more air */
+:is([data-theme="modern"], [data-theme="modernlight"]) .tabs { border-radius: var(--radio-radius); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .tabbar { padding: 8px 12px 0; gap: 4px; background: var(--panel); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .tab { padding: 14px 20px; font-size: 13px; letter-spacing: .6px; border-radius: 10px 10px 0 0; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .tabpage { padding: 22px 24px 26px; gap: 18px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .row { gap: 14px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .card { padding: 18px 20px; gap: 12px; border-radius: 16px; border: 0; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .cols { gap: 20px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .grid th { padding: 12px 14px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .grid td { padding: 10px 14px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) table.grid { font-size: 14px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .tablewrap { border-radius: 12px; max-height: 460px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .modal-box { border-radius: 20px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .modal-body { padding: 8px 28px 28px; }
+@media (max-width: 600px) {
+  :is([data-theme="modern"], [data-theme="modernlight"]) .topbar { padding: 8px 12px; gap: 10px; }
+  :is([data-theme="modern"], [data-theme="modernlight"]) .top-status { grid-template-columns: repeat(2, 1fr); }
+  :is([data-theme="modern"], [data-theme="modernlight"]) .radio-body { padding: 14px; }
+  :is([data-theme="modern"], [data-theme="modernlight"]) .lcd-freq-txt { font-size: 34px !important; }
+  :is([data-theme="modern"], [data-theme="modernlight"]) #spec { height: calc(160px + var(--bp-strip, 30px)); }
+  :is([data-theme="modern"], [data-theme="modernlight"]) #wf { height: 220px; }
+}
+
+/* Modern: order = display, dials, keypad, then the quick-pick groups */
+:is([data-theme="modern"], [data-theme="modernlight"]) .radio-body { grid-template-areas: none; grid-template-columns: 1fr; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .radio-center { display: contents; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .radio-body > .radio-left, :is([data-theme="modern"], [data-theme="modernlight"]) .radio-body > .radio-right { grid-area: auto; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd { order: 1; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .radio-left { order: 2; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .radio-right { order: 3; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .quick { order: 4; background: none; border: 0; padding: 0; box-shadow: none; }
+
+/* Modern: the controls card scrolls on its own so the spectrum stays in view; long labels wrap instead of being cut off */
+@media (min-width: 1101px) {
+  :is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .radio { position: sticky; top: 84px; max-height: calc(100vh - 108px); overflow-y: auto; scrollbar-width: thin; }
+}
+:is([data-theme="modern"], [data-theme="modernlight"]) .q-row { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .key.q { white-space: normal; line-height: 1.2; overflow: visible; text-overflow: clip; }
