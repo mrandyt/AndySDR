@@ -1668,7 +1668,7 @@ function renderDevice() {
   if (knobs.gain) { knobs.gain.min = DEV.gain_min; knobs.gain.max = DEV.gain_max; knobs.gain.render(); }
   [...$("devSel").options].forEach((o) => (o.selected = o.value === DEV.key));
   $("rateSel").innerHTML = (DEV.rates || []).filter((r) => r >= 960000).map((r) => `<option value="${r}" ${r === DEV.sample_rate ? "selected" : ""}>${(r / 1e6).toFixed(2)} MS/s</option>`).join("");
-  $("antSel").innerHTML = (DEV.antennas || []).map((a) => `<option>${esc(a)}</option>`).join("") || "<option>default</option>";
+  $("antSel").innerHTML = (DEV.antennas || []).map((a) => `<option ${a === DEV.antenna ? "selected" : ""}>${esc(a)}</option>`).join("") || "<option>default</option>";
   const box = $("devSettings");
   box.innerHTML = (DEV.settings || []).map((s, i) => {
     let ctl;

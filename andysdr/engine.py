@@ -204,6 +204,7 @@ class Radio:
         i = self.dev.info()
         i["sample_rate"] = self.dev.sample_rate
         i["center"] = self.dev.center
+        i["antenna"] = self.s["antenna"] or getattr(self.dev, "antenna", "") or ""     # the input in use, so the GUI can show it
         i["soapy"] = devices.soapy_status()
         return i
 
