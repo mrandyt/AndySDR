@@ -1689,13 +1689,15 @@ function renderDevice() {
     : `SoapySDR not loaded (${so.error || "not installed"}) – RTL-SDR/Airspy/HackRF need it; see Help › Receivers.`);
 }
 const BIAS_CHIP = {
-  ok: ["● Powered and working", "pic"], settling: ["… settling (measuring)", ""], off: ["Off", ""], no_path: ["⚠ On, but not reaching the antenna", "warn"],
+  ok: ["● On – noise floor steady", "pic"], settling: ["… settling (measuring)", ""], off: ["Off", ""], no_path: ["⚠ On, but not reaching the antenna", "warn"],
   drop: ["⚠ Noise floor has dropped – power lost?", "warn"], testing: ["Testing …", ""], unsupported: ["Not available on this receiver", ""],
 };
 function renderBias(b) {
   const card = $("biasCard"); if (!card) return;
   card.hidden = !b || !b.supported; if (card.hidden) return;
-  const c = BIAS_CHIP[b.state] || ["–", ""];
+  let c = BIAS_CHIP[b.state] || ["–", ""];
+  if (b.state === "ok" && b.result && b.result.state === "ok") c = [`● Verified – powered antenna adds ${(b.result.on_db - b.result.off_db).toFixed(1)} dB`, "pic"];
+  else if (b.state === "ok" && b.result && b.result.state === "none") c = ["● On – no change seen in power check", ""];
   $("biasChip").textContent = c[0]; $("biasChip").className = "sig-chip " + c[1];
   $("biasAnt").textContent = b.antenna || "–";
   $("biasEff").textContent = !b.on ? "(bias-T is off)" : b.effective ? "Yes" : "NO – select Antenna B";
