@@ -1288,8 +1288,14 @@ function onAdsb(d) {
   const nPos = ADS.list.filter((a) => a.lat != null && a.seen <= 90).length;
   if (!ADS.view.user && nPos > (ADS.view.fitN || 0)) { adsFit(); ADS.view.fitN = nPos; }     // keep zooming out as more aircraft appear, until you touch the map
   adsbBadge();
-  if (adsTabOpen()) { renderAdsbTable(); adsbStat(); adsDraw(); }
+  if (adsTabOpen()) {
+    // the list only re-sorts every ADS_TABLE_MS so rows stay put long enough to click (map and stats still update every second)
+    const now = Date.now();
+    if (now - (ADS.tableAt || 0) >= ADS_TABLE_MS) { ADS.tableAt = now; renderAdsbTable(); } else adsDetail();
+    adsbStat(); adsDraw();
+  }
 }
+const ADS_TABLE_MS = 3000;
 function adsbBadge() {
   const n = adsRunning() && ADS.stats ? ADS.stats.aircraft || 0 : 0;
   const b = $("adsbBadge");
