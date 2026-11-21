@@ -601,6 +601,21 @@
       <label><input type="checkbox" id="agcChk"> Hardware AGC</label>
     </div>
     <div class="devsettings" id="devSettings"></div>
+    <div class="card bias-card" id="biasCard" data-help="biaspanel" hidden>
+      <div class="row wrapline"><b>Bias-T</b> <span class="sig-chip" id="biasChip">–</span>
+        <span class="grow"></span>
+        <button class="btn sm" id="biasTest" title="Switches bias-T off for a few seconds, then on, and compares the noise floor">Run power check</button></div>
+      <div class="bias-grid small">
+        <div>Antenna input<br><b id="biasAnt">–</b></div>
+        <div>Power can reach antenna<br><b id="biasEff">–</b></div>
+        <div>Noise floor<br><b id="biasFloor">–</b></div>
+        <div>Change since it settled<br><b id="biasDelta">–</b></div>
+        <div>Receiver overloads<br><b id="biasOvl">–</b></div>
+      </div>
+      <svg id="biasSpark" viewBox="0 0 240 40" preserveAspectRatio="none" class="bias-spark"></svg>
+      <div class="small" id="biasMsg"></div>
+      <div class="muted small">The receiver cannot measure the current it supplies. This watches the noise floor instead: a powered LNA or active antenna lifts it, and a sudden drop means the power has gone. For the actual current use a USB power meter or a DC meter on the feed.</div>
+    </div>
     <div class="muted small" id="soapyInfo"></div>
   </div>
 

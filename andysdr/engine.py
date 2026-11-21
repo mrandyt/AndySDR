@@ -21,6 +21,7 @@ from .dsp import (AUDIO_RATE, BLOCK_SECONDS, MODES, Receiver, Spectrum, find_pea
                   pick_sample_rate)
 from .memory import MemoryBank
 from .scheduler import Scheduler
+from .biasmon import BiasMonitor, judge
 from .sstv import SstvDecoder
 
 log = logging.getLogger("andysdr.engine")
@@ -84,6 +85,8 @@ class Radio:
         self.job = None                   # scheduled capture in progress
         self.job_prev = None
         self.scheduler = Scheduler(self, settings)
+        self.biasmon = BiasMonitor()
+        self._bias_emit = 0.0
         from .meshlink import MeshLink
         self.mesh = MeshLink(settings, self._emit)   # MeshCore messaging via a companion board
 
@@ -558,6 +561,78 @@ class Radio:
                     self._bias_check()
             self._emit("device", self.device_info())
         self.call(do)
+
+    BIAS_KEYS = ("bias_t", "biastee")
+
+    def _bias_state(self):
+        """(on, can_reach_antenna) for the open receiver; on is None if it has no bias-T switch."""
+        d = self.dev
+        if d is None:
+            return None, False
+        fl = getattr(d, "flags", None)
+        if isinstance(fl, dict) and "bias_t" in fl:
+            on = bool(fl["bias_t"])
+            eff = True
+            if getattr(d, "hw", None) in (2, 4, 7):
+                eff = (getattr(d, "antenna", "") or "Antenna A") == "Antenna B"
+            return on, eff
+        if hasattr(d, "bias") and hasattr(d, "write_setting"):
+            return bool(d.bias), True
+        return None, False
+
+    def _bias_tick(self, spec_db, now):
+        on, eff = self._bias_state()
+        if on is None:
+            return
+        d = self.dev
+        key = (d.center, round(float(self.s["rf_gain"]), 1), getattr(d, "antenna", ""), d.sample_rate, on)
+        self.biasmon.update(float(np.median(spec_db)), key, now, getattr(d, "overloads", 0))
+        if now - self._bias_emit >= 1.0:
+            self._bias_emit = now
+            self._emit("bias", self.bias_snapshot())
+
+    def bias_snapshot(self):
+        on, eff = self._bias_state()
+        d = self.dev
+        return self.biasmon.snapshot(on, eff, getattr(d, "antenna", "") or ("Antenna A" if getattr(d, "hw", None) == 2 else ""),
+                                     getattr(d, "overloads", 0))
+
+    def bias_test(self):
+        """Switch the bias-T off for a few seconds, then back on, and compare the noise floor (a real working check)."""
+        on, eff = self._bias_state()
+        m = self.biasmon
+        if on is None or m.testing:
+            return
+        if not on:
+            self._emit("event", {"level": "warn", "text": "Bias-T check: switch bias-T on first (it compares power on and off)."})
+            return
+        if self.job is not None:
+            self._emit("event", {"level": "warn", "text": "Bias-T check: wait until the scheduled capture has finished (power is cut for a few seconds)."})
+            return
+        dev = self.dev
+        key = "bias_t" if isinstance(getattr(dev, "flags", None), dict) else "biastee"
+        m.testing = True
+        m.result = {"state": "running", "text": "Testing: bias-T off for 6 s, then on for 8 s ..."}
+
+        def run():
+            try:
+                self.call(lambda: dev.write_setting(key, "false"))
+                time.sleep(6.0)
+                off_db = m.recent(3)
+                self.call(lambda: dev.write_setting(key, "true"))
+                time.sleep(8.0)
+                on_db = m.recent(3)
+                if on_db is None or off_db is None:
+                    m.result = {"state": "none", "text": "Not enough signal data to compare - try again."}
+                else:
+                    v, text = judge(on_db, off_db)
+                    m.result = {"state": v, "text": text, "on_db": round(on_db, 1), "off_db": round(off_db, 1)}
+            finally:
+                self.call(lambda: dev.write_setting(key, "true"))      # always leave it as it was (on)
+                m.testing = False
+                m.baseline = None
+            self._emit("bias", self.bias_snapshot())
+        threading.Thread(target=run, name="bias-test", daemon=True).start()
 
     def _bias_check(self):
         """SDRplay RSP2 / RSPdx only put bias-T power on Antenna B: say so if it is on but another input is selected."""
@@ -1094,6 +1169,7 @@ class Radio:
 
             spec_db = self.spec.process(iq, alpha=0.6 if self.scan["state"] == "manual" else 1.0)
             self.spec_fresh = True
+            self._bias_tick(spec_db, time.time())
             q = np.clip((spec_db - SPEC_MIN_DB) / (SPEC_MAX_DB - SPEC_MIN_DB) * 255, 0, 255).astype(np.uint8)
             self._emit("spectrum", {"center": self.dev.center, "fs": fs, "freq": self.freq,
                                     "data": q.tobytes(), "min": SPEC_MIN_DB, "max": SPEC_MAX_DB})

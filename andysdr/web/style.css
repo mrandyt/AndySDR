@@ -751,3 +751,8 @@ html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spec
 .sch-clash { border-color: var(--warn, #ffb020); margin: 8px 0; padding: 6px 10px; }
 .sch-clash ul { margin: 4px 0 0 18px; padding: 0; }
 .warnmark { color: var(--warn, #ffb020); cursor: help; }
+
+.bias-card { margin-top: 10px; padding: 8px 12px; }
+.bias-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(11em, 1fr)); gap: 8px; margin: 6px 0; }
+.bias-spark { width: 100%; height: 46px; color: var(--accent); background: color-mix(in srgb, var(--panel) 80%, transparent); border-radius: 6px; }
+.sig-chip.warn { background: color-mix(in srgb, #ffb020 35%, transparent); }

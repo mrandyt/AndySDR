@@ -76,6 +76,7 @@ function onJSON(m) {
     case "memory": MEM = d; renderMemory(); break;
     case "activity": renderActivity(d); break;
     case "device": DEV = d; renderDevice(); break;
+    case "bias": renderBias(d); break;
     case "devices": renderDevices(d); break;
     case "decoder": decLine(d.text, d.t); break;
     case "decoders": decoders = d; renderDecoders(); break;
@@ -113,6 +114,7 @@ function onHello(h) {
   if (h.token) { token = h.token; sessionStorage.setItem("andysdr_token", token); }
   isLocal = h.local;
   document.querySelectorAll(".local-only").forEach((e) => (e.style.display = isLocal ? "" : "none"));
+  if (h.bias) renderBias(h.bias);
   S = h.state; MEM = h.memory; DEV = h.device; applyDeviceBandplan(); decoders = h.decoders; BWS = h.bandwidths || BWS;
   renderDevices(h.devices); renderDevice(); renderMemory(); renderActivity(h.activity);
   renderDecoders(); renderImages(h.images); renderState();
@@ -1686,6 +1688,29 @@ function renderDevice() {
     (so.available ? `SoapySDR ${so.version || ""} – driver modules: ${(so.modules || []).map((m) => m.split(/[\\/]/).pop()).join(", ")}`
     : `SoapySDR not loaded (${so.error || "not installed"}) – RTL-SDR/Airspy/HackRF need it; see Help › Receivers.`);
 }
+const BIAS_CHIP = {
+  ok: ["● Powered and working", "pic"], settling: ["… settling (measuring)", ""], off: ["Off", ""], no_path: ["⚠ On, but not reaching the antenna", "warn"],
+  drop: ["⚠ Noise floor has dropped – power lost?", "warn"], testing: ["Testing …", ""], unsupported: ["Not available on this receiver", ""],
+};
+function renderBias(b) {
+  const card = $("biasCard"); if (!card) return;
+  card.hidden = !b || !b.supported; if (card.hidden) return;
+  const c = BIAS_CHIP[b.state] || ["–", ""];
+  $("biasChip").textContent = c[0]; $("biasChip").className = "sig-chip " + c[1];
+  $("biasAnt").textContent = b.antenna || "–";
+  $("biasEff").textContent = !b.on ? "(bias-T is off)" : b.effective ? "Yes" : "NO – select Antenna B";
+  $("biasFloor").textContent = b.floor == null ? "–" : b.floor.toFixed(1) + " dB";
+  $("biasDelta").textContent = b.delta == null ? "–" : (b.delta > 0 ? "+" : "") + b.delta.toFixed(1) + " dB";
+  $("biasOvl").textContent = `${b.overloads}` + (b.overload_rate > 2 ? ` (${b.overload_rate}/min – lower RF GAIN)` : "");
+  const h = b.hist || [];
+  if (h.length > 1) {
+    const lo = Math.min(...h) - 1, hi = Math.max(...h) + 1, w = 240 / (h.length - 1);
+    $("biasSpark").innerHTML = `<polyline fill="none" stroke="currentColor" stroke-width="1.5" points="${h.map((v, i) => `${(i * w).toFixed(1)},${(38 - ((v - lo) / (hi - lo)) * 36).toFixed(1)}`).join(" ")}"/>`;
+  }
+  $("biasMsg").textContent = b.result ? b.result.text : "";
+  $("biasTest").disabled = b.state === "testing" || !b.on;
+}
+$("biasTest").onclick = () => send({ cmd: "bias_test" });
 $("devOpen").onclick = () => send({ cmd: "device", key: $("devSel").value });
 $("devRefresh").onclick = () => send({ cmd: "refresh_devices" });
 $("tcpAdd").onclick = () => { if ($("tcpAddr").value.includes(":")) send({ cmd: "add_rtltcp", addr: $("tcpAddr").value.trim() }); else toast("Use host:port, e.g. 192.168.1.20:1234", "warn"); };
@@ -2476,6 +2501,7 @@ const HELP = {
   import: ["RadioReference UK import", "On radioreference.com open a UK county/agency database page and use its CSV download (premium) – or select the frequency table on the page, copy it and save it as a .txt file. Choose the file, pick the bank, and Import. AndySDR recognises Frequency, Alpha Tag, Description, Mode, Tag and Tone columns, converts FMN/AM/DMR/P25/NXDN/TETRA modes, and attaches the right decoder. Talkgroup lists (Decimal/Alpha Tag) are stored as talkgroups. Banks overflow into the next free bank."],
   search: ["Search", "Set From/To in MHz, the channel step, mode and sensitivity (lower dB = finds weaker signals but more false hits), then Search. UK quick ranges fill the boxes for you. Results list each active frequency with hit count and strength – click a frequency to listen, Store to save it to the selected bank."],
   decoders: ["Decoders", "Pick what to decode on the current frequency. Digital voice uses DSD-FME (choose DMR, P25, NXDN, dPMR, YSF, M17, D-STAR or Auto; if a DMR or dPMR signal shows sync but only garbage, try the Inverted entry). AndySDR also centres the signal for the decoder automatically so a dongle's tuning error doesn't break decoding; pagers use multimon-ng (POCSAG & FLEX); WEFAX, SSTV and ADS-B aircraft tracking (1090 MHz, see the ADS-B tab) are built in; Meteor-M LRPT records the satellite pass and hands it to SatDump. Decoded text appears in the log and on the LCD bottom line; pager messages are also listed in the PAGER MESSAGES tab. Memory channels can start their decoder automatically."],
+  biaspanel: ["Bias-T panel", "Shows whether the bias-T (antenna power) is on and can reach your antenna (RSP2: Antenna B only), the receiver noise floor over the last two minutes, and receiver overloads. No SDR can measure the current it supplies, so a drop in noise floor is used to spot lost power. 'Run power check' switches bias-T off for 6 s then on for 8 s and tells you how many dB the powered antenna or LNA adds - if there is no change, nothing is being powered. Do not run it during a scheduled capture."],
   receiver: ["Receiver", "Choose which SDR to use: every SoapySDR device (RTL-SDR/Nooelec, SDRplay RSP1A/RSP2/RSP2pro/RSPdx/RSPduo, Airspy, HackRF, LimeSDR, Pluto…), rtl_tcp servers on other machines, or the Simulator for practice. Sample rate sets how wide the waterfall is. Antenna picks the input (RSP2: Antenna A, B or Hi-Z). Device switches (bias-T, notch filters, direct sampling) appear underneath automatically."],
   autoid: ["Auto ID (automatic signal identification)", "When ticked, AndySDR analyses whatever you are listening to and shows what it is next to the VFO: DMR (it spots the 30 ms TDMA bursts), P25, NXDN, dPMR, pagers (POCSAG/FLEX), APRS, DTMF, SSTV, WEFAX, TETRA or analogue voice (with any CTCSS tone). It then switches to the right mode and starts the matching decoder by itself, and stops it again when the channel goes back to voice. SSTV pictures are caught from their very first line. A decoder you pick yourself, or one stored on a memory channel, is never overridden. Untick to turn it off."],
   eibitab: ["Shortwave (EiBi)", "The EiBi shortwave broadcast schedule: press Get latest schedule once (or Import file…), then search by station, language or frequency. Tick On air now to see only what is being broadcast right now (UTC). Tune goes to the frequency in AM; ★ stores it in memory; ⏰ schedules an automatic tune-in every time that broadcast is on."],
