@@ -54,6 +54,7 @@ DEFAULTS = {
     "ppm": 0,
     "antenna": "",
     "bias_tee": False,
+    "dev_switches": {},           # per receiver: bias-T / notch switches restored at start
     "deemphasis_us": 50,          # UK/Europe broadcast FM
     "server_host": "0.0.0.0",     # 0.0.0.0 = allow other PCs on the network
     "server_port": 8045,

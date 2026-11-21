@@ -167,7 +167,13 @@ class Radio:
             dev.set_ppm(self.s["ppm"])
             if self.s["antenna"]:
                 dev.set_antenna(self.s["antenna"])
+            for k, v in (self.s.get("dev_switches", {}).get(dev.key, {}) or {}).items():     # bias-T / notches as you left them
+                try:
+                    dev.write_setting(k, v)
+                except Exception:
+                    log.exception("restore receiver switch %s", k)
             self.dev = dev
+            self._bias_check()
             self.s["device"] = dev.key
             self._emit("event", {"level": "info", "text": f"Receiver: {dev.label} @ {sr / 1e6:.2f} MS/s"})
         except Exception as e:
@@ -534,6 +540,7 @@ class Radio:
             if key == "antenna":
                 self.s["antenna"] = value
                 self.dev.set_antenna(value)
+                self._bias_check()
             elif key == "ppm":
                 self.s["ppm"] = int(value)
                 self.dev.set_ppm(int(value))
@@ -543,8 +550,25 @@ class Radio:
                 return
             else:
                 self.dev.write_setting(key, value)
+                if key in ("bias_t", "fm_notch", "dab_notch", "biastee"):        # remember it for the next start
+                    sw = dict(self.s.get("dev_switches", {}) or {})
+                    sw[self.dev.key] = {**sw.get(self.dev.key, {}), key: str(value).lower() in ("1", "true", "on", "yes")}
+                    self.s["dev_switches"] = sw
+                    self.s.save()
+                    self._bias_check()
             self._emit("device", self.device_info())
         self.call(do)
+
+    def _bias_check(self):
+        """SDRplay RSP2 / RSPdx only put bias-T power on Antenna B: say so if it is on but another input is selected."""
+        d = self.dev
+        flags = getattr(d, "flags", None)
+        if not flags or not flags.get("bias_t") or getattr(d, "hw", None) not in (2, 4, 7):
+            return
+        ant = getattr(d, "antenna", "") or "Antenna A"
+        if ant != "Antenna B":
+            self._emit("event", {"level": "warn", "text": f"Bias-T is ON but {ant} is selected - the RSP only powers an antenna or LNA "
+                                                          "through Antenna B. Choose Antenna B in the Receiver tab."})
 
     def set_decoder(self, dec_id, sub="auto"):
         def do():
