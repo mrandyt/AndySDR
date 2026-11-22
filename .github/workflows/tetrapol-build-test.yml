@@ -46,8 +46,12 @@ jobs:
           print("demod synced:", d.synced, "frames:", d.sync_frames, "bits:", len(rx))
           pr = subprocess.run(["dist/tetrapol/tetrapol_dump.exe", "-i", "-", "-b", "UHF", "-t", "CCH", "-d", "DOWN"],
                               input=rx.tobytes(), capture_output=True, timeout=60)
-          out = (pr.stdout + pr.stderr).decode("latin1")
-          print("exit code:", pr.returncode)
-          print(out[-1500:])
+          so = pr.stdout.decode("latin1").splitlines()
+          se = pr.stderr.decode("latin1").splitlines()
+          print("exit code:", pr.returncode, "| stdout lines:", len(so), "| stderr lines:", len(se))
+          import collections, re
+          print("stdout event kinds:", collections.Counter(re.findall(r'"event": "(\w+)"', pr.stdout.decode("latin1"))))
+          print("---- stdout first 12 lines"); print("\n".join(l[:200] for l in so[:12]))
+          print("---- stderr first 50 lines"); print("\n".join(l[:200] for l in se[:50]))
           sys.exit(0 if pr.returncode in (0, 1) else 1)
           PY
