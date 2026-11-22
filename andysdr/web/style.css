@@ -823,7 +823,7 @@ html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spec
 :is([data-theme="modern"], [data-theme="modernlight"]) .btn.sm { padding: 5px 12px; }
 
 /* page: controls card on the left, big spectrum + waterfall on the right, tables underneath */
-:is([data-theme="modern"], [data-theme="modernlight"]) .wrap { display: grid; grid-template-columns: 440px minmax(0, 1fr); grid-template-areas: "radio scope" "tabs tabs"; align-items: start; gap: 24px; padding: 24px; max-width: 2200px; margin: 0 auto; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .wrap { display: grid; grid-template-columns: clamp(440px, 34vw, 660px) minmax(0, 1fr); grid-template-areas: "radio scope" "tabs tabs"; align-items: start; gap: 24px; padding: 24px; max-width: 2200px; margin: 0 auto; }
 :is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .radio { grid-area: radio; width: auto; max-width: none; align-self: start; }
 :is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .scope { grid-area: scope; position: sticky; top: 84px; }
 :is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .tabs { grid-area: tabs; }
@@ -855,7 +855,7 @@ html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spec
 :is([data-theme="modern"], [data-theme="modernlight"]) .radio-body { grid-template-columns: 1fr; grid-template-areas: "center" "left" "right"; gap: 22px; padding: 22px 24px 26px; }
 
 /* the big display */
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd { border: 1px solid var(--line); border-radius: 18px; padding: 20px 22px; gap: 12px; width: 100%; max-width: none; box-shadow: none; font-family: var(--mono); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd { container-type: inline-size; border: 1px solid var(--line); border-radius: 18px; padding: 20px 22px; gap: 12px; width: 100%; max-width: none; box-shadow: none; font-family: var(--mono); }
 :is([data-theme="modern"], [data-theme="modernlight"]) .lcd::after { display: none; }
 :is([data-theme="modern"], [data-theme="modernlight"]) .lcd-flags { flex-wrap: wrap; gap: 6px; }
 :is([data-theme="modern"], [data-theme="modernlight"]) .lcd-flags span { font-size: 11px; padding: 2px 8px; border-radius: 999px; letter-spacing: .5px; }
@@ -877,6 +877,52 @@ html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spec
 :is([data-theme="modern"], [data-theme="modernlight"]) .smeter i.sq { box-shadow: 0 -4px 0 0 var(--muted); }
 :is([data-theme="modern"], [data-theme="modernlight"]) .lcd-decode { font-size: 13px; min-height: 18px; color: var(--muted); }
 :is([data-theme="modern"], [data-theme="modernlight"]) .radio-center { align-items: stretch; justify-content: flex-start; gap: 18px; }
+
+
+/* the display fills the card: digits, text and meters grow with its width */
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd { min-height: 300px; padding: 20px 24px; gap: 12px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-main { flex: 1; align-items: center; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-freq { height: min(13.5cqw, 112px); align-items: center; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-freq .seg { height: min(12.5cqw, 104px); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-ch .seg { height: min(5cqw, 34px); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-unit { font-size: clamp(15px, 3cqw, 24px); padding-bottom: 0; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-tag { font-size: clamp(18px, 4.4cqw, 30px) !important; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-mode { font-size: clamp(14px, 3cqw, 20px); padding: 4px 14px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-flags span { font-size: clamp(11px, 2.2cqw, 14px); padding: 3px 10px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-banks { font-size: clamp(12px, 2.6cqw, 16px); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-decode { font-size: clamp(13px, 2.6cqw, 16px); min-height: 22px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-rope { gap: 12px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .rope-row { font-size: clamp(12px, 2.6cqw, 16px); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .rope-row em { min-width: 56px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .rope { height: clamp(14px, 3cqw, 20px); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .rope.sql { height: clamp(8px, 1.6cqw, 11px); }
+
+/* OLED readout: black screen, white digits, thin cyan / violet accents, rope-light signal meter */
+.lcd-rope { display: none; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd { --lcd: #000; --lcd-on: #fff; --lcd-off: rgba(255,255,255,.09); background: #000; border: 1px solid #242830; border-radius: 20px; color: #fff; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-flags span { color: #4d5563; border-color: #262b34; background: transparent; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-flags span.on { background: transparent; color: #7ff0ff; border-color: #7ff0ff; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-banks span { color: #3a414d; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-banks span.on { color: #b79cff; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-banks span.cur { border-bottom-color: #7ff0ff; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-ch small { color: #b79cff; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-unit { color: #b79cff; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-mode { background: transparent; border: 1.5px solid #b79cff; color: #b79cff; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-tag { color: #d4d8df; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-step { color: #8a93a3; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-decode { color: #7ff0ff; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-meter { display: none; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-rope { display: flex; flex-direction: column; gap: 9px; margin-top: 2px; }
+.rope-row { display: flex; align-items: center; gap: 10px; font-size: 12px; color: #8a93a3; }
+.rope-row b { width: 28px; font-weight: 600; letter-spacing: 1px; }
+.rope-row em { font-style: normal; min-width: 44px; text-align: right; color: #d4d8df; }
+.rope { position: relative; height: 14px; border-radius: 6px; background: #14171c;
+  -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 4px, transparent 4px 5px); mask-image: repeating-linear-gradient(90deg, #000 0 4px, transparent 4px 5px); }
+.rope s { position: absolute; inset: 0; border-radius: 6px; text-decoration: none; transition: clip-path .09s linear;
+  background: linear-gradient(90deg, #17d96a 0%, #7fe035 28%, #f3dc22 50%, #ff9d1c 72%, #ff3b30 100%); }
+.rope.sql { height: 8px; } .rope.sql s { background: #b79cff; }
+.rope-wrap u { position: absolute; top: -4px; bottom: -4px; width: 2px; background: #fff; text-decoration: none; z-index: 2; margin-left: -1px; display: none; }
+.rope-wrap { flex: 1; position: relative; }
 
 /* knobs: three roomy dials */
 :is([data-theme="modern"], [data-theme="modernlight"]) .radio-left { gap: 18px; padding: 0; background: none; }

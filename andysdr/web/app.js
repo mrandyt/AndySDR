@@ -234,6 +234,15 @@ function renderLCD() {
   $("smeter").innerHTML = Array.from({ length: bars }, (_, i) =>
     `<i class="${i < lit ? "on" : ""} ${i === sqi ? "sq" : ""}"></i>`).join("");
   $("lcdDb").textContent = (S.level ?? -120).toFixed(0).padStart(4, " ");
+  // OLED "rope light" meters (Modern styles): one smooth green to red tube, squelch in violet
+  const pct = (v) => Math.max(0, Math.min(1, (v - lo) / (hi - lo))) * 100;
+  const lvl = S.level ?? -120, sqv = S.squelch ?? -120;
+  const sg = pct(lvl), sq = sqv <= -119 ? 0 : pct(sqv);
+  $("ropeSig").style.clipPath = `inset(0 ${(100 - sg).toFixed(1)}% 0 0)`;
+  $("ropeSql").style.clipPath = `inset(0 ${(100 - sq).toFixed(1)}% 0 0)`;
+  $("ropeTick").style.left = sq.toFixed(1) + "%"; $("ropeTick").style.display = sq > 0 ? "block" : "none";
+  $("ropeDb").textContent = lvl.toFixed(0);
+  $("ropeSqDb").textContent = sqv <= -119 ? "OPEN" : sqv.toFixed(0);
 }
 
 function renderState() {
