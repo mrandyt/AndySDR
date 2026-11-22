@@ -446,6 +446,7 @@ function sizeCanvases() {
   }
 }
 window.addEventListener("resize", sizeCanvases);
+if (window.ResizeObserver) new ResizeObserver(() => sizeCanvases()).observe(wfC);   // the waterfall can change size with the layout
 sizeCanvases();
 
 /* ---- zoom / pan: the view is a window (viewC centre, fs/zoom wide) into the received span ---- */

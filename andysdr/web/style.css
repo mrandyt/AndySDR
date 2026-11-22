@@ -929,9 +929,21 @@ html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spec
 @media (min-width: 1101px) {
   :is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .radio { position: sticky; top: 84px; max-height: calc(100vh - 108px); overflow-y: auto; scrollbar-width: thin; }
 }
+/* (replaced below by a fixed-height work area – sticky panels slid over the tables when scrolling) */
 :is([data-theme="modern"], [data-theme="modernlight"]) .q-row { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
 :is([data-theme="modern"], [data-theme="modernlight"]) .key.q { white-space: normal; line-height: 1.2; overflow: visible; text-overflow: clip; }
 
 /* Modern: Morse decoder in the theme colour instead of amber */
 :is([data-theme="modern"], [data-theme="modernlight"]) .ticker span { color: var(--accent); text-shadow: none; }
 :is([data-theme="modern"], [data-theme="modernlight"]) .ticker { border-color: var(--line); background: var(--lcd); }
+
+/* Modern, wide screens: the radio card and the spectrum fill one screen-high work area (each scrolls/shrinks inside it);
+   the tabs and tables sit below it and scroll normally – nothing is sticky, so nothing can slide over the tables. */
+@media (min-width: 1101px) {
+  :is([data-theme="modern"], [data-theme="modernlight"]) .wrap { grid-template-rows: minmax(520px, calc(100vh - 124px)) auto; }
+  :is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .radio { position: static; top: auto; height: 100%; max-height: none; align-self: stretch; overflow-y: auto; scrollbar-width: thin; }
+  :is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .scope { position: static; top: auto; height: 100%; align-self: stretch; display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto; }
+  :is([data-theme="modern"], [data-theme="modernlight"]) .scope > * { flex: 0 0 auto; }
+  :is([data-theme="modern"], [data-theme="modernlight"]) #spec { height: calc(clamp(140px, 26vh, 300px) + var(--bp-strip, 30px)); }
+  :is([data-theme="modern"], [data-theme="modernlight"]) #wf { flex: 1 1 0; height: 0; min-height: 220px; }
+}
