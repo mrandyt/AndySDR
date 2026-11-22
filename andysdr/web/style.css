@@ -642,7 +642,7 @@ tr.cq td { color: var(--accent); }
 .hot-form[hidden] { display: none; }
 .hot-form label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--muted, #8a95a6); min-width: 0; }
 .hot-form input, .hot-form select { min-width: 0; width: 100%; }
-.digi-row { grid-template-columns: 1fr auto; align-items: center; }
+.digi-row { grid-template-columns: 1fr; align-items: center; }
 .digi-row select { min-width: 0; width: 100%; }
 .notch-row { grid-template-columns: auto auto 1fr; align-items: center; }
 .notch-row select { min-width: 0; width: 100%; }
@@ -1007,6 +1007,12 @@ html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spec
   :is([data-theme="modern"], [data-theme="modernlight"]) #wf { height: 220px; }
 }
 
+/* jump chips under the display: the quick-pick groups are far down the card, these take you straight to one */
+.q-jump { display: none; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .q-jump { display: flex; flex-wrap: wrap; gap: 6px; order: 1; }
+.q-jump button { cursor: pointer; font: inherit; font-size: 11px; font-weight: 600; letter-spacing: .6px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel2); color: var(--text); }
+.q-jump button:hover { border-color: var(--accent); color: var(--accent); }
+.q-group.flash { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 10px; transition: outline-color .6s; }
 /* Modern: order = display, dials, keypad, then the quick-pick groups */
 :is([data-theme="modern"], [data-theme="modernlight"]) .radio-body { grid-template-areas: none; grid-template-columns: 1fr; }
 :is([data-theme="modern"], [data-theme="modernlight"]) .radio-center { display: contents; }

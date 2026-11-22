@@ -2184,6 +2184,16 @@ function renderBw() {
 }
 function bwInit() {
   notchInit(); hotspotInit();
+  $("qJump").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    const g = document.querySelector(`.q-group[data-help="${b.dataset.j}"]`); if (!g) return;
+    const card = document.querySelector(".wrap > .radio");
+    if (card && card.scrollHeight > card.clientHeight + 4 && getComputedStyle(card).overflowY !== "visible") {
+      // the controls card scrolls on its own: move only that, so the page does not jump
+      card.scrollTo({ top: g.getBoundingClientRect().top - card.getBoundingClientRect().top + card.scrollTop - 12, behavior: "smooth" });
+    } else g.scrollIntoView({ behavior: "smooth", block: "center" });
+    g.classList.add("flash"); setTimeout(() => g.classList.remove("flash"), 1600);
+  });
   $("bwSel").addEventListener("change", (e) => {
     const v = e.target.value;
     if (v === "auto") { const sug = suggestBw(); send({ cmd: "bandwidth", bw: sug ? sug.hz : 0, auto: true }); }
@@ -2777,6 +2787,7 @@ const HELP = {
   qmode: ["Mode buttons", "One click to choose how the signal is demodulated – no need to press MODE repeatedly. NFM/FM for most two-way radio, AM for airband, WFM for FM broadcast, USB/LSB for HF voice and weather fax, CW for Morse, DIG and DIG25 for digital signals (DIG25 is the wider one for TETRA and satellites). The current mode is lit."],
   qband: ["Band buttons", "Jump straight to a popular UK band with the right mode and tuning step already set: AIR (121.500 MHz), MARINE (channel 16), PMR446, 2M, 70CM, CB, FM BC, PAGER and weather SATS. Then step with ▲ ▼, press SCAN, or use SRCH to find what is active. The button for the band you are in stays lit."],
   qdec: ["Decoder buttons", "Start a decoder with one click: DMR, P25, NXDN, dPMR, M17 (digital voice), TETRA and TETRAPOL (network, call and message signalling), PAGER (POCSAG/FLEX), APRS (also DTMF/ZVEI/EAS), WEFAX, SSTV, LRPT (Meteor-M) and ADS-B (aircraft). AUTO (Auto ID) lets AndySDR identify signals and pick the decoder itself. OFF stops the decoder. A dimmed button means its program is not installed yet – see the DECODERS tab."],
+  qjump: ["Jump buttons", "These small buttons under the display take you straight to a group of quick buttons further down the controls card: MODE, BAND, HOTSPOT, DIGITAL VOICE (DMR, P25, M17, TETRA bands), DECODE, NOTCH, SKIP and AUDIO. The group you jump to is outlined for a moment."],
   qhot: ["My hotspot", "Your saved DMR hotspot. Press the big button to tune to it, switch to digital mode and start the DMR decoder in one go – the callsigns and talkgroups your hotspot passes appear in the decoder list. EDIT lets you change the name, frequency (MHz), colour code, timeslot and talkgroup; SAVE keeps them for next time. Keep RF GAIN low when the hotspot is close to the receiver."],
   qdigi: ["Digital voice band", "Pick DMR, dPMR, P25, M17, NXDN or TETRA (Airwave) from the list: AndySDR tunes to the bottom of that band, sets the mode and step for it and starts the matching decoder. SEARCH BAND then sweeps the whole band and stops on any activity so the decoder can lock on (SKIP moves on to the next one). TETRA and TETRAPOL show signalling only; encrypted voice cannot be decoded."],
   qnotch: ["Notch filters", "Cut an annoying steady whistle or carrier out of what you hear (it does not touch what the decoders receive). NOTCH is one filter you aim yourself: switch it on, then drag the slider until the whistle disappears – the pitch shows in Hz; NARROW removes only that pitch, WIDE also takes a little around it. AUTO listens for steady whistles, heterodynes and carriers in the audio and notches them by itself (up to three, released a couple of seconds after the whistle goes); speech passes through. Both work in every mode. The Hz are the pitch of the audio, not the radio frequency – to get rid of a carrier that is a different signal, move the receiver or narrow the WIDTH. The radio's own FM / DAB broadcast notches are separate switches under Device settings (RSP2 / RSPdx etc.)."],
