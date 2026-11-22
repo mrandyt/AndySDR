@@ -13,6 +13,7 @@ import numpy as np
 from . import capturemeta, devices, ft8
 from .adsb import ADSB_FREQ, Adsb
 from .meshsdr import MeshSdr
+from .datalink import DatalinkStore
 from .autodetect import SignalClassifier
 from .config import data_dir
 from .decoders import DecoderManager
@@ -43,6 +44,8 @@ class Radio:
         self.spec = Spectrum(4096)
         self.decoders = DecoderManager(settings, self._emit)
         self.pager = PagerStore(settings, self._emit)
+        self.datalink = DatalinkStore(settings, self._emit)
+        self.decoders.datalink = self.datalink
         self.adsb = Adsb(settings, self._emit)
         self.decoders.adsb = self.adsb
         self.meshsdr = MeshSdr(settings, self._emit)
@@ -681,6 +684,13 @@ class Radio:
                 self._tune(1694100000 if dec_id == "goes" else 1701300000, "DIG25", force=True)
                 self.decoders.start(dec_id, sub)
             else:
+                if dec_id == "acars" and self.mode != "AM":
+                    self.mode = "AM"                      # ACARS is AM audio
+                    self.rx.set_mode("AM")
+                elif dec_id == "sonde" and (self.mode != "NFM" or self.rx.bandwidth() < 14000):
+                    self.mode = "NFM"                     # the sonde's FSK needs a wider channel than a voice radio
+                    self.rx.set_mode("NFM")
+                    self.rx.set_bandwidth(16000)
                 if dec_id in ("wefax", "sstv", "lrpt") and self.rec:
                     self.rec.close()           # picture decoders keep the picture only, not the sound
                     self.rec = None

@@ -126,7 +126,7 @@ class Server:
                 payload = dict(payload, listeners=len(self.clients))
             frame = _ws_frame(json.dumps({"type": kind, "data": payload}).encode(), 1)
             for c in self.clients:
-                c.push(frame, droppable=(kind in ("state", "adsb", "meshsdr", "update_progress", "bias", "gps")))
+                c.push(frame, droppable=(kind in ("state", "adsb", "meshsdr", "update_progress", "bias", "gps", "datalink_status")))
 
     # ---------------------------------------------------------------- HTTP
     async def handle(self, reader, writer):
@@ -178,6 +178,13 @@ class Server:
         if path == "/api/pager.csv":
             data = self.radio.pager.export_csv().encode("utf-8-sig")
             fname = time.strftime("andysdr_pager_%Y%m%d_%H%M.csv")
+            await self._send(writer, 200, data, "text/csv",
+                             extra={"Content-Disposition": f'attachment; filename="{fname}"'})
+            return
+        if path in ("/api/acars.csv", "/api/sondes.csv"):
+            which = "acars" if "acars" in path else "sondes"
+            data = self.radio.datalink.export_csv(which).encode("utf-8-sig")
+            fname = time.strftime(f"andysdr_{which}_%Y%m%d_%H%M.csv")
             await self._send(writer, 200, data, "text/csv",
                              extra={"Content-Disposition": f'attachment; filename="{fname}"'})
             return
@@ -344,6 +351,7 @@ class Server:
             "mesh": r.mesh.snapshot(), "mesh_history": r.mesh.history[-1500:],
             "meshsdr": r.meshsdr.snapshot(),
             "pager": r.pager.snapshot(),
+            "datalink": r.datalink.snapshot(),
             "adsb": r.adsb.snapshot(),
             "ft8": r.decoders.ft8_history[-300:],
             "morse": {"text": r.decoders.morse_text[-2000:], "status": r.decoders.morse_status},
@@ -635,6 +643,8 @@ class Server:
                     done=lambda: self._from_radio("decoders", r.decoders.available()))
             elif cmd == "pager_clear":
                 r.pager.clear()
+            elif cmd == "datalink_clear":
+                r.datalink.clear(m.get("which", "all"))
             elif cmd == "pager_alias":
                 r.pager.set_alias(m["capcode"], m.get("name", ""))
             elif cmd == "pager_highlight":

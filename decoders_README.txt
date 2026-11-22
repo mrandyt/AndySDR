@@ -13,7 +13,8 @@ The AndySDR download already contains these free programs (one sub-folder each):
   satdump\         Meteor-M N2-3 / N2-4 LRPT weather satellite images
                    https://www.satdump.org  (Windows x64 portable)
 
-WEFAX (HF weather fax) and SSTV are built into AndySDR - nothing to install.
+WEFAX (HF weather fax), SSTV, Morse, FT8 (own program), ADS-B, ACARS (aircraft text) and RS41 radiosondes
+(weather balloons) are built into AndySDR - nothing to install.
 
 If one is missing (the DECODERS tab shows a red cross), press "Download missing decoders" in
 that tab: AndySDR fetches it from GitHub into %APPDATA%\AndySDR\decoders. You can also unzip

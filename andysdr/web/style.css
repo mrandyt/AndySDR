@@ -954,3 +954,10 @@ html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spec
 .splitter:hover i, .splitter.drag i { opacity: 1; background: var(--accent, #4a76ff); }
 body.sz-spec #spec { height: calc(var(--user-spec) + var(--bp-strip, 30px)) !important; flex: none !important; }
 body.sz-wf #wf { height: var(--user-wf) !important; min-height: 0 !important; flex: none !important; }
+
+/* aircraft text + sondes */
+#acarsTable td.msg { white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; }
+#acarsTable td.lbl { white-space: nowrap; }
+#acarsFreqs .btn { margin-right: 4px; }
+#sondeTable td { white-space: nowrap; }
+#sondeTable tr.old td { opacity: .55; }

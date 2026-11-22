@@ -206,6 +206,8 @@
     <button class="tab" data-tab="dec">DECODERS</button>
     <button class="tab" data-tab="pag">PAGER MESSAGES <span class="tab-badge" id="pagBadge" hidden>0</span></button>
     <button class="tab" data-tab="adsb">ADS-B <span class="tab-badge" id="adsbBadge" hidden>0</span></button>
+    <button class="tab" data-tab="acars">AIRCRAFT TEXT <span class="tab-badge" id="acarsBadge" hidden>0</span></button>
+    <button class="tab" data-tab="sonde">SONDES <span class="tab-badge" id="sondeBadge" hidden>0</span></button>
     <button class="tab" data-tab="ft8">FT8 / FT4 <span class="tab-badge" id="ft8Badge" hidden>0</span></button>
     <button class="tab" data-tab="img">WEATHER IMAGES</button>
     <button class="tab" data-tab="rec">RECORDINGS</button>
@@ -443,6 +445,47 @@
       </div>
     </div>
     <div class="muted small" id="adsbNote"></div>
+  </div>
+
+  <!-- AIRCRAFT TEXT (ACARS) -->
+  <div class="tabpage" id="tab-acars">
+    <div class="row wrapline" data-help="acars">
+      <button class="btn primary" id="acarsStart" title="Switches to AM and starts reading ACARS on the frequency you are tuned to">▶ Start ACARS</button>
+      <span class="muted small">Tune:</span>
+      <span id="acarsFreqs"></span>
+      <input class="inp" id="acarsSearch" type="search" placeholder="Search registration, flight, text" style="width:16em">
+      <label><input type="checkbox" id="acarsHideEmpty"> Hide link tests (no text)</label>
+      <span class="grow"></span>
+      <span class="muted small" id="acarsCount"></span>
+      <a class="btn" id="acarsExport" href="#" download>Export CSV</a>
+      <button class="btn danger" id="acarsClear">Clear list</button>
+    </div>
+    <div class="tablewrap pagwrap">
+      <table class="grid" id="acarsTable">
+        <thead><tr><th>Time</th><th>Frequency</th><th>Aircraft</th><th>Flight</th><th>Label</th><th>Message</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="muted small" id="acarsLogDir"></div>
+  </div>
+
+  <!-- RADIOSONDES -->
+  <div class="tabpage" id="tab-sonde">
+    <div class="row wrapline" data-help="sonde">
+      <button class="btn primary" id="sondeStart" title="Switches to narrow FM (16 kHz wide) and starts reading RS41 balloons on the frequency you are tuned to">▶ Start sonde decoder</button>
+      <span class="muted small">Sondes use 400.15–406 MHz. Use SRCH or tune a frequency a balloon is on (launches are about 11:00 and 23:00 UTC).</span>
+      <span class="grow"></span>
+      <span class="muted small" id="sondeCount"></span>
+      <a class="btn" id="sondeExport" href="#" download>Export CSV</a>
+      <button class="btn danger" id="sondeClear">Clear list</button>
+    </div>
+    <div class="tablewrap pagwrap">
+      <table class="grid" id="sondeTable">
+        <thead><tr><th>Serial</th><th>Heard</th><th>Position</th><th>Height</th><th>Speed</th><th>Climb</th><th>Heading</th><th>Sats</th><th title="Needs My position (ADS-B tab) or a GPS unit">From me</th><th>Freq</th><th>Frames</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="muted small" id="sondeLogDir"></div>
   </div>
 
   <!-- FT8 / FT4 -->

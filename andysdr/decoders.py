@@ -34,6 +34,8 @@ from .config import app_dir, data_dir
 from .iqbridge import IqBridge
 from .ft8 import Ft8Decoder, match_freq
 from .morse import MorseDecoder
+from .acars import AcarsDecoder
+from .radiosonde import RadiosondeDecoder
 from . import capturemeta, imgcheck
 from .sstv import SstvDecoder
 from .wefax import WefaxDecoder
@@ -71,6 +73,10 @@ DECODERS = {
                "help": "1694.1 MHz GOES-East/West images and EMWIN. Needs a dish + L-band LNA; the receiver is shared with SatDump over a local rtl_tcp link."},
     "metop":  {"name": "Metop AHRPT weather satellite (SatDump)", "exe": "satdump",
                "help": "1701.3 MHz Metop-B / Metop-C direct broadcast (AVHRR pictures and more). Needs a dish + L-band LNA and the 6 or 10 MS/s sample rate; the receiver is shared with SatDump over a local rtl_tcp link."},
+    "acars":  {"name": "ACARS aircraft text messages (built in)", "exe": None,
+               "help": "AM, 131.xxx MHz (UK: 131.525, 131.725, 131.825). Reads the airline text messages: registration, flight, label and message. See the AIRCRAFT TEXT tab."},
+    "sonde":  {"name": "Radiosondes / weather balloons RS41 (built in)", "exe": None,
+               "help": "Narrow FM, 400-406 MHz. Reads the Vaisala RS41 balloons the Met Office launches: position, height, speed and serial. See the SONDES tab."},
     "adsb":   {"name": "ADS-B aircraft 1090 MHz (built in)", "exe": None,
                "help": "Tunes to 1090 MHz and tracks aircraft (callsign, position, altitude, speed). See the ADS-B tab."},
     "meshsdr": {"name": "MeshCore with just an SDR (built in, receive only)", "exe": None,
@@ -256,6 +262,11 @@ class DecoderManager:
         self.job_fn = None         # set by the radio: () -> running scheduled job (dict) or None
         self.dial_fn = None        # set by the radio: () -> FT8 dial frequency of the tuned channel (Hz)
         self.ft8_history = []
+        self.acars = None
+        self.sonde = None
+        self.datalink = None       # set by the radio: the ACARS / radiosonde message store
+        self.acars_status = {}
+        self.sonde_status = {}
         self.morse = None
         self.morse_text = ""
         self.morse_status = {}
@@ -306,6 +317,27 @@ class DecoderManager:
         self.emit(kind, {"t": time.strftime("%H:%M:%S"), "text": text, "decoder": self.active})
 
     # ------------------------------------------------------------------
+    def _acars_msg(self, m):
+        f = self.freq_fn() if self.freq_fn else 0
+        who = m["reg"] + (" " + m["flight"] if m.get("flight") else "")
+        self.log(f"ACARS {who} [{m['label']}] {m['text'][:80]}".replace("\n", " "))
+        if self.datalink:
+            self.datalink.add_acars(m, f)
+
+    def _acars_status(self, st):
+        self.acars_status = st
+        self.emit("datalink_status", {"acars": st})
+
+    def _sonde_rec(self, r):
+        f = self.freq_fn() if self.freq_fn else 0
+        self.log(f"Sonde {r['id']} {r['lat']:.4f}, {r['lon']:.4f}  {r['alt']:.0f} m  {r['vh']:.0f} m/s")
+        if self.datalink:
+            self.datalink.add_sonde(r, f)
+
+    def _sonde_status(self, st):
+        self.sonde_status = st
+        self.emit("datalink_status", {"sonde": st})
+
     def _morse_text(self, t):
         self.morse_text = (self.morse_text + t)[-4000:]
         self.emit("morse", {"text": t})
@@ -411,6 +443,12 @@ class DecoderManager:
                 self.log("Recording Meteor LRPT pass (240 kS/s IQ). Press the decoder OFF "
                          "when the pass ends to make the pictures." +
                          ("" if exe else " SatDump not found – recording only."))
+            elif dec_id == "acars":
+                self.acars = AcarsDecoder(on_message=self._acars_msg, on_status=self._acars_status)
+                self.log("ACARS decoder running (AM) - messages appear in the AIRCRAFT TEXT tab")
+            elif dec_id == "sonde":
+                self.sonde = RadiosondeDecoder(on_sonde=self._sonde_rec, on_status=self._sonde_status)
+                self.log("Radiosonde decoder running (RS41, narrow FM) - balloons appear in the SONDES tab")
             elif dec_id == "morse":
                 self.morse = MorseDecoder(on_text=self._morse_text, on_status=self._morse_status)
                 self.log("Morse decoder running – the text appears on the ticker tape in the MORSE box")
@@ -714,6 +752,8 @@ class DecoderManager:
             self.ft8.stop()
             self.ft8 = None
         self.morse = None
+        self.acars = None
+        self.sonde = None
         if self.active:
             self.log("Decoder stopped")
         self.active = None
@@ -796,6 +836,10 @@ class DecoderManager:
                 self.ft8.process(out["audio_ungated"])
             elif a == "morse" and self.morse:
                 self.morse.process(out["audio_ungated"])
+            elif a == "acars" and self.acars:
+                self.acars.process(out["audio_ungated"])
+            elif a == "sonde" and self.sonde:
+                self.sonde.process(out["disc"])
             elif a == "dsd" and self.tcp:
                 d = out["disc"]
                 if self.settings.get("dsd_dc_remove", True) and getattr(self, "dsd_cond", None):
