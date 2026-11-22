@@ -35,6 +35,7 @@ from .iqbridge import IqBridge
 from .ft8 import Ft8Decoder, match_freq
 from .morse import MorseDecoder
 from .acars import AcarsDecoder
+from .vdl2 import Vdl2Decoder
 from .radiosonde import RadiosondeDecoder
 from . import capturemeta, imgcheck
 from .sstv import SstvDecoder
@@ -75,6 +76,8 @@ DECODERS = {
                "help": "1701.3 MHz Metop-B / Metop-C direct broadcast (AVHRR pictures and more). Needs a dish + L-band LNA and the 6 or 10 MS/s sample rate; the receiver is shared with SatDump over a local rtl_tcp link."},
     "acars":  {"name": "ACARS aircraft text messages (built in)", "exe": None,
                "help": "AM, 131.xxx MHz (UK: 131.525, 131.725, 131.825). Reads the airline text messages: registration, flight, label and message. See the AIRCRAFT TEXT tab."},
+    "vdl2":   {"name": "VDL Mode 2 aircraft data link (built in)", "exe": None,
+               "help": "136.xxx MHz (UK: 136.975 is the busiest, then 136.725-136.925). Reads the digital aircraft data link (D8PSK, 10.5 kbaud) and lists the ACARS messages inside it in the AIRCRAFT TEXT tab."},
     "sonde":  {"name": "Radiosondes / weather balloons RS41 (built in)", "exe": None,
                "help": "Narrow FM, 400-406 MHz. Reads the Vaisala RS41 balloons the Met Office launches: position, height, speed and serial. See the SONDES tab."},
     "adsb":   {"name": "ADS-B aircraft 1090 MHz (built in)", "exe": None,
@@ -264,9 +267,11 @@ class DecoderManager:
         self.ft8_history = []
         self.acars = None
         self.sonde = None
+        self.vdl2 = None
         self.datalink = None       # set by the radio: the ACARS / radiosonde message store
         self.acars_status = {}
         self.sonde_status = {}
+        self.vdl2_status = {}
         self.morse = None
         self.morse_text = ""
         self.morse_status = {}
@@ -320,13 +325,17 @@ class DecoderManager:
     def _acars_msg(self, m):
         f = self.freq_fn() if self.freq_fn else 0
         who = m["reg"] + (" " + m["flight"] if m.get("flight") else "")
-        self.log(f"ACARS {who} [{m['label']}] {m['text'][:80]}".replace("\n", " "))
+        self.log(f"{m.get('via') or 'ACARS'} {who} [{m['label']}] {m['text'][:80]}".replace("\n", " "))
         if self.datalink:
             self.datalink.add_acars(m, f)
 
     def _acars_status(self, st):
         self.acars_status = st
         self.emit("datalink_status", {"acars": st})
+
+    def _vdl2_status(self, st):
+        self.vdl2_status = st
+        self.emit("datalink_status", {"vdl2": st})
 
     def _sonde_rec(self, r):
         f = self.freq_fn() if self.freq_fn else 0
@@ -446,6 +455,9 @@ class DecoderManager:
             elif dec_id == "acars":
                 self.acars = AcarsDecoder(on_message=self._acars_msg, on_status=self._acars_status)
                 self.log("ACARS decoder running (AM) - messages appear in the AIRCRAFT TEXT tab")
+            elif dec_id == "vdl2":
+                self.vdl2 = Vdl2Decoder(on_message=self._acars_msg, on_status=self._vdl2_status)
+                self.log("VDL2 decoder running (D8PSK 10.5 kbaud) - ACARS messages appear in the AIRCRAFT TEXT tab")
             elif dec_id == "sonde":
                 self.sonde = RadiosondeDecoder(on_sonde=self._sonde_rec, on_status=self._sonde_status)
                 self.log("Radiosonde decoder running (RS41, narrow FM) - balloons appear in the SONDES tab")
@@ -754,6 +766,7 @@ class DecoderManager:
         self.morse = None
         self.acars = None
         self.sonde = None
+        self.vdl2 = None
         if self.active:
             self.log("Decoder stopped")
         self.active = None
@@ -840,6 +853,8 @@ class DecoderManager:
                 self.acars.process(out["audio_ungated"])
             elif a == "sonde" and self.sonde:
                 self.sonde.process(out["disc"])
+            elif a == "vdl2" and self.vdl2 and out.get("iq48") is not None:
+                self.vdl2.process(out["iq48"])
             elif a == "dsd" and self.tcp:
                 d = out["disc"]
                 if self.settings.get("dsd_dc_remove", True) and getattr(self, "dsd_cond", None):

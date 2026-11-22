@@ -687,6 +687,9 @@ class Radio:
                 if dec_id == "acars" and self.mode != "AM":
                     self.mode = "AM"                      # ACARS is AM audio
                     self.rx.set_mode("AM")
+                elif dec_id == "vdl2" and self.mode != "DIG25":
+                    self.mode = "DIG25"                   # a 25 kHz wide digital channel (the decoder reads the IQ itself)
+                    self.rx.set_mode("DIG25")
                 elif dec_id == "sonde" and (self.mode != "NFM" or self.rx.bandwidth() < 14000):
                     self.mode = "NFM"                     # the sonde's FSK needs a wider channel than a voice radio
                     self.rx.set_mode("NFM")

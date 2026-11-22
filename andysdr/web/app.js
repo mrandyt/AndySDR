@@ -1263,6 +1263,7 @@ $("pagStart").onclick = () => send({ cmd: "decoder", id: "pager" });
 /* ----- aircraft text (ACARS) and radiosondes ----- */
 const DL = { acars: [], sondes: {}, unA: 0, unS: 0, status: {}, dirA: "", dirS: "" };
 const ACARS_FREQS = [131525000, 131725000, 131825000, 131550000, 130025000];
+const VDL2_FREQS = [136975000, 136725000, 136775000, 136825000, 136875000, 136925000];
 const ACARS_MAX_ROWS = 300;
 function dlHello(d) {
   DL.acars = d.acars || []; DL.sondes = {}; (d.sondes || []).forEach((r) => (DL.sondes[r.id] = r));
@@ -1276,6 +1277,7 @@ function dlBadges() {
 }
 function dlStatus(d) {
   if (d.acars) DL.status.acars = d.acars;
+  if (d.vdl2) DL.status.vdl2 = d.vdl2;
   if (d.sonde) DL.status.sonde = d.sonde;
   if ($("tab-acars").classList.contains("active")) acarsCount();
   if ($("tab-sonde").classList.contains("active")) sondeCount();
@@ -1287,24 +1289,26 @@ function acarsMatch(m) {
 }
 function acarsRow(m, isNew) {
   const f = m.freq ? `<td class="f" data-f="${m.freq}" title="Tune here">${fmtMHz(m.freq, 3)}</td>` : "<td>—</td>";
-  return `<tr class="${isNew ? "new" : ""}"><td class="t">${esc(m.t)}</td>${f}<td><b>${esc(m.reg || "—")}</b></td><td>${esc(m.flight || "")}</td>` +
+  return `<tr class="${isNew ? "new" : ""}"><td class="t">${esc(m.t)}</td>${f}<td><b>${esc(m.reg || "—")}</b>${m.via ? ` <span class='muted' title='Heard on the VDL2 digital link${m.icao ? ", aircraft address " + m.icao : ""}'>VDL2</span>` : ""}</td><td>${esc(m.flight || "")}</td>` +
     `<td class="lbl" title="${esc(m.label_name || "")}">${esc(m.label)}${m.down ? "" : " <span class='muted' title='Sent from a ground station to the aircraft'>→a/c</span>"}</td>` +
     `<td class="msg">${m.text ? esc(m.text) : '<span class="muted">(no text)</span>'}${m.more ? ' <span class="muted">…more</span>' : ""}</td></tr>`;
 }
 function acarsCount(n) {
-  const st = DL.status.acars || {};
+  const st = (S.decoder === "vdl2" ? DL.status.vdl2 : DL.status.acars) || {};
   if (n == null) n = DL.acars.filter(acarsMatch).length;
   $("acarsCount").textContent = `${n} of ${DL.acars.length} message${DL.acars.length === 1 ? "" : "s"}` +
-    (S.decoder === "acars" && st.level != null ? ` · signal ${st.level > 0.003 ? "present" : "none"}` : "");
+    (S.decoder === "acars" && st.level != null ? ` · signal ${st.level > 0.003 ? "present" : "none"}` : "") +
+    (S.decoder === "vdl2" && st.bursts != null ? ` · VDL2: ${st.bursts} burst${st.bursts === 1 ? "" : "s"}, ${st.frames} frame${st.frames === 1 ? "" : "s"}` : "");
 }
 function renderAcars() {
   const shown = DL.acars.filter(acarsMatch).slice(-ACARS_MAX_ROWS).reverse();
   $("acarsTable").querySelector("tbody").innerHTML = shown.map((m) => acarsRow(m, false)).join("") ||
     `<tr><td colspan="6" class="muted">${DL.acars.length ? "No messages match the filter." :
-      "No ACARS messages yet. Click one of the frequency buttons above (UK: 131.525, 131.725 or 131.825 MHz) and press ▶ Start ACARS. A good airband antenna and a clear view help – messages arrive every few seconds near an airport or airway."}</td></tr>`;
+      "No ACARS messages yet. Click one of the frequency buttons above (UK: 131.525, 131.725 or 131.825 MHz) and press ▶ Start ACARS, or a 136 MHz button for the digital VDL2 link. A good airband antenna and a clear view help – messages arrive every few seconds near an airport or airway."}</td></tr>`;
   acarsCount(shown.length);
   $("acarsLogDir").textContent = DL.dirA && isLocal ? `Every message is also saved to ${DL.dirA} (one CSV file per day).` : "";
   $("acarsFreqs").innerHTML = ACARS_FREQS.map((f) => `<button class="btn sm" data-f="${f}">${fmtMHz(f, 3)}</button>`).join("");
+  $("vdl2Freqs").innerHTML = VDL2_FREQS.map((f) => `<button class="btn sm" data-f="${f}">${fmtMHz(f, 3)}</button>`).join("");
 }
 function addAcars(m) {
   DL.acars.push(m);
@@ -1350,6 +1354,8 @@ $("acarsTable").addEventListener("click", (e) => { const f = e.target.closest("t
 $("sondeTable").addEventListener("click", (e) => { const f = e.target.closest("td.f[data-f]"); if (f) send({ cmd: "tune", freq: +f.dataset.f }); });
 $("acarsFreqs").addEventListener("click", (e) => { const b = e.target.closest("button[data-f]"); if (b) { send({ cmd: "tune", freq: +b.dataset.f, mode: "AM" }); setTimeout(() => send({ cmd: "decoder", id: "acars" }), 150); } });
 $("acarsStart").onclick = () => send({ cmd: "decoder", id: "acars" });
+$("vdl2Freqs").addEventListener("click", (e) => { const b = e.target.closest("button[data-f]"); if (b) { send({ cmd: "tune", freq: +b.dataset.f, mode: "DIG25" }); setTimeout(() => send({ cmd: "decoder", id: "vdl2" }), 150); } });
+$("vdl2Start").onclick = () => send({ cmd: "decoder", id: "vdl2" });
 $("sondeStart").onclick = () => send({ cmd: "decoder", id: "sonde" });
 $("acarsClear").onclick = () => { if (confirm("Clear the aircraft text list? (Daily log files are kept.)")) send({ cmd: "datalink_clear", which: "acars" }); };
 $("sondeClear").onclick = () => { if (confirm("Clear the balloon list? (Daily log files are kept.)")) send({ cmd: "datalink_clear", which: "sondes" }); };
@@ -1920,6 +1926,7 @@ const Q_BANDS = [
   ["CB", 27601250, "NFM", 10000, [27.6, 27.992], "UK CB (27/81 set, 40 channels). Jumps to channel 1 (27.60125 MHz)."],
   ["FM BC", 100000000, "WFM", 100000, [87.5, 108], "FM broadcast radio. Jumps to 100.0 MHz in wide FM."],
   ["ACARS", 131725000, "AM", 25000, [131.4, 131.95], "Aircraft text messages (ACARS, AM). Jumps to 131.725 MHz; the other UK channels are 131.525 and 131.825. Press the ACARS decoder key."],
+  ["VDL2", 136975000, "DIG25", 25000, [136.7, 137], "Digital aircraft data link (VDL2, 25 kHz wide). Jumps to 136.975 MHz, the busiest UK channel; others are 136.725 to 136.925 MHz. Press the VDL2 decoder key."],
   ["SONDE", 403000000, "NFM", 12500, [400.15, 406], "Weather balloons (radiosondes, 400.15–406 MHz). Use SRCH or step ▲ to find one, then press the SONDE decoder key."],
   ["PAGER", 153000000, "DIG", 12500, [153, 154], "UK pager band (153.0–153.5 MHz busiest). Jumps to the bottom of it – then use SRCH or ▲ to find the active channel."],
   ["SATS", 137900000, "DIG25", 25000, [137, 138], "Weather satellites (Meteor-M LRPT on 137.9 MHz). Start the LRPT decoder when a satellite is overhead."],
@@ -1927,11 +1934,11 @@ const Q_BANDS = [
 const Q_DECS = [
   ["DMR", "dsd", "dmr"], ["P25", "dsd", "p25p1"], ["NXDN", "dsd", "nxdn48"], ["dPMR", "dsd", "dpmr"], ["M17", "dsd", "m17"],
   ["TETRA", "tetra", ""], ["PAGER", "pager", ""], ["APRS", "data", ""], ["WEFAX", "wefax", ""], ["SSTV", "sstv", ""],
-  ["ACARS", "acars", ""], ["SONDE", "sonde", ""], ["LRPT", "lrpt", ""], ["METOP", "metop", ""], ["ADS-B", "adsb", ""], ["FT8", "ft8", "ft8"], ["FT4", "ft8", "ft4"], ["MORSE", "morse", ""],
+  ["ACARS", "acars", ""], ["VDL2", "vdl2", ""], ["SONDE", "sonde", ""], ["LRPT", "lrpt", ""], ["METOP", "metop", ""], ["ADS-B", "adsb", ""], ["FT8", "ft8", "ft8"], ["FT4", "ft8", "ft4"], ["MORSE", "morse", ""],
 ];
 const Q_DEC_TIPS = { dmr: "DMR digital voice", p25p1: "P25 Phase 1 digital voice", nxdn48: "NXDN 4800 digital voice", dpmr: "dPMR digital voice",
   m17: "M17 digital voice", tetra: "TETRA network and call signalling (25 kHz, DIG25)", pager: "POCSAG / FLEX pagers – messages appear in PAGER MESSAGES",
-  acars: "ACARS aircraft text messages (AM, 131 MHz) – listed in AIRCRAFT TEXT", sonde: "Radiosonde weather balloons (RS41, 400–406 MHz) – listed in SONDES",
+  acars: "ACARS aircraft text messages (AM, 131 MHz) – listed in AIRCRAFT TEXT", vdl2: "VDL2 digital aircraft data link (136 MHz) – ACARS inside it is listed in AIRCRAFT TEXT", sonde: "Radiosonde weather balloons (RS41, 400–406 MHz) – listed in SONDES",
   data: "APRS, DTMF, ZVEI, EAS", wefax: "Weather fax charts (USB mode)", sstv: "SSTV pictures", lrpt: "Meteor-M satellite pictures",
   adsb: "Aircraft tracking on 1090 MHz – opens the ADS-B tab data", goes: "GOES-East/West HRIT images on 1694.1 MHz (needs a dish and LNA)", metop: "Metop-B/C AHRPT images on 1701.3 MHz (needs a dish, an LNA and the 6 or 10 MS/s sample rate)",
   ft8: "FT8 weak-signal digital (USB, 15 s slots) – messages appear in the FT8 tab", ft4: "FT4 (USB, 7.5 s slots)", morse: "Morse code (CW) decoder – opens a box with a ticker tape and the most popular Morse frequencies" };
@@ -2706,7 +2713,7 @@ const HELP = {
   morsebox: ["Morse code decoder", "Press the MORSE key (DECODE row) to open this box. AndySDR switches to CW mode and reads Morse from the audio: it finds the pitch of the tone by itself, follows the sending speed (about 5-50 WPM) and prints the letters on the ticker tape, newest on the right; the box underneath keeps everything decoded. SPEED, TONE and SIGNAL show what it hears and the green light flashes with the keying. Click a popular frequency to tune it – most activity is near the QRP spots (7.030, 14.060 MHz), the IARU beacons (14.100, 28.200 MHz) and aviation NDB beacons (190-530 kHz). Weak or very fast signals decode with mistakes (shown as ¿); a clean tone with the signal 15 dB or more above the noise works best. ✕ hides the box but decoding carries on; ■ Stop ends it."],
   ft8tab: ["FT8 / FT4", "Weak-signal amateur digital modes. Pick a band and press ▶ FT8 (or ▶ FT4): AndySDR tunes USB to the dial frequency and decodes every 15 s UTC slot (FT4: 7.5 s). It also starts by itself when you tune or scan onto an FT8/FT4 channel from the band plan and something is on the air. The PC clock must be accurate. CQ only hides everything except stations calling CQ. From/Grid are read from the message."],
   wfsize: ["Spectrum / waterfall size", "Drag the small bar between the spectrum and the waterfall up or down to change how tall each one is (double-click it to reset). The Waterfall menu picks a fixed waterfall height – Small, Medium, Large or Huge – and Auto fills the space that is left. On a tall waterfall the panel scrolls. Reset size puts both back to normal. Your choice is remembered."],
-  acars: ["Aircraft text (ACARS)", "ACARS is the airlines' text messaging with aircraft: position and weather reports, flight times (out, off, on, in), maintenance data and short messages. In the UK it is on AM channels around 131 MHz – 131.525, 131.725 and 131.825 are the busiest. Press ▶ Start ACARS (or the ACARS key) and tune one; AndySDR switches to AM and lists what it reads: aircraft registration, flight number, the two-letter label and the message. Click a frequency button to tune it. A block with a damaged character is repaired when it can be, otherwise it is dropped, so a weak signal gives fewer messages rather than wrong ones. Link tests and acknowledgements have no text – tick Hide link tests to hide them. Messages are saved to a CSV file each day, and Export CSV saves the list."],
+  acars: ["Aircraft text (ACARS)", "ACARS is the airlines' text messaging with aircraft: position and weather reports, flight times (out, off, on, in), maintenance data and short messages. In the UK it is on AM channels around 131 MHz – 131.525, 131.725 and 131.825 are the busiest. Press ▶ Start ACARS (or the ACARS key) and tune one; AndySDR switches to AM and lists what it reads: aircraft registration, flight number, the two-letter label and the message. Click a frequency button to tune it. A block with a damaged character is repaired when it can be, otherwise it is dropped, so a weak signal gives fewer messages rather than wrong ones. Link tests and acknowledgements have no text – tick Hide link tests to hide them. Messages are saved to a CSV file each day, and Export CSV saves the list. ▶ Start VDL2 does the same job for the newer digital link on 136 MHz (UK: 136.975 MHz is the busiest, then 136.725 to 136.925): it reads the 25 kHz wide data signal and lists the ACARS messages inside it, marked VDL2 next to the aircraft. Pick a VDL2 frequency button, wait for a burst – the line at the top counts bursts and frames. VDL2 needs a reasonably strong signal (a short airband or wideband VHF antenna and a clear view); the receiver is set to the 25 kHz digital mode automatically."],
   sonde: ["Weather balloons (radiosondes)", "A radiosonde is the small box a weather balloon carries up to 30 km. It sends its GPS position every second on 400.15–406 MHz. The Met Office launches from about 11:00 and 23:00 UTC at several UK sites. Tune one (use SRCH, or watch the waterfall for a signal about 10 kHz wide) and press ▶ Start sonde decoder: AndySDR switches to narrow FM, 16 kHz wide, and lists every balloon it hears with serial, position, height, speed, climb, heading and satellites, plus the distance and bearing from you when My position is set (ADS-B tab, or a USB GPS unit). Click the position to see it on a map (internet needed). Only Vaisala RS41 sondes are read; other makes (DFM, M10, iMet) are ignored."],
   gps: ["USB GPS unit", "Plug in a USB GPS unit (a GPS 'puck' or dongle that appears as a COM port), tick the box and AndySDR fills in My position by itself – for satellite passes and the ADS-B distance and bearing. Leave Port on Auto-find, or pick the unit from the list (★ marks likely GPS units). The chip shows Fix and the number of satellites once it has a position; the first fix can take a few minutes, and it works best near a window or outdoors. By default it checks once a day (then lets go of the unit); the Check menu can make it every hour, or all the time so it follows you if you move. While this is ticked it replaces any position you typed in."],
   satauto: ["Satellite auto-capture", "Tick Record on a satellite and AndySDR predicts every pass over your position for the next 4 days (listed day by day) (set it with My position or 📍), tunes at acquisition of signal, follows the Doppler shift if Track is ticked, runs the right decoder and stops when the satellite sets – then puts the radio back as it was. ISS SSTV listens on 145.800 MHz FM (limit it to the ARISS event dates with the date boxes); Meteor-M N2-3 and N2-4 are LRPT on 137.900 MHz (switch to 137.100 if the satellite moves); GOES-19/18 are 1694.1 MHz HRIT from geostationary orbit – AndySDR says honestly when the satellite is below your horizon. Tick the days of the week you want (none ticked = every day) – you never type a time, AndySDR starts each capture only when the satellite is actually above your horizon. Min elevation hides low, weak passes. Orbit data (TLEs) is downloaded from CelesTrak and refreshed automatically. A capture you add by hand always takes priority. Only satellites you can actually receive from your position are listed (the GOES satellites over the Americas are hidden in the UK). NOAA 15, 18 and 19 (classic 137 MHz APT) were retired in 2025. From the UK the weather pictures you can receive are Meteor-M N2-3 / N2-4 (137 MHz LRPT – a simple turnstile or V-dipole antenna and an LNA are enough) and Metop-B / Metop-C (1701.3 MHz AHRPT – needs a dish, an L-band LNA and the 6 or 10 MS/s sample rate)."],

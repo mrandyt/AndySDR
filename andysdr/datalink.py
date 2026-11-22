@@ -17,7 +17,7 @@ from .radiosonde import bearing_distance
 log = logging.getLogger("andysdr.datalink")
 
 MAX_ACARS = 1500
-ACARS_FIELDS = ["date", "time", "freq_mhz", "reg", "flight", "label", "label_name", "mode", "ack", "block", "message"]
+ACARS_FIELDS = ["date", "time", "freq_mhz", "reg", "flight", "label", "label_name", "mode", "ack", "block", "message", "source", "icao"]
 SONDE_FIELDS = ["date", "time", "freq_mhz", "serial", "type", "frame", "lat", "lon", "alt_m", "speed_ms", "climb_ms",
                 "heading", "sats", "gps_time"]
 TRACK_MAX = 400
@@ -54,7 +54,8 @@ class DatalinkStore:
         self._write(self.dir_a, "acars", ACARS_FIELDS, {
             "date": rec["date"], "time": rec["t"], "freq_mhz": f"{rec['freq'] / 1e6:.4f}" if rec["freq"] else "",
             "reg": rec["reg"], "flight": rec["flight"], "label": rec["label"], "label_name": rec["label_name"],
-            "mode": rec["mode"], "ack": rec["ack"], "block": rec["bid"], "message": rec["text"].replace("\n", " | ")},
+            "mode": rec["mode"], "ack": rec["ack"], "block": rec["bid"], "message": rec["text"].replace("\n", " | "),
+            "source": rec.get("via", "ACARS"), "icao": rec.get("icao", "")},
             rec["date"])
         self.emit("acars", rec)
         return rec
@@ -129,7 +130,8 @@ class DatalinkStore:
                 for m in self.acars:
                     w.writerow({"date": m["date"], "time": m["t"], "freq_mhz": f"{m['freq'] / 1e6:.4f}" if m["freq"] else "",
                                 "reg": m["reg"], "flight": m["flight"], "label": m["label"], "label_name": m["label_name"],
-                                "mode": m["mode"], "ack": m["ack"], "block": m["bid"], "message": m["text"].replace("\n", " | ")})
+                                "mode": m["mode"], "ack": m["ack"], "block": m["bid"], "message": m["text"].replace("\n", " | "),
+                                "source": m.get("via", "ACARS"), "icao": m.get("icao", "")})
         else:
             w = csv.DictWriter(buf, fieldnames=["serial", "type", "frames", "last_lat", "last_lon", "last_alt_m", "gps_time", "freq_mhz"])
             w.writeheader()
