@@ -210,6 +210,8 @@ class Radio:
             self.dev.ref_fn = self.adsb.tracker.ref
         self.rx = Receiver(self.dev.sample_rate)
         self.rx.nb_on = bool(self.s.get("noise_blanker", True))
+        self.rx.notch.configure(man_on=bool(self.s.get("notch_on", False)), man_hz=float(self.s.get("notch_hz", 1000)),
+                                man_q=float(self.s.get("notch_q", 20)), auto_on=bool(self.s.get("auto_notch", False)))
         self.rx.deemph_us = self.s["deemphasis_us"]
         self.rx.bw_lookup = self._remembered_bw
         self.rx.set_mode(self.mode)
@@ -541,6 +543,18 @@ class Radio:
             self.s["agc"] = bool(on)
             if self.dev:
                 self.dev.set_agc(bool(on))
+            self._push_state(True)
+        self.call(do)
+
+    def set_notch(self, on=None, hz=None, q=None, auto=None):
+        """Audio notch filters: manual (on / pitch in Hz / sharpness Q) and the auto-notch."""
+        def do():
+            for key, v in (("notch_on", on), ("notch_hz", hz), ("notch_q", q), ("auto_notch", auto)):
+                if v is not None:
+                    self.s[key] = bool(v) if key in ("notch_on", "auto_notch") else float(v)
+            if self.rx:
+                self.rx.notch.configure(man_on=bool(self.s.get("notch_on", False)), man_hz=float(self.s.get("notch_hz", 1000)),
+                                        man_q=float(self.s.get("notch_q", 20)), auto_on=bool(self.s.get("auto_notch", False)))
             self._push_state(True)
         self.call(do)
 
@@ -1180,6 +1194,9 @@ class Radio:
             "mute_digital_audio": bool(self.s.get("mute_digital_audio", True)),
             "bw": self.rx.bandwidth() if self.rx else 0, "bw_auto": bool(self.s.get("bw_auto", True)),
             "auto_owned": self.auto_owned,
+            "notch": {"on": bool(self.s.get("notch_on", False)), "hz": float(self.s.get("notch_hz", 1000)),
+                      "q": float(self.s.get("notch_q", 20)), "auto": bool(self.s.get("auto_notch", False)),
+                      "found": list(self.rx.notch.active) if self.rx else []},
             "signal": self.signal,
             "job": {"name": self.job["name"], "action": self.job.get("action")} if self.job else None,
         }

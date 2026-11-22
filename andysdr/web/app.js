@@ -250,7 +250,7 @@ function renderState() {
   knobs.gain.render();
   $("agcChk").checked = !!S.agc;
   $("gainAgc").classList.toggle("on", !!S.agc); $("gainAgc").style.fontWeight = S.agc ? "700" : "400"; $("gainAgc").textContent = S.agc ? "AGC ON" : "AGC OFF";
-  renderQuick(); renderTop(); renderBw();
+  renderQuick(); renderTop(); renderBw(); renderNotch();
   document.querySelectorAll("[data-k=scan]").forEach((b) => b.classList.toggle("on", S.scan === "scan"));
   document.querySelectorAll("[data-k=srch]").forEach((b) => b.classList.toggle("on", S.scan === "search"));
   document.querySelectorAll("[data-k=rec]").forEach((b) => b.classList.toggle("on", S.recording));
@@ -1931,6 +1931,19 @@ const Q_BANDS = [
   ["PAGER", 153000000, "DIG", 12500, [153, 154], "UK pager band (153.0–153.5 MHz busiest). Jumps to the bottom of it – then use SRCH or ▲ to find the active channel."],
   ["SATS", 137900000, "DIG25", 25000, [137, 138], "Weather satellites (Meteor-M LRPT on 137.9 MHz). Start the LRPT decoder when a satellite is overhead."],
 ];
+// digital voice bands: label, lo MHz, hi MHz, mode, step Hz, decoder, sub, note
+const Q_DIGI = [
+  ["DMR – 70 cm amateur", 430, 440, "DIG", 12500, "dsd", "dmr", "UK amateur DMR repeaters and simplex sit in the 70 cm band (430–440 MHz). Use SEARCH BAND to find active slots."],
+  ["DMR – PMR446 (Tier 1)", 446.1, 446.2, "DIG", 6250, "dsd", "dmr", "Licence-free digital PMR446 (446.1–446.2 MHz, 12.5 kHz, DMR Tier 1 handhelds)."],
+  ["dPMR – PMR446", 446.1, 446.2, "DIG", 6250, "dsd", "dpmr", "Licence-free dPMR446 handhelds on 446.1–446.2 MHz."],
+  ["P25 – 70 cm amateur", 430, 440, "DIG", 12500, "dsd", "p25p1", "Amateur P25 Phase 1 on 70 cm. The big public-safety P25 networks are in the USA, not the UK."],
+  ["M17 – 70 cm amateur", 430, 440, "DIG", 12500, "dsd", "m17", "Open-source M17 digital voice, mostly on 70 cm (and 2 m) amateur frequencies."],
+  ["M17 – 2 m amateur", 144, 146, "DIG", 12500, "dsd", "m17", "M17 on the 2 m amateur band (144–146 MHz)."],
+  ["NXDN – 70 cm", 430, 440, "DIG", 6250, "dsd", "nxdn48", "NXDN 4800 (6.25 kHz) – a few amateur and business users on 70 cm."],
+  ["TETRA – Airwave base (390–395)", 390, 395, "DIG25", 25000, "tetra", "", "UK emergency-services TETRA (Airwave) base-station transmit band, 390–395 MHz, 25 kHz channels. Control signalling only – voice is encrypted."],
+  ["TETRA – Airwave terminals (380–385)", 380, 385, "DIG25", 25000, "tetra", "", "UK Airwave handset/vehicle transmit band, 380–385 MHz – only strong when a terminal is near you."],
+  ["TETRAPOL (380–400)", 380, 400, "DIG", 12500, "tetrapol", "", "TETRAPOL control channels (12.5 kHz) – used in France and parts of Europe, not in the UK."],
+];
 const Q_DECS = [
   ["DMR", "dsd", "dmr"], ["P25", "dsd", "p25p1"], ["NXDN", "dsd", "nxdn48"], ["dPMR", "dsd", "dpmr"], ["M17", "dsd", "m17"],
   ["TETRA", "tetra", ""], ["TETRAPOL", "tetrapol", ""], ["PAGER", "pager", ""], ["APRS", "data", ""], ["WEFAX", "wefax", ""], ["SSTV", "sstv", ""],
@@ -1947,6 +1960,17 @@ let sqPrev = -60;
 function buildQuick() {
   $("qMode").innerHTML = MODES.map((m) => `<button class="key q" data-m="${m}" title="Switch to ${m}">${m}</button>`).join("");
   $("qBand").innerHTML = Q_BANDS.map((b, i) => `<button class="key q" data-b="${i}" title="${b[5]}">${b[0]}</button>`).join("");
+  $("qDigi").innerHTML = `<option value="">Choose a band…</option>` + Q_DIGI.map((d, i) => `<option value="${i}">${d[0]}</option>`).join("");
+  $("qDigi").addEventListener("change", (e) => {
+    const d = Q_DIGI[+e.target.value]; $("qDigiInfo").textContent = d ? d[7] : ""; if (!d) return;
+    send({ cmd: "tune", freq: Math.round(d[1] * 1e6), mode: d[3] }); send({ cmd: "stepsize", hz: d[4] });
+    send({ cmd: "decoder", id: d[5], sub: d[6] || "auto" });
+  });
+  $("qDigiSrch").addEventListener("click", () => {
+    const d = Q_DIGI[+$("qDigi").value]; if (!d) { toast("Pick a digital voice band first", "info"); return; }
+    send({ cmd: "decoder", id: d[5], sub: d[6] || "auto" });
+    send({ cmd: "search", start: Math.round(d[1] * 1e6), stop: Math.round(d[2] * 1e6), step: d[4], mode: d[3] });
+  });
   $("qDec").innerHTML = `<button class="key q" data-d="autoid" title="Automatic signal identification (Auto ID): AndySDR picks the mode and decoder for you">AUTO</button>` +
     Q_DECS.map((d, i) => `<button class="key q" data-d="${i}" title="${Q_DEC_TIPS[d[2] || d[1]]}">${d[0]}</button>`).join("") +
     `<button class="key q danger" data-d="off" title="Stop the running decoder">OFF</button>`;
@@ -2069,6 +2093,31 @@ function suggestBw() {
   if (["USB", "LSB"].includes(mode)) return { hz: 2700, why: "standard SSB voice" };
   return { hz: def, why: "normal width for " + mode };
 }
+// notch filters (manual pitch + auto-notch)
+let notchDrag = false;
+function renderNotch() {
+  const n = S.notch; if (!n || !$("notchMan")) return;
+  $("notchMan").classList.toggle("on", !!n.on);
+  $("notchAuto").classList.toggle("on", !!n.auto);
+  if (!notchDrag) { $("notchHz").value = n.hz; }
+  $("notchHzTxt").textContent = Math.round(n.hz) + " Hz";
+  $("notchQ").value = String(n.q >= 30 ? 40 : n.q <= 12 ? 8 : 20);
+  const bits = [];
+  if (n.on) bits.push("cutting " + Math.round(n.hz) + " Hz");
+  if (n.auto) bits.push(n.found && n.found.length ? "auto-notch removing " + n.found.join(", ") + " Hz" : "auto-notch listening for whistles");
+  $("notchInfo").textContent = bits.join(" · ");
+}
+function notchInit() {
+  $("notchMan").addEventListener("click", () => send({ cmd: "notch", on: !(S.notch && S.notch.on) }));
+  $("notchAuto").addEventListener("click", () => send({ cmd: "notch", auto: !(S.notch && S.notch.auto) }));
+  $("notchQ").addEventListener("change", (e) => send({ cmd: "notch", q: parseFloat(e.target.value) }));
+  let last = 0;
+  $("notchHz").addEventListener("input", (e) => {
+    notchDrag = true; $("notchHzTxt").textContent = e.target.value + " Hz";
+    if (Date.now() - last > 80) { last = Date.now(); send({ cmd: "notch", hz: parseFloat(e.target.value), on: true }); }
+  });
+  $("notchHz").addEventListener("change", (e) => { notchDrag = false; send({ cmd: "notch", hz: parseFloat(e.target.value), on: true }); });
+}
 let bwLastAuto = { hz: 0, t: 0 };
 function renderBw() {
   const sel = $("bwSel"); if (!sel) return;
@@ -2096,6 +2145,7 @@ function renderBw() {
   }
 }
 function bwInit() {
+  notchInit();
   $("bwSel").addEventListener("change", (e) => {
     const v = e.target.value;
     if (v === "auto") { const sug = suggestBw(); send({ cmd: "bandwidth", bw: sug ? sug.hz : 0, auto: true }); }
@@ -2689,6 +2739,8 @@ const HELP = {
   qmode: ["Mode buttons", "One click to choose how the signal is demodulated – no need to press MODE repeatedly. NFM/FM for most two-way radio, AM for airband, WFM for FM broadcast, USB/LSB for HF voice and weather fax, CW for Morse, DIG and DIG25 for digital signals (DIG25 is the wider one for TETRA and satellites). The current mode is lit."],
   qband: ["Band buttons", "Jump straight to a popular UK band with the right mode and tuning step already set: AIR (121.500 MHz), MARINE (channel 16), PMR446, 2M, 70CM, CB, FM BC, PAGER and weather SATS. Then step with ▲ ▼, press SCAN, or use SRCH to find what is active. The button for the band you are in stays lit."],
   qdec: ["Decoder buttons", "Start a decoder with one click: DMR, P25, NXDN, dPMR, M17 (digital voice), TETRA and TETRAPOL (network, call and message signalling), PAGER (POCSAG/FLEX), APRS (also DTMF/ZVEI/EAS), WEFAX, SSTV, LRPT (Meteor-M) and ADS-B (aircraft). AUTO (Auto ID) lets AndySDR identify signals and pick the decoder itself. OFF stops the decoder. A dimmed button means its program is not installed yet – see the DECODERS tab."],
+  qdigi: ["Digital voice band", "Pick DMR, dPMR, P25, M17, NXDN or TETRA (Airwave) from the list: AndySDR tunes to the bottom of that band, sets the mode and step for it and starts the matching decoder. SEARCH BAND then sweeps the whole band and stops on any activity so the decoder can lock on (SKIP moves on to the next one). TETRA and TETRAPOL show signalling only; encrypted voice cannot be decoded."],
+  qnotch: ["Notch filters", "Cut an annoying steady whistle or carrier out of what you hear (it does not touch what the decoders receive). NOTCH is one filter you aim yourself: switch it on, then drag the slider until the whistle disappears – the pitch shows in Hz; NARROW removes only that pitch, WIDE also takes a little around it. AUTO listens for steady whistles, heterodynes and carriers in the audio and notches them by itself (up to three, released a couple of seconds after the whistle goes); speech passes through. Both work in every mode. The Hz are the pitch of the audio, not the radio frequency – to get rid of a carrier that is a different signal, move the receiver or narrow the WIDTH. The radio's own FM / DAB broadcast notches are separate switches under Device settings (RSP2 / RSPdx etc.)."],
   qlock: ["Skip / lock out", "Stops the scanner dwelling on something you don't want to hear. While it is stopped on a transmission (or searching) press SKIP and it carries straight on to the next channel – nothing is locked out, so it is visited again next time round. SKIP 10 MIN, SKIP 1 HOUR and SKIP TODAY also carry straight on, but then ignore that channel for a while; it is scanned again when the time is up (or when AndySDR is restarted). LOCK OUT is the permanent version (the L/O key): a memory channel stays locked out until you untick L/O in the MEMORY tab. UNSKIP clears all temporary skips and search lockouts at once – the number shows how many are being ignored and hovering lists them. Keyboard: N = skip to the next channel, I = skip for 10 minutes."],
   replay: ["Instant replay", "AndySDR keeps the last two minutes of everything you heard (silences left out). Press ⏪ REPLAY under the display, or Replay here, to hear the last 15 s, 30 s, 60 s or 2 minutes again – handy when the scanner passes a conversation you wanted. Keep as recording saves it as a normal sound file in the list below. Only what came through the speaker is remembered, so turn SQUELCH up just enough to hear stations, not noise."],
   qfiles: ["Files buttons", "IMAGES – shows the WEATHER IMAGES tab: every received picture (WEFAX charts, SSTV, satellite images) with the satellite or station name, frequency and time, and a Download button that saves it to the device you are using. RECORDINGS – shows the RECORDINGS tab: your sound recordings with Play and Download buttons. Both work the same on the radio PC and on remote PCs, tablets and phones."],
@@ -2714,7 +2766,7 @@ function openHelp() {
     <li>Press <b>SRCH</b> to hunt for live transmissions across a band.</li>
   </ol>
   <h3>KNOBS &amp; DISPLAY</h3>${ctl(["volume", "squelch", "gain", "power", "leds", "lcd", "topstatus"])}
-  <h3>QUICK BUTTONS (under the display)</h3>${ctl(["qmode", "qbw", "qband", "qdec", "qlock", "qtog", "qfiles", "replay"])}
+  <h3>QUICK BUTTONS (under the display)</h3>${ctl(["qmode", "qbw", "qband", "qdigi", "qdec", "qnotch", "qlock", "qtog", "qfiles", "replay"])}
   <h3>KEYPAD &amp; FUNCTION KEYS</h3>${ctl(["k_skip", "k_scan", "k_man", "k_srch", "k_pgm", "k_lo", "k_pri", "k_mode", "k_step", "k_bank", "k_dly", "k_rec", "k_dec", "k_dot", "k_e", "k_arrows", "k_clr"])}
   <p class="small">Keyboard: digits and <code>.</code> type, <code>Enter</code> tunes, <code>↑ ↓</code> step, <code>S</code> scan, <code>M</code> manual, <code>P</code> program, <code>L</code> lockout, <code>I</code> skip 10 min, <code>H</code> help, <code>Esc</code> clear.</p>
   <h3>SCREENS</h3>${ctl(["scope", "zoom", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "satauto", "gps", "acars", "sonde", "ft8tab", "morsebox", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "updates", "receiver", "remote", "theme", "conn"])}

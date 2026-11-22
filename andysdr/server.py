@@ -504,6 +504,8 @@ class Server:
                 r.store(int(m["bank"]), m.get("ch"), m.get("name", ""))
             elif cmd == "lockout":
                 r.lockout()
+            elif cmd == "notch":
+                r.set_notch(m.get("on"), m.get("hz"), m.get("q"), m.get("auto"))
             elif cmd == "skip":
                 r.skip()
             elif cmd == "lockout_temp":

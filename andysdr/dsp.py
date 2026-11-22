@@ -212,6 +212,7 @@ class Receiver:
         self.hang = 0                    # squelch hang: keeps the audio open briefly so word endings are not chopped
         self.cw_mix = Mixer()
         self.ssb_mix = Mixer()
+        self.notch = AudioNotch(AUDIO_RATE)   # manual / auto notch on what you listen to (decoders get the untouched audio)
 
     # ------------------------------------------------------------------
     def set_mode(self, mode):
@@ -328,7 +329,8 @@ class Receiver:
         elif self.hang > 0:
             self.hang -= 1
         audio_open = self.sq_open or self.hang > 0
-        out["audio"] = out["audio_ungated"] if audio_open else np.zeros_like(out["audio_ungated"])
+        listen = self.notch.process(out["audio_ungated"]) if self.notch.enabled else out["audio_ungated"]
+        out["audio"] = listen if audio_open else np.zeros_like(out["audio_ungated"])
         out["level_db"] = self.level_db
         out["squelch_open"] = self.sq_open
         return out
@@ -400,3 +402,109 @@ def find_peaks_db(spec_db, fs, center, threshold_db, min_sep_hz=10000):
     dist = max(1, int(min_sep_hz / bin_hz))
     idx, _ = signal.find_peaks(s, height=floor + threshold_db, distance=dist)
     return [(center + (i - n / 2) * bin_hz, float(s[i])) for i in idx]
+
+
+class AudioNotch:
+    """Notch filters on the listening audio: one manual notch (you pick the pitch) and an auto-notch that finds steady
+    whistles / heterodynes / carriers in the audio and removes them (up to MAX_AUTO at a time).  Speech passes."""
+    MAX_AUTO = 3
+    NFFT = 4096                  # analysis block (85 ms at 48 kHz, 11.7 Hz per bin)
+    LO_HZ, HI_HZ = 220, 3800     # where the auto-notch looks
+    PEAK_DB = 15.0               # a tone must stand this far above its surroundings ...
+    NEED_BLOCKS = 12             # ... for about a second before it is notched
+    DROP_BLOCKS = 30             # and is released about 2.5 s after it has gone
+
+    def __init__(self, fs=AUDIO_RATE):
+        self.fs = fs
+        self.man_on = False
+        self.man_hz = 1000.0
+        self.man_q = 20.0
+        self.auto_on = False
+        self._man = None                       # [b, a, zi]
+        self.auto = []                         # [{"hz", "b", "a", "zi"}]
+        self._buf = np.zeros(0, np.float32)
+        self._win = np.hanning(self.NFFT).astype(np.float32)
+        self._cand = {}                        # bin -> persistence counter
+        self.active = []                       # Hz of the auto notches in use (shown in the GUI)
+
+    @staticmethod
+    def _coef(hz, q, fs):
+        return signal.iirnotch(hz / (fs / 2.0), q)
+
+    def configure(self, man_on=None, man_hz=None, man_q=None, auto_on=None):
+        if man_hz is not None:
+            self.man_hz = float(np.clip(man_hz, 100, 3800))
+        if man_q is not None:
+            self.man_q = float(np.clip(man_q, 3, 60))
+        if man_on is not None:
+            self.man_on = bool(man_on)
+        if auto_on is not None:
+            self.auto_on = bool(auto_on)
+            if not self.auto_on:
+                self.auto, self.active, self._cand = [], [], {}
+        b, a = self._coef(self.man_hz, self.man_q, self.fs)
+        self._man = [b, a, self._man[2] if self._man else np.zeros(2)]
+
+    @property
+    def enabled(self):
+        return self.man_on or self.auto_on
+
+    def _analyse(self, x):
+        """Look for steady narrow peaks; add / release auto notches."""
+        n = self.NFFT
+        seg = x[:n] * self._win
+        p = np.abs(np.fft.rfft(seg)) ** 2 + 1e-18
+        db = 10 * np.log10(p)
+        k0, k1 = int(self.LO_HZ * n / self.fs), int(self.HI_HZ * n / self.fs)
+        # local floor: running median of the surroundings (+-40 bins), cheap version on a coarse grid
+        floor = signal.medfilt(db, 81)
+        seen = set()
+        for k in range(k0 + 3, k1 - 3):
+            if db[k] < floor[k] + self.PEAK_DB or db[k] < db[k - 1] or db[k] < db[k + 1]:
+                continue
+            if db[k] - max(db[k - 4], db[k + 4]) < 9:      # must be narrow: far fewer dB a few bins away
+                continue
+            seen.add(k)
+        new = {}
+        for k in seen:
+            c = next((kk for kk in self._cand if abs(kk - k) <= 1), None)
+            new[k] = min(self._cand.get(c, 0) + 2, self.DROP_BLOCKS + self.NEED_BLOCKS) if c is not None else 2
+        for kk, v in self._cand.items():
+            if not any(abs(kk - k) <= 1 for k in seen) and v > 1:
+                new[kk] = v - 1
+        self._cand = new
+        for k, v in new.items():
+            hz = k * self.fs / n
+            have = next((t for t in self.auto if abs(t["hz"] - hz) < 25), None)
+            if v >= self.NEED_BLOCKS * 2 and have is None and len(self.auto) < self.MAX_AUTO:
+                # refine the pitch (parabolic interpolation)
+                d1, d2, d3 = db[k - 1], db[k], db[k + 1]
+                off = 0.5 * (d1 - d3) / (d1 - 2 * d2 + d3) if (d1 - 2 * d2 + d3) != 0 else 0
+                f = (k + off) * self.fs / n
+                b, a = self._coef(f, 35.0, self.fs)
+                self.auto.append({"hz": f, "b": b, "a": a, "zi": np.zeros(2)})
+            elif v <= 0 and have is not None:
+                self.auto.remove(have)
+        for kk in [kk for kk, v in self._cand.items() if v <= 0]:
+            del self._cand[kk]
+        # release notches whose tone has gone (counter fell to nothing)
+        live = {round(k * self.fs / n) for k, v in self._cand.items()}
+        self.auto = [t for t in self.auto if any(abs(t["hz"] - h) < 30 for h in live)]
+        self.active = [round(t["hz"]) for t in self.auto]
+
+    def process(self, x):
+        if not self.enabled or len(x) == 0:
+            return x
+        y = x.astype(np.float64)
+        if self.auto_on:
+            self._buf = np.concatenate((self._buf, x.astype(np.float32)))
+            while len(self._buf) >= self.NFFT:
+                self._analyse(self._buf)
+                self._buf = self._buf[self.NFFT // 2:]          # 50 % overlap
+        if self.man_on and self._man is not None:
+            b, a, zi = self._man
+            y, zi = signal.lfilter(b, a, y, zi=zi)
+            self._man[2] = zi
+        for t in self.auto:
+            y, t["zi"] = signal.lfilter(t["b"], t["a"], y, zi=t["zi"])
+        return y.astype(np.float32)

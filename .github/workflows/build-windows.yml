@@ -54,6 +54,7 @@ jobs:
         run: |
           python tests/test_lockout.py
           python tests/test_skip.py
+          python tests/test_notch.py
 
       - name: New-feature self-tests (informational)
         continue-on-error: true

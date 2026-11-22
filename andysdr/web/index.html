@@ -128,7 +128,21 @@
             <button class="key q" id="bwSug" title="Use the suggested bandwidth">★</button></div>
           <div class="bw-why" id="bwWhy"></div></div>
         <div class="q-group" data-help="qband"><span class="q-lab">BAND</span><div class="q-row" id="qBand"></div></div>
+        <div class="q-group" data-help="qdigi"><span class="q-lab">DIGITAL VOICE BAND</span>
+          <div class="q-row digi-row">
+            <select id="qDigi" title="Pick a digital voice band: tunes to it, sets the mode and step and starts the right decoder"></select>
+            <button class="key q" id="qDigiSrch" title="Search the whole band for active digital signals (stops on a hit, SKIP moves on)">SEARCH BAND</button>
+          </div>
+          <div class="bw-why" id="qDigiInfo"></div></div>
         <div class="q-group" data-help="qdec"><span class="q-lab">DECODE</span><div class="q-row" id="qDec"></div></div>
+        <div class="q-group" data-help="qnotch"><span class="q-lab">NOTCH</span>
+          <div class="q-row notch-row">
+            <button class="key q" id="notchMan" title="Notch filter: cuts one steady pitch (a whistle or heterodyne) out of the audio">NOTCH</button>
+            <button class="key q" id="notchAuto" title="Auto-notch: finds steady whistles and carriers in the audio and removes them">AUTO</button>
+            <select id="notchQ" title="How narrow the notch is"><option value="40">NARROW</option><option value="20" selected>NORMAL</option><option value="8">WIDE</option></select>
+            <div class="notch-slide"><input type="range" id="notchHz" min="200" max="3800" step="10" value="1000" title="Pitch to cut out"><output id="notchHzTxt">1000 Hz</output></div>
+          </div>
+          <div class="bw-why" id="notchInfo"></div></div>
         <div class="q-group" data-help="qlock"><span class="q-lab">SKIP</span><div class="q-row" id="qLock"></div></div>
         <div class="q-group" data-help="qtog"><span class="q-lab">AUDIO</span><div class="q-row" id="qTog"></div></div>
         <div class="q-group" data-help="qfiles"><span class="q-lab">FILES</span><div class="q-row" id="qFiles">
