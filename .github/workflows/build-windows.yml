@@ -56,7 +56,7 @@ jobs:
       - name: New-feature self-tests (informational)
         continue-on-error: true
         run: |
-          for t in test_aircraftinfo test_satpass test_satsched test_ft8 test_bandwidth test_imgcheck test_dspquality test_replay test_rate10m test_morse test_dsdcond test_tetra; do python tests/$t.py || echo "::warning::$t failed"; done
+          for t in test_aircraftinfo test_satpass test_satsched test_ft8 test_bandwidth test_imgcheck test_dspquality test_replay test_rate10m test_morse test_dsdcond test_tetra test_vdl2 test_tetrapol; do python tests/$t.py || echo "::warning::$t failed"; done
 
       - name: Build AndySDR.exe
         run: |
@@ -149,6 +149,27 @@ jobs:
         run: |
           TETRA_RX="dist/AndySDR/decoders/tetra-rx/tetra-rx.exe" python tests/test_tetra.py
 
+      - name: Build tetrapol_dump (Tetrapol-kit TETRAPOL frame decoder, GPL-2.0)
+        continue-on-error: true            # if this fails the TETRAPOL decoder says tetrapol_dump is missing; everything else still ships
+        shell: msys2 {0}
+        run: |
+          pacman -S --noconfirm --needed mingw-w64-x86_64-glib2 mingw-w64-x86_64-pkgconf
+          TK=9bfb9f80347f30f43d25fe38325c11de145359d9
+          git init -q /tmp/tetrapol-kit && cd /tmp/tetrapol-kit && git fetch -q --depth 1 https://github.com/jswo/tetrapol-kit.git $TK && git checkout -q FETCH_HEAD
+          cd "$GITHUB_WORKSPACE"
+          D="$GITHUB_WORKSPACE/dist/AndySDR/decoders/tetrapol"
+          bash decoders_src/tetrapol/build.sh /tmp/tetrapol-kit "$D" gcc
+          # the MinGW DLLs it needs (glib and friends) go next to it; Windows' own DLLs are skipped
+          ldd "$D/tetrapol_dump.exe" | awk '/mingw64/ {print $3}' | sort -u | while read -r dll; do cp "$dll" "$D/"; done
+          cp /tmp/tetrapol-kit/COPYING "$D/LICENSE-tetrapol-kit-GPL-2.0.txt"
+          printf 'tetrapol-kit %s https://github.com/jswo/tetrapol-kit (GPL-2.0)\nGLib and its runtime DLLs (LGPL-2.1+) from MSYS2 mingw-w64.\nBuild recipe and Windows shims: decoders_src/tetrapol in the AndySDR repository.\n' $TK > "$D/ANDYSDR_SOURCE.txt"
+          ls -l "$D"
+      - name: TETRAPOL end-to-end self-test (synthetic signal through the built tetrapol_dump.exe)
+        continue-on-error: true
+        shell: bash -el {0}
+        run: |
+          TETRAPOL_DUMP="dist/AndySDR/decoders/tetrapol/tetrapol_dump.exe" python tests/test_tetrapol.py
+
       - name: Visual C++ runtime for the installer
         continue-on-error: true
         shell: pwsh
@@ -205,7 +226,7 @@ jobs:
             * `AndySDR-Setup.exe` – installer (Start menu + desktop shortcut, firewall rule for remote use, Visual C++ runtime)
             * `AndySDR-windows.zip` – portable: unzip and run `AndySDR.exe`
 
-            Decoders bundled in the `decoders` folder: DSD-FME (DMR, P25, NXDN, dPMR, YSF, M17), multimon-ng (POCSAG, FLEX, APRS, DTMF, ZVEI, EAS), SatDump (Meteor-M LRPT), tetra-rx (TETRA). WEFAX and SSTV are built in.
+            Decoders bundled in the `decoders` folder: DSD-FME (DMR, P25, NXDN, dPMR, YSF, M17), multimon-ng (POCSAG, FLEX, APRS, DTMF, ZVEI, EAS), SatDump (Meteor-M LRPT), tetra-rx (TETRA), tetrapol_dump (TETRAPOL). WEFAX, SSTV, ACARS, VDL2 and RS41 radiosondes are built in.
             1.11.1: TETRA auto-corrects mirrored (I/Q-swapped) signals and shows a short readable summary: network, cell frequencies, encryption on/off, neighbour cells, call set-ups, channel allocations.
             1.11.0: TETRA decoder - AndySDR now has its own TETRA demodulator feeding the osmo-tetra decoder: shows the network (MCC/MNC), cell information, call set-up and text messages on unencrypted networks (encrypted networks such as UK Airwave show signalling only). New AGC on/off button by the RF GAIN knob; DSD-FME signal centring and D-STAR / inverted DMR / inverted dPMR modes; satellite auto-record with a per-day pass list and Doppler tracking.
             1.9.0: MeshCore with just an SDR - a receive-only LoRa decoder in the MESHCORE tab lists repeaters, room servers, companions and sensors from their adverts (with positions) and reads public / #hashtag channel messages, plus a live packet log. No LoRa board needed (experimental; nothing is transmitted).

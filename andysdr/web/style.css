@@ -875,6 +875,7 @@ html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spec
 :is([data-theme="modern"], [data-theme="modernlight"]) .q-group { display: flex; flex-direction: column; align-items: stretch; gap: 8px; background: var(--panel2); border: 0; border-radius: 14px; padding: 12px 14px; }
 :is([data-theme="modern"], [data-theme="modernlight"]) .q-lab { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: 1.4px; }
 :is([data-theme="modern"], [data-theme="modernlight"]) .q-row { grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) #qDec .key.danger { grid-column: 1 / -1; }   /* OFF on its own full-width row, not an orphan */
 :is([data-theme="modern"], [data-theme="modernlight"]) .key.q { font-size: 13px; padding: 9px 6px; min-height: 40px; border-radius: 10px; }
 :is([data-theme="modern"], [data-theme="modernlight"]) .bw-row { grid-template-columns: 1fr auto; }
 :is([data-theme="modern"], [data-theme="modernlight"]) .bw-why { font-size: 12px; }

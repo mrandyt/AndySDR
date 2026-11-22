@@ -12,10 +12,13 @@ so AndySDR can switch to the right demodulator and start the right decoder by it
   SSTV (1200 Hz sync + 1500-2300)    -> SSTV pictures (built in)
   1500-2300 Hz fax tones, no sync    -> WEFAX charts (built in, SSB only)
   wide 25 kHz, non-constant envelope -> TETRA (shown only – UK Airwave is encrypted)
+  GMSK 8000 Bd, 12.5 kHz + 20 ms sync -> TETRAPOL (Tetrapol-kit; signalling only – not used in the UK)
   otherwise                          -> analogue voice (FM with CTCSS tone reported, AM, SSB) – no decoder
 """
 import numpy as np
 from scipy import signal
+
+from . import tetrapol
 
 FS = 48000
 WIN = 48000            # analyse one second at a time
@@ -166,6 +169,15 @@ class SignalClassifier:
         # ---- TETRA: about 25 kHz wide, pi/4-DQPSK (envelope not constant)
         if wide and snr > 15 and env_full > 0.18 and duty > 0.75 and mode not in ("AM", "USB", "LSB", "CW"):
             return R("TETRA", "TETRA (π/4-DQPSK, 25 kHz) – Airwave is encrypted", "tetra", "", dmode="DIG25", conf=0.8)
+
+        # ---- TETRAPOL: GMSK 8000 Bd in 12.5 kHz (constant envelope).  A cheap 8000 Bd line test first, then the
+        # real proof: the frame-sync pattern that repeats every 20 ms (tetrapol.probe).
+        if not wide and snr > 12 and env_cv < 0.35 and mode not in ("AM", "USB", "LSB", "CW") and len(dfull) > 8000:
+            if _line_strength(np.diff(dfull) ** 2, [8000])[8000] > 40:
+                tp = tetrapol.probe(iq)
+                if tp:
+                    return R("TETRAPOL", "TETRAPOL (GMSK 8000 Bd, 12.5 kHz) – signalling only, speech is not decodable",
+                             "tetrapol", "", dmode="DIG", conf=0.92, frames=tp["frames"])
 
         # ---- audio-tone signals (work in FM and SSB): SSTV, WEFAX, AFSK/APRS, DTMF
         tone = self._tones(audio, mode)

@@ -41,6 +41,7 @@ from . import capturemeta, imgcheck
 from .sstv import SstvDecoder
 from .wefax import WefaxDecoder
 from .tetrademod import TetraDemod
+from .tetrapol import TetrapolDemod
 
 log = logging.getLogger("andysdr.decoders")
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
@@ -87,6 +88,10 @@ DECODERS = {
     "tetra":  {"name": "TETRA (built-in demodulator + osmo-tetra)", "exe": "tetra-rx",
                "help": "Decodes the TETRA downlink (25 kHz, DIG25 mode, tune to the carrier centre): network codes (MCC/MNC), "
                        "cell and call set-up and text messages. Encrypted traffic (UK Airwave) shows signalling only, no speech."},
+    "tetrapol": {"name": "TETRAPOL (built-in demodulator + Tetrapol-kit)", "exe": "tetrapol_dump",
+               "help": "Decodes the TETRAPOL control channel (GMSK 8 kbit/s, 12.5 kHz, DIG mode, tune to the carrier centre): cell and network "
+                       "codes, call set-ups and short messages. There is no free speech decoder for TETRAPOL, so you get signalling, not speech. "
+                       "TETRAPOL is not used in the UK (France, Spain, Switzerland, Czech Republic and others)."},
 }
 
 
@@ -254,6 +259,8 @@ class DecoderManager:
         self.udp = None
         self.tetra_demod = None
         self.tetra_state = {}
+        self.tetrapol_demod = None
+        self.tetrapol_state = {}
         self.rec = None
         self.rec_path = None
         self.resample_state = None
@@ -519,6 +526,21 @@ class DecoderManager:
                     port = int(self.settings.get("tetra_udp_port", 42000))
                     self.log("tetra-rx not found (Help > Decoders). Streaming 48 kHz complex float32 IQ to "
                              f"UDP 127.0.0.1:{port} for an external TETRA decoder instead.")
+            elif dec_id == "tetrapol":
+                exe = find_exe("tetrapol_dump", ov)
+                if exe:
+                    f = self.freq_fn() if self.freq_fn else 0
+                    band = "VHF" if 0 < f < 200e6 else "UHF"
+                    self.tetrapol_demod = TetrapolDemod(48000.0)
+                    self.tetrapol_state = {"t0": time.time(), "cur": None, "kv": {}, "said": {}, "count": {}}
+                    self.proc = _popen([exe, "-i", "-", "-b", band, "-t", "CCH", "-d", "DOWN"], stdin=subprocess.PIPE,
+                                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                    _Reader(self.proc.stdout, self._tetrapol_line).start()
+                    self._start_feeder()
+                    self.log(f"TETRAPOL decoder started ({band} band) - tune to the centre of a 12.5 kHz TETRAPOL control channel "
+                             "(DIG mode). There is no free speech decoder: you get cell, call and message signalling.")
+                else:
+                    raise FileNotFoundError("tetrapol_dump not found – see Help > Decoders")
             self.status = "on"
             return True
         except Exception as e:
@@ -633,6 +655,83 @@ class DecoderManager:
                      "Check you are on the exact carrier centre in DIG25 mode, the gain, and that the network is "
                      "a TETRA downlink.")
 
+    # ---- TETRAPOL (Tetrapol-kit prints each decoded message as a "CODOP=0x90 (D_SYSTEM_INFO)" line followed by
+    # indented KEY=value lines; those are gathered per message and boiled down to what is worth reading)
+    _TP_CALLS = ("D_CALL_SETUP", "U_CALL_SETUP", "D_CALL_START", "D_CALL_CONNECT", "D_CHANNEL_INIT", "D_GROUP_ACTIVATION",
+                 "D_CONNECT_DCH", "U_CALL_ANSWER", "D_CALL_ALERT", "D_RELEASE")
+    _TP_DATA = ("D_DATA_MSG_DOWN", "U_DATA_MSG_UP", "D_EXPLICIT_SHORT_DATA", "D_FUNCTIONAL_SHORT_DATA")
+
+    def _tetrapol_say(self, key, text, hold=30.0):
+        st = self.tetrapol_state
+        said = st.setdefault("said", {})
+        now = time.time()
+        if now - said.get(key, 0) >= hold:
+            said[key] = now
+            self.log(text)
+
+    def _tetrapol_flush(self):
+        st = self.tetrapol_state
+        cur, kv = st.get("cur"), st.get("kv") or {}
+        st["cur"], st["kv"] = None, {}
+        if not cur:
+            return
+        cnt = st.setdefault("count", {})
+        cnt[cur] = cnt.get(cur, 0) + 1
+        if cur == "D_SYSTEM_INFO":
+            self._tetrapol_say("cell", "TETRAPOL cell: country code %s, network %s, location area %s, cell %s, uplink scrambling %s" % (
+                kv.get("COUNTRY_CODE", "?"), kv.get("NETWORK", "?"), kv.get("LOC_ID", "?"), kv.get("CELL_ID", "?"),
+                kv.get("U_CH_SCRAMBLING", "?")), 120)
+        elif cur == "D_NEIGHBOURING_CELL":
+            n = kv.get("CCR_CONFIG")
+            if n and n != "0":
+                self._tetrapol_say("nb", f"TETRAPOL neighbour cells listed: {n}", 120)
+        elif cur in self._TP_CALLS:
+            extra = " ".join(f"{k}={v}" for k, v in kv.items() if k in ("ORIGIN", "ID", "KEY_TYPE", "KEY_INDEX"))
+            self._tetrapol_say(cur, f"TETRAPOL call signalling {cur}" + (f" ({extra})" if extra else ""), 5)
+        elif cur in self._TP_DATA:
+            d = kv.get("data") or kv.get("DATA") or ""
+            self._tetrapol_say(cur, f"TETRAPOL message {cur}" + (f": {d[:120]}" if d else ""), 3)
+        else:
+            self._tetrapol_say("o" + cur, f"TETRAPOL {cur}", 60)
+
+    def _tetrapol_line(self, line):
+        st = self.tetrapol_state
+        if self.settings.get("tetrapol_verbose"):
+            self.log("TETRAPOL: " + line[:200])
+            return
+        m = re.match(r"CODOP=0x[0-9a-fA-F]+ \((\w+)\)", line)
+        if m:
+            self._tetrapol_flush()
+            st["cur"] = m.group(1)
+            st["cur_t"] = time.time()
+            return
+        if st.get("cur") and "=" in line and len(st["kv"]) < 60:
+            k, _, v = line.partition("=")
+            k = k.strip().split(" ")[-1]
+            st["kv"][k] = v.strip()
+
+    def _tetrapol_watch(self):
+        st = self.tetrapol_state
+        dm = self.tetrapol_demod
+        now = time.time()
+        if st.get("cur") and now - st.get("cur_t", now) > 2:
+            self._tetrapol_flush()
+        if dm.synced and not st.get("synced"):
+            st["synced"] = True
+            st["last_sync"] = now
+            self.log("TETRAPOL: frame sync found" + (" (spectrum is mirrored - polarity corrected automatically)" if dm.invert else ""))
+        elif dm.synced:
+            st["last_sync"] = now
+        if st.get("synced") and not dm.synced and now - st.get("last_sync", now) > 20 and not st.get("lost"):
+            st["lost"] = True
+            self.log("TETRAPOL sync lost - signal gone or too weak.")
+        elif dm.synced:
+            st["lost"] = False
+        if not st.get("synced") and now - st.get("hint", st.get("t0", now)) > 20:
+            st["hint"] = now
+            self.log(f"TETRAPOL: no frame sync yet (frequency error {dm.freq:+.0f} Hz). Check you are on the exact centre of a "
+                     "12.5 kHz TETRAPOL control channel in DIG mode and that the gain is right. TETRAPOL is not used in the UK.")
+
     # Frame types tried in turn while the signal is unknown ("Auto"): -ft covers DMR + P25 (phase 1 and 2) + YSF,
     # the others cover NXDN 12.5 / 6.25 kHz and the legacy detector (dPMR, ProVoice, D-STAR ...).
     DSD_CYCLE = [["-ft"], ["-fn"], ["-fi"], ["-fa"]]
@@ -711,7 +810,7 @@ class DecoderManager:
                 try:
                     proc.stdin.write(data)
                     proc.stdin.flush()
-                except OSError:
+                except (OSError, ValueError):          # the program ended / stdin was closed by stop()
                     break
         threading.Thread(target=feeder, daemon=True).start()
 
@@ -752,6 +851,7 @@ class DecoderManager:
             self.udp.close()
             self.udp = None
         self.tetra_demod = None
+        self.tetrapol_demod = None
         if self.active == "adsb" and self.adsb:
             self.adsb.stop()
         if self.active == "meshsdr" and self.meshsdr:
@@ -884,6 +984,14 @@ class DecoderManager:
                     except queue.Full:
                         pass
                 self._tetra_watch()
+            elif a == "tetrapol" and self.tetrapol_demod is not None and self.feed_q and out.get("iq48") is not None:
+                bits = self.tetrapol_demod.process(out["iq48"])
+                if len(bits):
+                    try:
+                        self.feed_q.put_nowait(bits.tobytes())
+                    except queue.Full:
+                        pass
+                self._tetrapol_watch()
             elif a == "tetra" and self.udp and out.get("iq48") is not None:
                 port = int(self.settings.get("tetra_udp_port", 42000))
                 b = out["iq48"].astype(np.complex64).tobytes()

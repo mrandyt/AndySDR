@@ -28,7 +28,7 @@ from .sstv import SstvDecoder
 log = logging.getLogger("andysdr.engine")
 
 SPEC_MIN_DB, SPEC_MAX_DB = -130.0, -10.0
-MUTE_WHEN_DECODING = ("dsd", "tetra", "pager", "data")
+MUTE_WHEN_DECODING = ("dsd", "tetra", "tetrapol", "pager", "data")
 REPLAY_MAX_S = 120                    # the replay buffer remembers up to two minutes of what you heard
 
 
@@ -392,7 +392,7 @@ class Radio:
                                                               "program is missing – see Help › Decoders"})
                 return
             self.auto_owned = True
-            if dec in ("dsd", "pager", "data", "tetra"):
+            if dec in ("dsd", "pager", "data", "tetra", "tetrapol"):
                 for past in list(self.pre):          # hand over what was heard while the signal was being identified
                     self.decoders.feed(past)
             self.pre.clear()
@@ -687,6 +687,9 @@ class Radio:
                 if dec_id == "acars" and self.mode != "AM":
                     self.mode = "AM"                      # ACARS is AM audio
                     self.rx.set_mode("AM")
+                elif dec_id == "tetrapol" and self.mode not in ("DIG", "DIG25"):
+                    self.mode = "DIG"                     # a 12.5 kHz wide digital channel (the decoder reads the IQ itself)
+                    self.rx.set_mode("DIG")
                 elif dec_id == "vdl2" and self.mode != "DIG25":
                     self.mode = "DIG25"                   # a 25 kHz wide digital channel (the decoder reads the IQ itself)
                     self.rx.set_mode("DIG25")

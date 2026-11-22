@@ -21,7 +21,7 @@ RR_MODES = {
     "NXDN": ("DIG", "dsd"), "NXDN48": ("DIG", "dsd"), "NXDN96": ("DIG", "dsd"),
     "DPMR": ("DIG", "dsd"), "DSTAR": ("DIG", "dsd"), "D-STAR": ("DIG", "dsd"),
     "YSF": ("DIG", "dsd"), "C4FM": ("DIG", "dsd"), "M17": ("DIG", "dsd"),
-    "TETRA": ("DIG25", "tetra"), "POCSAG": ("DIG", "pager"), "FLEX": ("DIG", "pager"),
+    "TETRA": ("DIG25", "tetra"), "TETRAPOL": ("DIG", "tetrapol"), "POCSAG": ("DIG", "pager"), "FLEX": ("DIG", "pager"),
     "PAGER": ("DIG", "pager"), "DATA": ("DIG", ""), "TELEMETRY": ("DIG", ""),
     "FMN/DMR": ("DIG", "dsd"), "FM/DMR": ("DIG", "dsd"), "WEFAX": ("USB", "wefax"),
     "FAX": ("USB", "wefax"),
