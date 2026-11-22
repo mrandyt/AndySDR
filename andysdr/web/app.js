@@ -2126,7 +2126,7 @@ function hotspotInit() {
   $("hotEdit").addEventListener("click", () => { $("hotForm").hidden = !$("hotForm").hidden; renderHotspot(); });
   $("hotSave").addEventListener("click", () => {
     const f = parseFloat(String($("hotFreq").value).replace(",", "."));
-    if (!(f >= 30 && f <= 2000)) { toast("Enter the hotspot frequency in MHz, e.g. 435.000", "error"); return; }
+    if (!(f >= 30 && f <= 2000)) { toast("Enter the hotspot frequency in MHz, e.g. 438.800", "error"); return; }
     send({ cmd: "hotspot_save", name: $("hotName").value.trim(), freq: Math.round(f * 1e6), cc: +$("hotCc").value || 0, ts: +$("hotTs").value, tg: $("hotTg").value.trim() });
     $("hotForm").hidden = true; toast("Hotspot saved", "info");
   });
