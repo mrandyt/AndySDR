@@ -506,6 +506,8 @@ class Server:
                 r.lockout()
             elif cmd == "notch":
                 r.set_notch(m.get("on"), m.get("hz"), m.get("q"), m.get("auto"))
+            elif cmd == "hotspot_save":
+                r.set_hotspot(m.get("name"), m.get("freq"), m.get("cc"), m.get("ts"), m.get("tg"))
             elif cmd == "skip":
                 r.skip()
             elif cmd == "lockout_temp":

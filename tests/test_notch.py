@@ -54,5 +54,8 @@ r.set_notch(on=True, hz=900, q=40, auto=True); time.sleep(0.8)
 n = r.state()["notch"]
 check("engine state notch", n["on"] and n["hz"] == 900 and n["q"] == 40 and n["auto"])
 check("receiver notch configured", r.rx.notch.enabled)
+r.set_hotspot(name='Desk', freq=435000000, cc=3, ts=1, tg='91'); time.sleep(0.8)
+h = r.state()['hotspot']
+check('hotspot saved', h['name']=='Desk' and h['freq']==435000000 and h['cc']==3 and h['ts']==1 and h['tg']=='91')
 r.stop()
 sys.exit(1 if fails else 0)

@@ -132,6 +132,20 @@
             <button class="key q" id="bwSug" title="Use the suggested bandwidth">★</button></div>
           <div class="bw-why" id="bwWhy"></div></div>
         <div class="q-group" data-help="qband"><span class="q-lab">BAND</span><div class="q-row" id="qBand"></div></div>
+        <div class="q-group" data-help="qhot"><span class="q-lab">MY HOTSPOT</span>
+          <div class="q-row hot-row">
+            <button class="key q" id="hotGo" title="Tune to your saved DMR hotspot and start the DMR decoder">HOTSPOT</button>
+            <button class="key q" id="hotEdit" title="Change the saved hotspot details">EDIT</button>
+          </div>
+          <div class="hot-form" id="hotForm" hidden>
+            <label>Name <input class="inp" id="hotName" maxlength="30"></label>
+            <label>Frequency MHz <input class="inp" id="hotFreq" inputmode="decimal"></label>
+            <label>Colour code <input class="inp" id="hotCc" type="number" min="0" max="15"></label>
+            <label>Timeslot <select id="hotTs"><option value="1">1</option><option value="2">2</option></select></label>
+            <label>Talkgroup <input class="inp" id="hotTg" maxlength="10" placeholder="e.g. 91"></label>
+            <button class="key q" id="hotSave">SAVE</button>
+          </div>
+          <div class="bw-why" id="hotInfo"></div></div>
         <div class="q-group" data-help="qdigi"><span class="q-lab">DIGITAL VOICE BAND</span>
           <div class="q-row digi-row">
             <select id="qDigi" title="Pick a digital voice band: tunes to it, sets the mode and step and starts the right decoder"></select>

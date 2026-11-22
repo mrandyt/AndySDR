@@ -637,6 +637,11 @@ tr.cq td { color: var(--accent); }
 /* ---- bandwidth selector ---- */
 .bw-row { grid-template-columns: 1fr auto; }
 .bw-row select { min-width: 0; width: 100%; }
+.hot-row { grid-template-columns: 1fr auto; }
+.hot-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-top: 8px; align-items: end; }
+.hot-form[hidden] { display: none; }
+.hot-form label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--muted, #8a95a6); min-width: 0; }
+.hot-form input, .hot-form select { min-width: 0; width: 100%; }
 .digi-row { grid-template-columns: 1fr auto; align-items: center; }
 .digi-row select { min-width: 0; width: 100%; }
 .notch-row { grid-template-columns: auto auto 1fr; align-items: center; }

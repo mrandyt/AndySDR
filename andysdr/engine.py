@@ -558,6 +558,22 @@ class Radio:
             self._push_state(True)
         self.call(do)
 
+    def set_hotspot(self, name=None, freq=None, cc=None, ts=None, tg=None):
+        """Save the DMR hotspot profile (frequency, colour code, timeslot, talkgroup)."""
+        def do():
+            if name is not None:
+                self.s["hotspot_name"] = str(name)[:30] or "My hotspot"
+            if freq:
+                self.s["hotspot_freq"] = int(freq)
+            if cc is not None:
+                self.s["hotspot_cc"] = max(0, min(15, int(cc)))
+            if ts is not None:
+                self.s["hotspot_ts"] = 1 if int(ts) == 1 else 2
+            if tg is not None:
+                self.s["hotspot_tg"] = str(tg)[:10]
+            self._push_state(True)
+        self.call(do)
+
     def set_squelch(self, db):
         def do():
             self.s["squelch"] = float(db)
@@ -1194,6 +1210,8 @@ class Radio:
             "mute_digital_audio": bool(self.s.get("mute_digital_audio", True)),
             "bw": self.rx.bandwidth() if self.rx else 0, "bw_auto": bool(self.s.get("bw_auto", True)),
             "auto_owned": self.auto_owned,
+            "hotspot": {"name": str(self.s.get("hotspot_name", "My hotspot")), "freq": int(self.s.get("hotspot_freq", 435000000)),
+                        "cc": int(self.s.get("hotspot_cc", 1)), "ts": int(self.s.get("hotspot_ts", 2)), "tg": str(self.s.get("hotspot_tg", ""))},
             "notch": {"on": bool(self.s.get("notch_on", False)), "hz": float(self.s.get("notch_hz", 1000)),
                       "q": float(self.s.get("notch_q", 20)), "auto": bool(self.s.get("auto_notch", False)),
                       "found": list(self.rx.notch.active) if self.rx else []},
