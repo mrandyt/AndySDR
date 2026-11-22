@@ -44,6 +44,13 @@ SATELLITES = {
                    "freqs": [137900000, 137100000], "min_el": 15, "lead": 30, "tail": 20,
                    "note": "Shares 137.900 / 137.100 MHz with N2-3; if both are up at once only one is decoded. "
                            "Switch the frequency here if its transmitter moves."},
+    "metopb": {"name": "Metop-B (AHRPT)", "norad": 38771, "kind": "leo", "action": "metop", "mode": "DIG25",
+               "freqs": [1701300000], "min_el": 10, "lead": 30, "tail": 20,
+               "note": "1701.3 MHz, about 4.5 MHz wide: needs a tracking 1 m-class dish, an L-band LNA, the 6 or 10 MS/s "
+                       "sample rate and SatDump. (The pass is followed for Doppler automatically.)"},
+    "metopc": {"name": "Metop-C (AHRPT)", "norad": 43689, "kind": "leo", "action": "metop", "mode": "DIG25",
+               "freqs": [1701300000], "min_el": 10, "lead": 30, "tail": 20,
+               "note": "Same 1701.3 MHz channel and hardware as Metop-B; if both are overhead at once only one is decoded."},
     "goes19": {"name": "GOES-19 East (HRIT)", "norad": 60133, "kind": "geo", "action": "goes", "mode": "DIG25",
                "freqs": [1694100000], "min_el": 3, "lead": 0, "tail": 0,
                "note": "1694.1 MHz, 927 ksym/s BPSK. Needs a 1 m-class dish, an L-band LNA and a path to the "

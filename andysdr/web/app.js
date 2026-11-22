@@ -1787,12 +1787,12 @@ const Q_BANDS = [
 const Q_DECS = [
   ["DMR", "dsd", "dmr"], ["P25", "dsd", "p25p1"], ["NXDN", "dsd", "nxdn48"], ["dPMR", "dsd", "dpmr"], ["M17", "dsd", "m17"],
   ["TETRA", "tetra", ""], ["PAGER", "pager", ""], ["APRS", "data", ""], ["WEFAX", "wefax", ""], ["SSTV", "sstv", ""],
-  ["LRPT", "lrpt", ""], ["GOES", "goes", ""], ["ADS-B", "adsb", ""], ["FT8", "ft8", "ft8"], ["FT4", "ft8", "ft4"], ["MORSE", "morse", ""],
+  ["LRPT", "lrpt", ""], ["GOES", "goes", ""], ["METOP", "metop", ""], ["ADS-B", "adsb", ""], ["FT8", "ft8", "ft8"], ["FT4", "ft8", "ft4"], ["MORSE", "morse", ""],
 ];
 const Q_DEC_TIPS = { dmr: "DMR digital voice", p25p1: "P25 Phase 1 digital voice", nxdn48: "NXDN 4800 digital voice", dpmr: "dPMR digital voice",
   m17: "M17 digital voice", tetra: "TETRA network and call signalling (25 kHz, DIG25)", pager: "POCSAG / FLEX pagers – messages appear in PAGER MESSAGES",
   data: "APRS, DTMF, ZVEI, EAS", wefax: "Weather fax charts (USB mode)", sstv: "SSTV pictures", lrpt: "Meteor-M satellite pictures",
-  adsb: "Aircraft tracking on 1090 MHz – opens the ADS-B tab data", goes: "GOES-East/West HRIT images on 1694.1 MHz (needs a dish and LNA)",
+  adsb: "Aircraft tracking on 1090 MHz – opens the ADS-B tab data", goes: "GOES-East/West HRIT images on 1694.1 MHz (needs a dish and LNA)", metop: "Metop-B/C AHRPT images on 1701.3 MHz (needs a dish, an LNA and the 6 or 10 MS/s sample rate)",
   ft8: "FT8 weak-signal digital (USB, 15 s slots) – messages appear in the FT8 tab", ft4: "FT4 (USB, 7.5 s slots)", morse: "Morse code (CW) decoder – opens a box with a ticker tape and the most popular Morse frequencies" };
 let sqPrev = -60;
 

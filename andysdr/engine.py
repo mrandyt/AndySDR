@@ -234,7 +234,7 @@ class Radio:
 
     def _tune(self, f, mode=None, force=False):
         f = int(f)
-        if self.decoders.active == "goes" and abs(f - self.freq) > 1000000:
+        if self.decoders.active in ("goes", "metop") and abs(f - self.freq) > 1000000:
             self.decoders.stop()              # moved off the GOES channel
         if self.decoders.active == "meshsdr" and abs(f - self.freq) > 100000:
             self.decoders.stop()              # tuned away from the MeshCore channel
@@ -285,7 +285,7 @@ class Radio:
         self.call(do)
 
     def _auto_feed(self, out):
-        if self.decoders.active in ("adsb", "ft8", "goes", "meshsdr"):
+        if self.decoders.active in ("adsb", "ft8", "goes", "metop", "meshsdr"):
             return
         # band plan says FT8 / FT4 here and something is on the air: start that decoder
         if (self.s.get("auto_identify", True) and self.decoders.active in (None, "") and not self.job
@@ -421,11 +421,11 @@ class Radio:
             self.job = job
             self._tune(job["freq"], job.get("mode"), force=True)
             act = job.get("action")
-            if act in ("wefax", "sstv", "lrpt", "goes") and self.rec:
+            if act in ("wefax", "sstv", "lrpt", "goes", "metop") and self.rec:
                 self.rec.close()               # picture jobs keep the picture only, not the sound
                 self.rec = None
             self.decoders.pass_northbound = bool(job.get("northbound"))      # LRPT: which way the satellite is heading
-            if act in ("wefax", "sstv", "lrpt", "goes", "pager", "data", "dsd"):
+            if act in ("wefax", "sstv", "lrpt", "goes", "metop", "pager", "data", "dsd"):
                 self.decoders.start(act, "auto")
             elif act == "record" and not self.rec:
                 self.record(True)
@@ -452,7 +452,7 @@ class Radio:
         def do():
             job, prev = self.job, self.job_prev or {}
             self.job, self.job_prev = None, None
-            if job and job.get("action") in ("wefax", "sstv", "lrpt", "goes", "pager", "data", "dsd"):
+            if job and job.get("action") in ("wefax", "sstv", "lrpt", "goes", "metop", "pager", "data", "dsd"):
                 self.decoders.stop()
             self.decoders.pass_northbound = False
             if job and job.get("action") == "record" and self.rec and not prev.get("recording"):
@@ -675,10 +675,10 @@ class Radio:
                 self._begin_adsb()
             elif dec_id == "meshsdr":
                 self.start_meshsdr()
-            elif dec_id == "goes":
+            elif dec_id in ("goes", "metop"):
                 self._stop_scan()
                 self.channel = None
-                self._tune(1694100000, "DIG25", force=True)
+                self._tune(1694100000 if dec_id == "goes" else 1701300000, "DIG25", force=True)
                 self.decoders.start(dec_id, sub)
             else:
                 if dec_id in ("wefax", "sstv", "lrpt") and self.rec:
@@ -1211,7 +1211,7 @@ class Radio:
                 last_pri = time.time()
                 self._priority_check(spec_db)
 
-            if self.decoders.active in ("adsb", "goes", "meshsdr"):
+            if self.decoders.active in ("adsb", "goes", "metop", "meshsdr"):
                 self.decoders.feed_iq(iq, fs, self.offset())    # these decoders work on the raw samples; no audio
             elif produce:
                 try:

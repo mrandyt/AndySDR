@@ -24,7 +24,7 @@ from .satpass import SATELLITES, SatPlanner
 log = logging.getLogger("andysdr.scheduler")
 
 ACTIONS = {
-    "wefax": "Weather fax (WEFAX)", "sstv": "SSTV pictures", "lrpt": "Meteor-M LRPT pass", "goes": "GOES HRIT (satellite)",
+    "wefax": "Weather fax (WEFAX)", "sstv": "SSTV pictures", "lrpt": "Meteor-M LRPT pass", "goes": "GOES HRIT (satellite)", "metop": "Metop AHRPT (satellite)",
     "record": "Record audio", "listen": "Just tune & listen", "pager": "Pagers", "data": "APRS / data",
     "dsd": "Digital voice",
 }
@@ -45,6 +45,7 @@ PRESETS = [
     {"name": "Meteor-M LRPT 137.900 MHz", "freq": 137900000, "mode": "DIG25", "action": "lrpt"},
     {"name": "Meteor-M LRPT 137.100 MHz", "freq": 137100000, "mode": "DIG25", "action": "lrpt"},
     {"name": "GOES HRIT 1694.1 MHz (needs dish + LNA)", "freq": 1694100000, "mode": "DIG25", "action": "goes"},
+    {"name": "Metop AHRPT 1701.3 MHz (needs dish + LNA, 6-10 MS/s)", "freq": 1701300000, "mode": "DIG25", "action": "metop"},
 ]
 
 

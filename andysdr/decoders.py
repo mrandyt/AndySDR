@@ -69,6 +69,8 @@ DECODERS = {
                "help": "Reads Morse from the audio: finds the tone, follows the speed (5-50 WPM) and prints the text on a ticker tape. Use CW mode on the HF bands. Press the MORSE key to open it."},
     "goes":   {"name": "GOES HRIT weather satellite (SatDump)", "exe": "satdump",
                "help": "1694.1 MHz GOES-East/West images and EMWIN. Needs a dish + L-band LNA; the receiver is shared with SatDump over a local rtl_tcp link."},
+    "metop":  {"name": "Metop AHRPT weather satellite (SatDump)", "exe": "satdump",
+               "help": "1701.3 MHz Metop-B / Metop-C direct broadcast (AVHRR pictures and more). Needs a dish + L-band LNA and the 6 or 10 MS/s sample rate; the receiver is shared with SatDump over a local rtl_tcp link."},
     "adsb":   {"name": "ADS-B aircraft 1090 MHz (built in)", "exe": None,
                "help": "Tunes to 1090 MHz and tracks aircraft (callsign, position, altitude, speed). See the ADS-B tab."},
     "meshsdr": {"name": "MeshCore with just an SDR (built in, receive only)", "exe": None,
@@ -355,7 +357,7 @@ class DecoderManager:
             return True
         ov = self.settings.get("decoder_paths", {})
         self.active, self.sub = dec_id, sub
-        if dec_id in ("wefax", "sstv", "lrpt", "goes"):
+        if dec_id in ("wefax", "sstv", "lrpt", "goes", "metop"):
             self._note_capture(dec_id)
         try:
             if dec_id == "wefax":
@@ -421,21 +423,25 @@ class DecoderManager:
                 self.ft8 = Ft8Decoder(exe, proto, on_message=self._ft8_msg, on_log=self.log, dial=self.dial_fn)
                 self.log(f"{proto.upper()} decoder running – decoding at the end of each {self.ft8.slot_len:g} s UTC slot. "
                          "Keep the PC clock accurate (Windows: Settings > Time > Sync now).")
-            elif dec_id == "goes":
+            elif dec_id in ("goes", "metop"):
+                pipe, mhz, label = (("goes_hrit", 1694.1, "GOES HRIT") if dec_id == "goes" else ("metop_ahrpt", 1701.3, "Metop AHRPT"))
                 exe = find_exe("satdump", ov)
                 if not exe:
                     raise FileNotFoundError("satdump.exe not found – see Help > Decoders")
                 self.bridge = IqBridge(out_rate=None)
                 port = self.bridge.start()
-                out = os.path.join(self.images_dir, "goes_" + time.strftime("%Y%m%d_%H%M%S"))
+                out = os.path.join(self.images_dir, dec_id + "_" + time.strftime("%Y%m%d_%H%M%S"))
                 fs = int(self.rate_fn())
                 self.bridge.out_rate = fs
-                args = [exe, "live", "goes_hrit", out, "--source", "rtltcp", "--ip_address", "127.0.0.1",
-                        "--port", str(port), "--samplerate", str(fs), "--frequency", "1694.1e6", "--gain", "30"]
+                if dec_id == "metop" and fs < 5000000:
+                    self.log("Metop AHRPT is about 4.5 MHz wide: choose 6 or 10 MS/s under Sample rate (Receiver tab) – "
+                             f"the current {fs / 1e6:g} MS/s is too narrow to decode it.", "warn")
+                args = [exe, "live", pipe, out, "--source", "rtltcp", "--ip_address", "127.0.0.1",
+                        "--port", str(port), "--samplerate", str(fs), "--frequency", f"{mhz}e6", "--gain", "30"]
                 self.proc = _popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
                 _Reader(self.proc.stdout, self.log, lambda l: "(D)" not in l).start()
                 self._watch_images(out)
-                self.log("SatDump (GOES HRIT) started on 1694.1 MHz – images appear in Weather images as they complete")
+                self.log(f"SatDump ({label}) started on {mhz} MHz – images appear in Weather images as they complete")
             elif dec_id == "meshsdr":
                 if self.meshsdr is None:
                     raise RuntimeError("MeshCore SDR receiver not available")
@@ -758,7 +764,7 @@ class DecoderManager:
             self.adsb.feed(iq, fs)
         elif self.active == "meshsdr" and self.meshsdr:
             self.meshsdr.feed(iq, fs, offset)
-        elif self.active == "goes" and self.bridge:
+        elif self.active in ("goes", "metop") and self.bridge:
             self.bridge.feed(iq, fs, offset)
 
     def _watch_images(self, out):
