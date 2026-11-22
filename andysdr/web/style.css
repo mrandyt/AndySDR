@@ -947,3 +947,10 @@ html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spec
   :is([data-theme="modern"], [data-theme="modernlight"]) #spec { height: calc(clamp(140px, 26vh, 300px) + var(--bp-strip, 30px)); }
   :is([data-theme="modern"], [data-theme="modernlight"]) #wf { flex: 1 1 0; height: 0; min-height: 220px; }
 }
+
+/* User-adjustable spectrum / waterfall size (drag the bar between them, or use the Waterfall menu) */
+.splitter { height: 14px; margin: -2px 0; cursor: row-resize; display: flex; align-items: center; justify-content: center; touch-action: none; user-select: none; flex: 0 0 auto; }
+.splitter i { display: block; width: 64px; height: 4px; border-radius: 3px; background: var(--muted, #888); opacity: .45; transition: opacity .15s, background .15s; }
+.splitter:hover i, .splitter.drag i { opacity: 1; background: var(--accent, #4a76ff); }
+body.sz-spec #spec { height: calc(var(--user-spec) + var(--bp-strip, 30px)) !important; flex: none !important; }
+body.sz-wf #wf { height: var(--user-wf) !important; min-height: 0 !important; flex: none !important; }

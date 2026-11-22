@@ -446,8 +446,41 @@ function sizeCanvases() {
   }
 }
 window.addEventListener("resize", sizeCanvases);
-if (window.ResizeObserver) new ResizeObserver(() => sizeCanvases()).observe(wfC);   // the waterfall can change size with the layout
+if (window.ResizeObserver) { const ro = new ResizeObserver(() => sizeCanvases()); ro.observe(wfC); ro.observe(specC); }   // the waterfall can change size with the layout
 sizeCanvases();
+
+// ---- adjustable spectrum / waterfall size ----
+(function () {
+  const sel = $("wfSize"), bar = $("splitter");
+  if (!sel || !bar) return;
+  let specH = +(localStorage.getItem("andysdr_specsize") || 0), wfH = +(localStorage.getItem("andysdr_wfsize") || 0);
+  const apply = (save = true) => {
+    const b = document.body;
+    b.classList.toggle("sz-spec", specH > 0); b.classList.toggle("sz-wf", wfH > 0);
+    if (specH > 0) b.style.setProperty("--user-spec", specH + "px");
+    if (wfH > 0) b.style.setProperty("--user-wf", wfH + "px");
+    sel.value = [...sel.options].some((o) => +o.value === wfH) ? String(wfH) : "0";
+    if (!wfH) sel.value = "0";
+    if (save) { localStorage.setItem("andysdr_specsize", specH); localStorage.setItem("andysdr_wfsize", wfH); }
+    setTimeout(() => { sizeCanvases(); window.dispatchEvent(new Event("resize")); }, 20);
+  };
+  sel.onchange = () => { wfH = +sel.value; apply(); };
+  $("sizeReset").onclick = () => { specH = 0; wfH = 0; apply(); };
+  bar.ondblclick = $("sizeReset").onclick;
+  bar.addEventListener("pointerdown", (e) => {
+    e.preventDefault(); bar.setPointerCapture(e.pointerId); bar.classList.add("drag");
+    const y0 = e.clientY, s0 = specC.clientHeight - (parseFloat(getComputedStyle(document.body).getPropertyValue("--bp-strip")) || 30), w0 = wfC.clientHeight;
+    const move = (ev) => {
+      const dy = ev.clientY - y0;
+      specH = Math.max(80, Math.round(s0 + dy));
+      if (wfH > 0 || document.body.classList.contains("sz-wf")) wfH = Math.max(80, Math.round(w0 - dy));
+      apply(false);
+    };
+    const up = () => { bar.classList.remove("drag"); bar.removeEventListener("pointermove", move); bar.removeEventListener("pointerup", up); bar.removeEventListener("pointercancel", up); apply(true); };
+    bar.addEventListener("pointermove", move); bar.addEventListener("pointerup", up); bar.addEventListener("pointercancel", up);
+  });
+  apply(false);
+})();
 
 /* ---- zoom / pan: the view is a window (viewC centre, fs/zoom wide) into the received span ---- */
 let zoom = 1, viewC = null, follow = true;      // follow = view stays centred on the tuned frequency while zoomed
@@ -2564,6 +2597,7 @@ const HELP = {
   eibitab: ["Shortwave (EiBi)", "The EiBi shortwave broadcast schedule: press Get latest schedule once (or Import file…), then search by station, language or frequency. Tick On air now to see only what is being broadcast right now (UTC). Tune goes to the frequency in AM; ★ stores it in memory; ⏰ schedules an automatic tune-in every time that broadcast is on."],
   morsebox: ["Morse code decoder", "Press the MORSE key (DECODE row) to open this box. AndySDR switches to CW mode and reads Morse from the audio: it finds the pitch of the tone by itself, follows the sending speed (about 5-50 WPM) and prints the letters on the ticker tape, newest on the right; the box underneath keeps everything decoded. SPEED, TONE and SIGNAL show what it hears and the green light flashes with the keying. Click a popular frequency to tune it – most activity is near the QRP spots (7.030, 14.060 MHz), the IARU beacons (14.100, 28.200 MHz) and aviation NDB beacons (190-530 kHz). Weak or very fast signals decode with mistakes (shown as ¿); a clean tone with the signal 15 dB or more above the noise works best. ✕ hides the box but decoding carries on; ■ Stop ends it."],
   ft8tab: ["FT8 / FT4", "Weak-signal amateur digital modes. Pick a band and press ▶ FT8 (or ▶ FT4): AndySDR tunes USB to the dial frequency and decodes every 15 s UTC slot (FT4: 7.5 s). It also starts by itself when you tune or scan onto an FT8/FT4 channel from the band plan and something is on the air. The PC clock must be accurate. CQ only hides everything except stations calling CQ. From/Grid are read from the message."],
+  wfsize: ["Spectrum / waterfall size", "Drag the small bar between the spectrum and the waterfall up or down to change how tall each one is (double-click it to reset). The Waterfall menu picks a fixed waterfall height – Small, Medium, Large or Huge – and Auto fills the space that is left. On a tall waterfall the panel scrolls. Reset size puts both back to normal. Your choice is remembered."],
   gps: ["USB GPS unit", "Plug in a USB GPS unit (a GPS 'puck' or dongle that appears as a COM port), tick the box and AndySDR fills in My position by itself – for satellite passes and the ADS-B distance and bearing. Leave Port on Auto-find, or pick the unit from the list (★ marks likely GPS units). The chip shows Fix and the number of satellites once it has a position; the first fix can take a few minutes, and it works best near a window or outdoors. By default it checks once a day (then lets go of the unit); the Check menu can make it every hour, or all the time so it follows you if you move. While this is ticked it replaces any position you typed in."],
   satauto: ["Satellite auto-capture", "Tick Record on a satellite and AndySDR predicts every pass over your position for the next 4 days (listed day by day) (set it with My position or 📍), tunes at acquisition of signal, follows the Doppler shift if Track is ticked, runs the right decoder and stops when the satellite sets – then puts the radio back as it was. ISS SSTV listens on 145.800 MHz FM (limit it to the ARISS event dates with the date boxes); Meteor-M N2-3 and N2-4 are LRPT on 137.900 MHz (switch to 137.100 if the satellite moves); GOES-19/18 are 1694.1 MHz HRIT from geostationary orbit – AndySDR says honestly when the satellite is below your horizon. Tick the days of the week you want (none ticked = every day) – you never type a time, AndySDR starts each capture only when the satellite is actually above your horizon. Min elevation hides low, weak passes. Orbit data (TLEs) is downloaded from CelesTrak and refreshed automatically. A capture you add by hand always takes priority. Only satellites you can actually receive from your position are listed (the GOES satellites over the Americas are hidden in the UK). NOAA 15, 18 and 19 (classic 137 MHz APT) were retired in 2025. From the UK the weather pictures you can receive are Meteor-M N2-3 / N2-4 (137 MHz LRPT – a simple turnstile or V-dipole antenna and an LNA are enough) and Metop-B / Metop-C (1701.3 MHz AHRPT – needs a dish, an L-band LNA and the 6 or 10 MS/s sample rate)."],
   sched: ["Scheduler", "Captures that run by themselves at set times – ideal for weather fax charts, ISS SSTV events and Meteor-M satellite passes. Pick a station from Quick pick (or type a frequency), choose what to do (WEFAX, SSTV, LRPT, record…), the start time on this PC's clock and how long, and either tick days of the week or pick a single date. At the start time AndySDR stops scanning, tunes, runs the decoder; at the end it saves the pictures and puts the radio back exactly as it was. Only one capture can run at a time: if two overlap, the one with the higher Priority takes over the radio (satellite passes count as High) and an interrupted capture carries on afterwards if time is left; overlaps are flagged with ⚠ and listed above the table. ▶ Now runs one straight away. AndySDR must be running (it can run as a server in the background)."],

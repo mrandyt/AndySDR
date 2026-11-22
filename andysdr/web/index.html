@@ -179,6 +179,10 @@
     <label class="mini keep" data-help="bandplan">Band plan <select id="bpSize">
       <option value="0">Off</option><option value="1">Small</option><option value="2" selected>Medium</option><option value="3">Large</option><option value="4">Extra large</option>
     </select></label>
+    <label class="mini keep" data-help="wfsize">Waterfall <select id="wfSize">
+      <option value="0" selected>Auto (fill)</option><option value="200">Small</option><option value="340">Medium</option><option value="520">Large</option><option value="760">Huge</option>
+    </select></label>
+    <button class="btn mini keep" id="sizeReset" title="Put the spectrum and waterfall back to their normal sizes">Reset size</button>
   </div>
   <div class="vfo-bar" data-help="vfo">
     <span class="vfo-chip"><b>VFO</b> <span id="vfoFreq">---.----- MHz</span></span>
@@ -190,6 +194,7 @@
   </div>
   <canvas id="bandmap" data-help="bandmap"></canvas>
   <canvas id="spec"></canvas>
+  <div id="splitter" class="splitter" data-help="wfsize" title="Drag up or down to make the spectrum or the waterfall bigger (double-click to reset)"><i></i></div>
   <canvas id="wf"></canvas>
 </section>
 
