@@ -132,6 +132,7 @@ button, select, input { font-family: inherit; font-size: 13px; }
 /* right column */
 .radio-right { display: flex; flex-direction: column; gap: 10px; }
 .fkeys { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+.key-skip { grid-column: 1 / -1; font-weight: 800; letter-spacing: 1.5px; }   /* SKIP: its own full-width row above the function keys */
 .numkeys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
 .numkeys .num { font-size: 18px; padding: 9px 0; font-family: var(--mono); }
 .key-enter { background: var(--key-hot); color: var(--key-hot-ink); }
@@ -169,6 +170,12 @@ button, select, input { font-family: inherit; font-size: 13px; }
 .smeter i { flex: 1; background: var(--lcd-off); border-radius: 1px; }
 .smeter i.on { background: var(--lcd-on); }
 .smeter i.sq { box-shadow: 0 -4px 0 0 var(--lcd-on); }
+.lcd-skiprow { order: 9; margin-top: 6px; }
+.lcd-skiprow[hidden] { display: none; }
+.lcd-skip { flex: 1; cursor: pointer; font: inherit; font-weight: 800; letter-spacing: 1.5px; font-size: 13px; padding: 9px 12px; border-radius: 6px;
+  border: 1px solid rgba(0,0,0,.35); background: var(--key, #ddd); color: var(--key-ink, #111); }
+.lcd-skip:active { transform: translateY(1px); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-skip { border-radius: 999px; border: 0; background: var(--accent); color: var(--accent-ink, #fff); font-size: 14px; padding: 11px 16px; }
 .lcd-decode { font-family: var(--mono); font-size: 12px; min-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 
@@ -883,6 +890,7 @@ html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spec
 :is([data-theme="modern"], [data-theme="modernlight"]) .key.on, :is([data-theme="modern"], [data-theme="modernlight"]) .key.q.on, :is([data-theme="modern"], [data-theme="modernlight"]) .key-hot { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); outline: 0; }
 :is([data-theme="modern"], [data-theme="modernlight"]) .key-power { min-height: 52px; font-size: 15px; border-radius: 14px; }
 :is([data-theme="modern"], [data-theme="modernlight"]) .fkeys { grid-template-columns: repeat(4, 1fr); gap: 10px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .key-skip { background: var(--accent); color: var(--accent-ink, #fff); }
 :is([data-theme="modern"], [data-theme="modernlight"]) .numkeys { gap: 10px; }
 :is([data-theme="modern"], [data-theme="modernlight"]) .numkeys .num { font-size: 20px; padding: 12px 0; }
 :is([data-theme="modern"], [data-theme="modernlight"]) .arrows { gap: 10px; }

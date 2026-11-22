@@ -504,6 +504,8 @@ class Server:
                 r.store(int(m["bank"]), m.get("ch"), m.get("name", ""))
             elif cmd == "lockout":
                 r.lockout()
+            elif cmd == "skip":
+                r.skip()
             elif cmd == "lockout_temp":
                 r.lockout_temp(float(m.get("minutes", 30)))
             elif cmd == "lockout_clear":

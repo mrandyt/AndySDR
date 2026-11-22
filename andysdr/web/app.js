@@ -209,6 +209,7 @@ function renderLCD() {
   flag("fScan", S.scan === "scan" || (S.scan === "hold" && S.scan_prev === "scan"));
   flag("fSrch", S.scan === "search" || (S.scan === "hold" && S.scan_prev === "search"));
   flag("fHold", S.scan === "hold");
+  $("lcdSkipRow").hidden = !(S.scan === "scan" || S.scan === "search" || S.scan === "hold");   // the SKIP button shows while scanning
   flag("fMan", S.scan === "manual");
   flag("fPri", !!S.priority);
   flag("fLo", S.channel && S.channel.lockout);
@@ -329,6 +330,7 @@ function key(k) {
       else send({ cmd: "store", bank: curBank });
       entry = ""; break;
     }
+    case "skip": send({ cmd: "skip" }); break;
     case "lo": send({ cmd: "lockout" }); break;
     case "pri":
       if (S.priority) send({ cmd: "priority" });
@@ -365,7 +367,7 @@ document.querySelectorAll(".radio [data-k]").forEach((b) => b.addEventListener("
 document.addEventListener("keydown", (e) => {
   if (e.target.matches("input, select, textarea") || !$("loginModal").hidden) return;
   if (e.key === "Escape") { if (explainOn) setExplain(false); $("helpModal").hidden = true; key("clr"); return; }
-  const map = { Enter: "e", ArrowUp: "up", ArrowDown: "down", Backspace: "clr", ".": ".", s: "scan", m: "man", p: "pgm", l: "lo" };
+  const map = { Enter: "e", ArrowUp: "up", ArrowDown: "down", Backspace: "clr", ".": ".", s: "scan", m: "man", p: "pgm", l: "lo", n: "skip" };
   if (/^[0-9]$/.test(e.key)) key(e.key);
   else if (e.key === "h" || e.key === "?") openHelp();
   else if (e.key === "i") send({ cmd: "lockout_temp", minutes: 10 });
@@ -1949,11 +1951,12 @@ function buildQuick() {
     Q_DECS.map((d, i) => `<button class="key q" data-d="${i}" title="${Q_DEC_TIPS[d[2] || d[1]]}">${d[0]}</button>`).join("") +
     `<button class="key q danger" data-d="off" title="Stop the running decoder">OFF</button>`;
   $("qLock").innerHTML = [
+    "SKIP|next|Leave this channel / frequency and carry on scanning straight away (nothing is locked out – it is visited again next time round). Same as the SKIP key or N on the keyboard.",
     "SKIP 10 MIN|t10|Ignore the channel you are stopped on (or the current one) for 10 minutes, then scan it again. Works while scanning and searching.",
     "SKIP 1 HOUR|t60|Ignore it for an hour.", "SKIP TODAY|t0|Ignore it until AndySDR is closed or you press UNSKIP.",
     "LOCK OUT|perm|Permanent lockout (same as the L/O key): a memory channel stays locked out until you untick L/O in the MEMORY tab; a searched frequency is ignored until UNSKIP.",
     "UNSKIP|clr|Stop ignoring everything you skipped or locked out while searching."]
-    .map((x) => { const [l, k, t] = x.split("|"); return `<button class="key q ${k === "clr" ? "" : "danger"}" data-l="${k}" title="${t}">${l}</button>`; }).join("");
+    .map((x) => { const [l, k, t] = x.split("|"); return `<button class="key q ${k === "clr" || k === "next" ? "" : "danger"}" data-l="${k}" title="${t}">${l}</button>`; }).join("");
   $("qTog").innerHTML = ["AGC|agc|Automatic gain control on/off (turns RF GAIN to automatic)", "MUTE|mute|Silence the sound on this screen without changing the volume knob",
     "MONITOR|mon|Hold the squelch open to listen to the hiss/background – press again to go back to your squelch setting",
     "STEP −|stepdn|Smaller tuning step", "STEP +|stepup|Larger tuning step"]
@@ -1971,7 +1974,8 @@ function buildQuick() {
     }
     else if (b.dataset.l) {
       const k = b.dataset.l;
-      if (k === "perm") send({ cmd: "lockout" });
+      if (k === "next") send({ cmd: "skip" });
+      else if (k === "perm") send({ cmd: "lockout" });
       else if (k === "clr") send({ cmd: "lockout_clear" });
       else send({ cmd: "lockout_temp", minutes: +k.slice(1) });
     }
@@ -2636,6 +2640,7 @@ const HELP = {
   power: ["AUDIO ON/OFF", "Starts or stops sound on this computer. Browsers need one click before they may play audio, so press this once after opening AndySDR. The LED shows green when audio is playing."],
   lcd: ["Display", "Top row: status flags – SCAN, SRCH (search), HOLD (stopped on a signal), MAN (manual), PRI (priority on), DLY (resume delay), L/O (channel locked out), AGC, REC (recording), DEC (decoder running). Second row: banks 0-9, lit if the bank will be scanned, underlined = bank in use. CH = channel number (bank × 100 + channel). Then the frequency in MHz, mode, channel name and step size. S-meter shows signal strength in dBFS."],
   k_scan: ["SCAN", "Scans all memory channels in the lit banks, skipping locked-out channels. AndySDR uses the spectrum to skip silent channels instantly, so scanning is very fast. It stops on activity, waits the resume delay after the transmission ends, then carries on. ▲/▼ change scan direction or skip the current channel."],
+  k_skip: ["SKIP ▸ next channel", "While scanning or searching: leaves the channel (or frequency) the scanner is stopped on – or still waiting on – and carries straight on to the next one. Nothing is locked out, so you hear it again next time round; use L/O or SKIP 10 MIN / 1 HOUR / TODAY if you never want it. While searching, a skipped signal is ignored for 20 seconds so the search moves on to other signals. Not scanning? It tells you to press SCAN or SRCH first. Keyboard: N."],
   k_man: ["MAN", "Manual: stops scanning/searching and stays on the current frequency. Type a channel number then MAN to jump to that memory channel (e.g. 1 2 MAN = channel 012)."],
   k_srch: ["SRCH", "Searches a frequency range for ANY live transmission (not just stored ones), using the range in the Live Activity / Search tab. Every signal found is logged in the activity list with how often it was heard. 'Stop on signal' listens to each one; 'Sweep & log only' keeps sweeping to map a band."],
   k_pgm: ["PGM", "Program (store) the current frequency and mode into memory. Type a channel number then PGM to store in that exact channel (e.g. 2 0 5 PGM = bank 2 channel 05), or just press PGM to use the next free channel in the bank selected in the Memory tab."],
@@ -2684,7 +2689,7 @@ const HELP = {
   qmode: ["Mode buttons", "One click to choose how the signal is demodulated – no need to press MODE repeatedly. NFM/FM for most two-way radio, AM for airband, WFM for FM broadcast, USB/LSB for HF voice and weather fax, CW for Morse, DIG and DIG25 for digital signals (DIG25 is the wider one for TETRA and satellites). The current mode is lit."],
   qband: ["Band buttons", "Jump straight to a popular UK band with the right mode and tuning step already set: AIR (121.500 MHz), MARINE (channel 16), PMR446, 2M, 70CM, CB, FM BC, PAGER and weather SATS. Then step with ▲ ▼, press SCAN, or use SRCH to find what is active. The button for the band you are in stays lit."],
   qdec: ["Decoder buttons", "Start a decoder with one click: DMR, P25, NXDN, dPMR, M17 (digital voice), TETRA and TETRAPOL (network, call and message signalling), PAGER (POCSAG/FLEX), APRS (also DTMF/ZVEI/EAS), WEFAX, SSTV, LRPT (Meteor-M) and ADS-B (aircraft). AUTO (Auto ID) lets AndySDR identify signals and pick the decoder itself. OFF stops the decoder. A dimmed button means its program is not installed yet – see the DECODERS tab."],
-  qlock: ["Skip / lock out", "Stops the scanner dwelling on something you don't want to hear. While it is stopped on a transmission (or searching) press SKIP 10 MIN, SKIP 1 HOUR or SKIP TODAY and it carries straight on; the channel is scanned again when the time is up (or when AndySDR is restarted). LOCK OUT is the permanent version (the L/O key): a memory channel stays locked out until you untick L/O in the MEMORY tab. UNSKIP clears all temporary skips and search lockouts at once – the number shows how many are being ignored and hovering lists them. Keyboard: I = skip for 10 minutes."],
+  qlock: ["Skip / lock out", "Stops the scanner dwelling on something you don't want to hear. While it is stopped on a transmission (or searching) press SKIP and it carries straight on to the next channel – nothing is locked out, so it is visited again next time round. SKIP 10 MIN, SKIP 1 HOUR and SKIP TODAY also carry straight on, but then ignore that channel for a while; it is scanned again when the time is up (or when AndySDR is restarted). LOCK OUT is the permanent version (the L/O key): a memory channel stays locked out until you untick L/O in the MEMORY tab. UNSKIP clears all temporary skips and search lockouts at once – the number shows how many are being ignored and hovering lists them. Keyboard: N = skip to the next channel, I = skip for 10 minutes."],
   replay: ["Instant replay", "AndySDR keeps the last two minutes of everything you heard (silences left out). Press ⏪ REPLAY under the display, or Replay here, to hear the last 15 s, 30 s, 60 s or 2 minutes again – handy when the scanner passes a conversation you wanted. Keep as recording saves it as a normal sound file in the list below. Only what came through the speaker is remembered, so turn SQUELCH up just enough to hear stations, not noise."],
   qfiles: ["Files buttons", "IMAGES – shows the WEATHER IMAGES tab: every received picture (WEFAX charts, SSTV, satellite images) with the satellite or station name, frequency and time, and a Download button that saves it to the device you are using. RECORDINGS – shows the RECORDINGS tab: your sound recordings with Play and Download buttons. Both work the same on the radio PC and on remote PCs, tablets and phones."],
   meshsdr: ["MeshCore with just the SDR", "Receive-only MeshCore using your SDR – no LoRa board. Press Start listening (UK/EU narrow is 869.618 MHz, 62.5 kHz, SF8). NODES lists every repeater, room server, companion and sensor heard advertising, with its position (click it for a map). MESSAGES shows channel messages for the Public channel and any #hashtag channel you add (or a 32-digit key). PACKET LOG lists everything heard including encrypted direct messages (which cannot be read) and damaged frames. Needs a decent 869 MHz antenna; the SDR must run at 250 kS/s or more."],
@@ -2710,7 +2715,7 @@ function openHelp() {
   </ol>
   <h3>KNOBS &amp; DISPLAY</h3>${ctl(["volume", "squelch", "gain", "power", "leds", "lcd", "topstatus"])}
   <h3>QUICK BUTTONS (under the display)</h3>${ctl(["qmode", "qbw", "qband", "qdec", "qlock", "qtog", "qfiles", "replay"])}
-  <h3>KEYPAD &amp; FUNCTION KEYS</h3>${ctl(["k_scan", "k_man", "k_srch", "k_pgm", "k_lo", "k_pri", "k_mode", "k_step", "k_bank", "k_dly", "k_rec", "k_dec", "k_dot", "k_e", "k_arrows", "k_clr"])}
+  <h3>KEYPAD &amp; FUNCTION KEYS</h3>${ctl(["k_skip", "k_scan", "k_man", "k_srch", "k_pgm", "k_lo", "k_pri", "k_mode", "k_step", "k_bank", "k_dly", "k_rec", "k_dec", "k_dot", "k_e", "k_arrows", "k_clr"])}
   <p class="small">Keyboard: digits and <code>.</code> type, <code>Enter</code> tunes, <code>↑ ↓</code> step, <code>S</code> scan, <code>M</code> manual, <code>P</code> program, <code>L</code> lockout, <code>I</code> skip 10 min, <code>H</code> help, <code>Esc</code> clear.</p>
   <h3>SCREENS</h3>${ctl(["scope", "zoom", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "satauto", "gps", "acars", "sonde", "ft8tab", "morsebox", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "updates", "receiver", "remote", "theme", "conn"])}
   <h3>DECODER PROGRAMS</h3>

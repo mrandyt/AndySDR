@@ -116,6 +116,9 @@
           <span>S</span><div class="smeter" id="smeter"></div><span id="lcdDb">-120</span>
         </div>
         <div class="lcd-decode" id="lcdDecode"></div>
+        <div class="lcd-row lcd-skiprow" id="lcdSkipRow" hidden>
+          <button class="lcd-skip" id="lcdSkip" data-k="skip" data-help="k_skip" title="Leave this channel and carry on scanning (keyboard: N)">SKIP ▸ next channel</button>
+        </div>
       </div>
       <!-- quick-access buttons (built in app.js) -->
       <div class="quick" id="quick">
@@ -138,6 +141,7 @@
     <!-- right: keypad -->
     <div class="radio-right">
       <div class="fkeys">
+        <button class="key key-skip" data-k="skip" data-help="k_skip">SKIP ▸ next channel</button>
         <button class="key key-hot" data-k="scan" data-help="k_scan">SCAN</button>
         <button class="key" data-k="man" data-help="k_man">MAN</button>
         <button class="key" data-k="srch" data-help="k_srch">SRCH</button>

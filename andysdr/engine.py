@@ -818,6 +818,32 @@ class Radio:
             self._push_state(True)
         self.call(do)
 
+    SEARCH_SKIP_S = 20
+
+    def skip(self):
+        """SKIP key: leave whatever the scanner is stopped on (or waiting on) and carry straight on to the next memory
+        channel / search frequency.  Nothing is locked out - it will be visited again on the next pass."""
+        def do():
+            sc = self.scan
+            st = sc["state"]
+            if st not in ("scan", "search", "hold"):
+                self._emit("event", {"level": "info", "text": "SKIP works while scanning or searching - press SCAN or SRCH first"})
+                return
+            base = sc.get("prev", "scan") if st == "hold" else st
+            on_hit = st == "hold" or sc.get("phase") == "check"
+            sc["state"] = base
+            sc["phase"] = "hop" if base == "search" else "next"
+            sc["resume_at"] = 0
+            note = ""
+            if base == "search" and on_hit:
+                # a search re-listens to the same span at once and would stop on the same signal again, so a
+                # signal that is skipped is ignored for a short while (memory scanning simply moves to the next channel)
+                self.temp_lock[("f", int(self.freq))] = (time.time() + self.SEARCH_SKIP_S, f"{self.freq / 1e6:.4f} MHz")
+                note = f" (ignored for {self.SEARCH_SKIP_S} s)"
+            self._emit("event", {"level": "info", "text": f"Skipped {self.freq / 1e6:.4f} MHz{note} - scanning on"})
+            self._push_state(True)
+        self.call(do)
+
     # ------------------------------------------------------------------ temporary lockout (skip for a while)
     def _temp_locked(self, key, now):
         v = self.temp_lock.get(key)

@@ -51,7 +51,9 @@ jobs:
 
       - name: Lockout self-test (informational)
         continue-on-error: true
-        run: python tests/test_lockout.py
+        run: |
+          python tests/test_lockout.py
+          python tests/test_skip.py
 
       - name: New-feature self-tests (informational)
         continue-on-error: true
