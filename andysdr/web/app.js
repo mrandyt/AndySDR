@@ -98,7 +98,6 @@ function onJSON(m) {
     case "schedule": SCH = d; renderSchedule(); break;
     case "images": renderImages(d); break;
     case "recordings": renderRecordings(d); break;
-    case "eibi": renderEibi(d); break;
     case "mesh": MESH = d; renderMesh(); break;
     case "mesh_msg": meshAddMsg(d); break;
     case "mesh_history": MESHMSG = d; renderMeshList(); renderMeshMsgs(); break;
@@ -974,7 +973,6 @@ fillBands("amateur");
 function tabEffects(name) {
   if (name === "img") send({ cmd: "images" });
   if (name === "rec") send({ cmd: "recordings" });
-  if (name === "eibi") eibiSearch();
   if (name === "dec") send({ cmd: "decoders" });
   if (name === "bp") renderBandPlan();
   if (name === "sch") send({ cmd: "schedule" });
@@ -2275,52 +2273,6 @@ function renderSchedule() {
     tr.querySelector("[data-act=edit]").onclick = () => fillSchForm(j);
   });
 }
-/* ======================================================= EiBi shortwave schedule */
-let eibiRows = [], eibiTimer = null;
-function eibiSearch() {
-  clearTimeout(eibiTimer);
-  send({ cmd: "eibi_query", q: $("eibiQ").value, lang: $("eibiLang").value, fmin: $("eibiFmin").value, fmax: $("eibiFmax").value, now: $("eibiNow").checked });
-  eibiTimer = setTimeout(() => { if ($("tab-eibi").classList.contains("active")) eibiSearch(); }, 60000);   // keep "on air now" fresh
-}
-function renderEibi(d) {
-  const st = d.status || {};
-  $("eibiStat").textContent = st.count ? `${st.count} broadcasts · schedule saved ${new Date(st.updated * 1000).toLocaleDateString()}` : "no schedule yet – press ⬇ Get latest schedule";
-  $("eibiUtc").textContent = d.utc || "--:--";
-  eibiRows = d.rows || [];
-  $("eibiTable").querySelector("tbody").innerHTML = eibiRows.map((r, i) => `<tr class="${r.now ? "sel" : ""}"><td>${esc(String(r.f))}</td><td>${esc(r.t)}</td><td class="muted">${esc(r.d)}</td>
-    <td class="cs">${esc(r.st)}</td><td>${esc(r.l)}</td><td class="muted">${esc(r.tg)}</td><td class="muted">${esc(r.r)}</td>
-    <td style="white-space:nowrap"><button class="btn small" data-a="tune" data-i="${i}" title="Tune the radio to this station (AM)">Tune</button>
-      <button class="btn small" data-a="mem" data-i="${i}" title="Store in the selected memory bank">★</button>
-      <button class="btn small" data-a="sch" data-i="${i}" title="Tune to it automatically every time it is on air">⏰</button></td></tr>`).join("") ||
-    `<tr><td colspan="8" class="muted">${st.count ? (d.total === 0 ? "Nothing matches" + ($("eibiNow").checked ? " – try un-ticking “On air now”." : ".") : "") : "Press ⬇ Get latest schedule (or Import file… if the PC has no internet)."}</td></tr>`;
-  if ((d.total || 0) > eibiRows.length) $("eibiStat").textContent += ` · showing first ${eibiRows.length} of ${d.total} matches – narrow the search`;
-}
-$("eibiGo").onclick = eibiSearch;
-$("eibiQ").onkeydown = (e) => { if (e.key === "Enter") eibiSearch(); };
-$("eibiNow").onchange = eibiSearch;
-$("eibiDl").onclick = () => { $("eibiStat").textContent = "downloading from eibispace.de …"; send({ cmd: "eibi_download" }); };
-$("eibiFile").onchange = (e) => {
-  const f = e.target.files[0]; if (!f) return;
-  const rd = new FileReader(); rd.onload = () => send({ cmd: "eibi_import", text: rd.result }); rd.readAsText(f, "ISO-8859-1"); e.target.value = "";
-};
-$("eibiTable").querySelector("tbody").addEventListener("click", (e) => {
-  const b = e.target.closest("button[data-a]"); if (!b) return;
-  const r = eibiRows[+b.dataset.i]; if (!r) return;
-  const hz = Math.round(r.f * 1000);
-  if (b.dataset.a === "tune") { send({ cmd: "tune", freq: hz, mode: "AM" }); toast(`Tuned to ${r.f} kHz – ${r.st}`); }
-  else if (b.dataset.a === "mem") { send({ cmd: "tune", freq: hz, mode: "AM" }); setTimeout(() => send({ cmd: "store", bank: curBank, name: r.st.slice(0, 16) }), 300); toast(`Stored ${r.st} (${r.f} kHz)`); }
-  else {
-    const [a, z] = r.t.split("-"), m0 = +a.slice(0, 2) * 60 + +a.slice(2, 4), m1 = +z.slice(0, 2) * 60 + +z.slice(2, 4);
-    const d = new Date(); d.setUTCHours(+a.slice(0, 2), +a.slice(2, 4), 0, 0);             // that UTC time today -> local time + day shift
-    const shift = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())) / 864e5);
-    const p2 = (n) => String(n).padStart(2, "0");
-    const job = { name: `${r.st} ${r.f} kHz`.slice(0, 60), freq: hz, mode: "AM", action: "listen", start: `${p2(d.getHours())}:${p2(d.getMinutes())}`,
-      duration: ((m1 - m0 + 1440) % 1440) || 1440, date: "", days: (r.dl || []).map((x) => (x + shift + 7) % 7), enabled: true };
-    send({ cmd: "schedule_save", job });
-    toast(`Scheduled: tunes to ${r.st} at ${job.start} (local time) when it is on air`);
-  }
-});
-
 /* ======================================================= FT8 / FT4 */
 const FT8 = { msgs: [], unseen: 0 };
 const FT8_BANDS = [["160 m", 1840000], ["80 m", 3573000], ["60 m", 5357000], ["40 m", 7074000], ["30 m", 10136000], ["20 m", 14074000], ["17 m", 18100000],
@@ -2709,7 +2661,6 @@ const HELP = {
   biaspanel: ["Bias-T panel", "Shows whether the bias-T (antenna power) is on and can reach your antenna (RSP2: Antenna B only), the receiver noise floor over the last two minutes, and receiver overloads. No SDR can measure the current it supplies, so a drop in noise floor is used to spot lost power. 'Run power check' switches bias-T off for 6 s then on for 8 s and tells you how many dB the powered antenna or LNA adds - if there is no change, nothing is being powered. Do not run it during a scheduled capture."],
   receiver: ["Receiver", "Choose which SDR to use: every SoapySDR device (RTL-SDR/Nooelec, SDRplay RSP1A/RSP2/RSP2pro/RSPdx/RSPduo, Airspy, HackRF, LimeSDR, Pluto…), rtl_tcp servers on other machines, or the Simulator for practice. Sample rate sets how wide the waterfall is. Antenna picks the input (RSP2: Antenna A, B or Hi-Z). Device switches (bias-T, notch filters, direct sampling) appear underneath automatically."],
   autoid: ["Auto ID (automatic signal identification)", "When ticked, AndySDR analyses whatever you are listening to and shows what it is next to the VFO: DMR (it spots the 30 ms TDMA bursts), P25, NXDN, dPMR, pagers (POCSAG/FLEX), APRS, DTMF, SSTV, WEFAX, TETRA or analogue voice (with any CTCSS tone). It then switches to the right mode and starts the matching decoder by itself, and stops it again when the channel goes back to voice. SSTV pictures are caught from their very first line. A decoder you pick yourself, or one stored on a memory channel, is never overridden. Untick to turn it off."],
-  eibitab: ["Shortwave (EiBi)", "The EiBi shortwave broadcast schedule: press Get latest schedule once (or Import file…), then search by station, language or frequency. Tick On air now to see only what is being broadcast right now (UTC). Tune goes to the frequency in AM; ★ stores it in memory; ⏰ schedules an automatic tune-in every time that broadcast is on."],
   morsebox: ["Morse code decoder", "Press the MORSE key (DECODE row) to open this box. AndySDR switches to CW mode and reads Morse from the audio: it finds the pitch of the tone by itself, follows the sending speed (about 5-50 WPM) and prints the letters on the ticker tape, newest on the right; the box underneath keeps everything decoded. SPEED, TONE and SIGNAL show what it hears and the green light flashes with the keying. Click a popular frequency to tune it – most activity is near the QRP spots (7.030, 14.060 MHz), the IARU beacons (14.100, 28.200 MHz) and aviation NDB beacons (190-530 kHz). Weak or very fast signals decode with mistakes (shown as ¿); a clean tone with the signal 15 dB or more above the noise works best. ✕ hides the box but decoding carries on; ■ Stop ends it."],
   ft8tab: ["FT8 / FT4", "Weak-signal amateur digital modes. Pick a band and press ▶ FT8 (or ▶ FT4): AndySDR tunes USB to the dial frequency and decodes every 15 s UTC slot (FT4: 7.5 s). It also starts by itself when you tune or scan onto an FT8/FT4 channel from the band plan and something is on the air. The PC clock must be accurate. CQ only hides everything except stations calling CQ. From/Grid are read from the message."],
   wfsize: ["Spectrum / waterfall size", "Drag the small bar between the spectrum and the waterfall up or down to change how tall each one is (double-click it to reset). The Waterfall menu picks a fixed waterfall height – Small, Medium, Large or Huge – and Auto fills the space that is left. On a tall waterfall the panel scrolls. Reset size puts both back to normal. Your choice is remembered."],
@@ -2761,7 +2712,7 @@ function openHelp() {
   <h3>QUICK BUTTONS (under the display)</h3>${ctl(["qmode", "qbw", "qband", "qdec", "qlock", "qtog", "qfiles", "replay"])}
   <h3>KEYPAD &amp; FUNCTION KEYS</h3>${ctl(["k_scan", "k_man", "k_srch", "k_pgm", "k_lo", "k_pri", "k_mode", "k_step", "k_bank", "k_dly", "k_rec", "k_dec", "k_dot", "k_e", "k_arrows", "k_clr"])}
   <p class="small">Keyboard: digits and <code>.</code> type, <code>Enter</code> tunes, <code>↑ ↓</code> step, <code>S</code> scan, <code>M</code> manual, <code>P</code> program, <code>L</code> lockout, <code>I</code> skip 10 min, <code>H</code> help, <code>Esc</code> clear.</p>
-  <h3>SCREENS</h3>${ctl(["scope", "zoom", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "satauto", "gps", "acars", "sonde", "eibitab", "ft8tab", "morsebox", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "updates", "receiver", "remote", "theme", "conn"])}
+  <h3>SCREENS</h3>${ctl(["scope", "zoom", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "satauto", "gps", "acars", "sonde", "ft8tab", "morsebox", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "updates", "receiver", "remote", "theme", "conn"])}
   <h3>DECODER PROGRAMS</h3>
   <p>AndySDR has WEFAX and SSTV built in (SSTV: Martin, Scottie, Robot and PD modes – ISS 145.800 NFM, 2 m 144.500 NFM, 20 m 14.230 USB). DSD-FME, multimon-ng and SatDump now come bundled in the <code>decoders</code> folder next to <code>AndySDR.exe</code>. If one shows ✖ in the DECODERS tab, press <b>⬇ Download missing decoders</b> and AndySDR fetches it from GitHub into <code>%APPDATA%\\AndySDR\\decoders</code>. You can also unzip your own copy into either folder (any sub-folder is fine – AndySDR finds the .exe):</p>
   <dl><dt>DSD-FME</dt><dd>github.com/lwvmobile/dsd-fme – DMR, P25 1/2, NXDN, dPMR, YSF, M17. AndySDR feeds it like SDR++'s network sink (TCP 127.0.0.1:7355, 48 kHz); DSD-FME plays decoded voice on your speakers itself (AndySDR starts the PulseAudio sound server that comes with it).</dd>
