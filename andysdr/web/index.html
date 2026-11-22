@@ -549,6 +549,7 @@
     <div class="card sat-card" data-help="satauto">
       <div class="row wrapline"><b>🛰 Satellite auto-capture</b>
         <span class="muted small">Switch a satellite on and AndySDR works out every pass over your location, tunes in and starts the decoder by itself.</span></div>
+      <div class="muted small" data-help="satauto">ℹ NOAA 15, 18 and 19 (the old 137 MHz APT pictures) were retired in 2025, so they are not listed. Weather pictures you can still receive: <b>Meteor-M N2-3 / N2-4</b> (137 MHz LRPT) and <b>GOES-18 / GOES-19</b> (1694 MHz HRIT, needs a dish). NOAA-20 / NOAA-21 send on X-band (about 7.8 GHz), which a normal SDR cannot receive.</div>
       <div class="row wrapline">
         <label>My position <input class="inp" id="satLat" placeholder="lat e.g. 51.5074" style="width:9em" inputmode="decimal">
           <input class="inp" id="satLon" placeholder="lon e.g. -0.1278" style="width:9em" inputmode="decimal"></label>
