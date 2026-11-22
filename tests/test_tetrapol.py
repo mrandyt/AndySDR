@@ -172,6 +172,7 @@ if EXE:
                         capture_output=True, timeout=60)
     out = (pr.stdout + pr.stderr).decode("latin1")
     check("tetrapol_dump runs on our bit stream (no crash)", pr.returncode in (0, 1), out[-300:])
+    check("tetrapol_dump itself finds the frame sync in our demodulated bits", "Frame sync found" in out, out[-300:])
 else:
     print("SKIP end-to-end (no tetrapol_dump)")
 
