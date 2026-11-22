@@ -4,3 +4,4 @@ build/
 dist/
 Output/
 *.spec.bak
+android/local.properties

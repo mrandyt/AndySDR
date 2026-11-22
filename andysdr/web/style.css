@@ -1058,3 +1058,22 @@ body.sz-wf #wf { height: var(--user-wf) !important; min-height: 0 !important; fl
 #acarsFreqs .btn { margin-right: 4px; }
 #sondeTable td { white-space: nowrap; }
 #sondeTable tr.old td { opacity: .55; }
+
+/* Tablets (10 inch, touch): portrait keeps the spectrum compact so the radio controls are not far below,
+   and every small button gets a finger-sized target. */
+@media (min-width: 761px) and (max-width: 1100px) {
+  :is([data-theme="modern"], [data-theme="modernlight"]) #spec { height: calc(200px + var(--bp-strip, 30px)); }
+  :is([data-theme="modern"], [data-theme="modernlight"]) #wf { height: clamp(180px, 20vh, 260px); }
+  /* the controls card uses the width: display on top, dials and keypad side by side, quick groups in two columns */
+  :is([data-theme="modern"], [data-theme="modernlight"]) .radio-body { grid-template-columns: 1fr 1fr; align-items: start; }
+  :is([data-theme="modern"], [data-theme="modernlight"]) .lcd, :is([data-theme="modern"], [data-theme="modernlight"]) .q-jump,
+  :is([data-theme="modern"], [data-theme="modernlight"]) .quick { grid-column: 1 / -1; }
+  :is([data-theme="modern"], [data-theme="modernlight"]) .quick { display: grid; grid-template-columns: 1fr 1fr; align-items: start; gap: 14px; }
+  :is([data-theme="modern"], [data-theme="modernlight"]) .quick > :is(.q-group[data-help="qdec"], .q-group[data-help="qdigi"]) { grid-column: 1 / -1; }
+}
+@media (pointer: coarse) {
+  .btn.sm, .q-jump button, #gainAgc, .lcd-flags span, .tabs button, select, .hot-form input, .hot-form select { min-height: 40px; }
+  .q-jump button { padding: 8px 14px; font-size: 12px; }
+  input[type="range"] { min-height: 32px; }
+  .key.q { min-height: 44px; }
+}
