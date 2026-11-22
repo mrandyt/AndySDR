@@ -74,8 +74,16 @@ button, select, input { font-family: inherit; font-size: 13px; }
 .brand-logo { height: 30px; }
 .brand-name { font-size: 20px; letter-spacing: .5px; }
 .brand-name b { color: var(--accent); }
-.topbar-mid { display: flex; gap: 12px; align-items: center; flex: 1; }
-.topbar-right { display: flex; gap: 10px; align-items: center; }
+.topbar-mid { display: flex; gap: 12px; align-items: center; flex: 1; min-width: 0; overflow: hidden; }
+.topbar-mid > * { white-space: nowrap; }
+.topbar-mid > .pill { flex: none; }
+#devname, #listeners { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.topbar-right { display: flex; gap: 10px; align-items: center; flex: 0 1 auto; min-width: 0; }
+.topbar-right select { min-width: 0; text-overflow: ellipsis; }
+.help-btn { white-space: nowrap; flex: none; }
+/* a narrow window: the connection pill stays, the receiver name / listener count (also shown in the status cards) go,
+   so the Style menu and HELP never get pushed out of the window and the page never becomes wider than it */
+@media (max-width: 860px) { #devname, #listeners { display: none; } }
 .pill { padding: 3px 10px; border-radius: 999px; font-size: 11px; letter-spacing: 1px; font-weight: 600; }
 .pill-on { background: #1f7a3a; color: #e6ffe9; }
 .pill-off { background: #7a1f1f; color: #ffe6e6; }
@@ -814,7 +822,17 @@ html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spec
 :is([data-theme="modern"], [data-theme="modernlight"]) .radio-top { background: none; border: 0; padding: 20px 24px 0; display: block; }
 :is([data-theme="modern"], [data-theme="modernlight"]) .model-badge { display: none; }
 :is([data-theme="modern"], [data-theme="modernlight"]) .model-sub { display: none; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .top-status { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .top-status { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .tchip { min-width: 0; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .tchip b { max-width: 100%; white-space: nowrap; }   /* long values (receiver name) get an ellipsis, never push the strip wider than its card */
+@media (max-width: 760px) {
+  :is([data-theme="modern"], [data-theme="modernlight"]) .top-status { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* narrow window: tighter header so the CONNECTED pill, Style menu and HELP all fit */
+  :is([data-theme="modern"], [data-theme="modernlight"]) .topbar { padding: 10px 14px; gap: 12px; }
+  :is([data-theme="modern"], [data-theme="modernlight"]) .theme-pick { font-size: 0; }
+  :is([data-theme="modern"], [data-theme="modernlight"]) .theme-pick select { font-size: 13px; max-width: 135px; }
+  :is([data-theme="modern"], [data-theme="modernlight"]) .help-btn { padding: 8px 14px; }
+}
 :is([data-theme="modern"], [data-theme="modernlight"]) .top-status .tchip:nth-child(n+5) { display: inline-flex; }
 :is([data-theme="modern"], [data-theme="modernlight"]) .tchip { flex-direction: column; align-items: flex-start; gap: 3px; padding: 9px 12px; border-radius: 12px; background: var(--panel2); }
 :is([data-theme="modern"], [data-theme="modernlight"]) .tchip small { font-size: 10px; letter-spacing: 1.2px; color: var(--muted); }
@@ -910,6 +928,8 @@ html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spec
 :is([data-theme="modern"], [data-theme="modernlight"]) .modal-body { padding: 8px 28px 28px; }
 @media (max-width: 600px) {
   :is([data-theme="modern"], [data-theme="modernlight"]) .topbar { padding: 8px 12px; gap: 10px; }
+  :is([data-theme="modern"], [data-theme="modernlight"]) .help-btn { padding: 8px 12px; }
+  :is([data-theme="modern"], [data-theme="modernlight"]) .theme-pick select { max-width: 112px; }
   :is([data-theme="modern"], [data-theme="modernlight"]) .top-status { grid-template-columns: repeat(2, 1fr); }
   :is([data-theme="modern"], [data-theme="modernlight"]) .radio-body { padding: 14px; }
   :is([data-theme="modern"], [data-theme="modernlight"]) .lcd-freq-txt { font-size: 34px !important; }
