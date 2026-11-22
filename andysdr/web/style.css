@@ -916,13 +916,16 @@ html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spec
 .rope-row { display: flex; align-items: center; gap: 10px; font-size: 12px; color: #8a93a3; }
 .rope-row b { width: 28px; font-weight: 600; letter-spacing: 1px; }
 .rope-row em { font-style: normal; min-width: 44px; text-align: right; color: #d4d8df; }
-.rope { position: relative; height: 14px; border-radius: 6px; background: #14171c;
-  -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 4px, transparent 4px 5px); mask-image: repeating-linear-gradient(90deg, #000 0 4px, transparent 4px 5px); }
-.rope s { position: absolute; inset: 0; border-radius: 6px; text-decoration: none; transition: clip-path .09s linear;
-  background: linear-gradient(90deg, #17d96a 0%, #7fe035 28%, #f3dc22 50%, #ff9d1c 72%, #ff3b30 100%); }
-.rope.sql { height: 8px; } .rope.sql s { background: #b79cff; }
-.rope-wrap u { position: absolute; top: -4px; bottom: -4px; width: 2px; background: #fff; text-decoration: none; z-index: 2; margin-left: -1px; display: none; }
+.rope { position: relative; height: 14px; border-radius: 999px; background: #101319; box-shadow: inset 0 0 0 1px #1d2128; }
+.rope s { position: absolute; left: 0; top: 0; bottom: 0; min-width: 0; border-radius: 999px; text-decoration: none; transition: width .09s linear;
+  background-image: linear-gradient(90deg, #17e06b 0%, #8fe82f 28%, #f7e41f 48%, #ff9a1a 72%, #ff3b30 100%); background-repeat: no-repeat; }
+.rope s.glow { filter: blur(9px); opacity: .85; top: -3px; bottom: -3px; }
+.rope s:not(.glow)::after { content: ""; position: absolute; left: 6px; right: 6px; top: 22%; height: 32%; border-radius: 999px; background: rgba(255,255,255,.62); filter: blur(.6px); }
+.rope.sql { height: 8px; }
+.rope.sql s { background: #b79cff; background-image: none; box-shadow: 0 0 10px 1px rgba(183,156,255,.75); }
+.rope.sql s::after { display: none; }
 .rope-wrap { flex: 1; position: relative; }
+.rope-wrap u { position: absolute; top: -5px; bottom: -5px; width: 2px; margin-left: -1px; background: #fff; border-radius: 1px; text-decoration: none; z-index: 3; display: none; box-shadow: 0 0 6px rgba(255,255,255,.8); }
 
 /* knobs: three roomy dials */
 :is([data-theme="modern"], [data-theme="modernlight"]) .radio-left { gap: 18px; padding: 0; background: none; }

@@ -238,8 +238,11 @@ function renderLCD() {
   const pct = (v) => Math.max(0, Math.min(1, (v - lo) / (hi - lo))) * 100;
   const lvl = S.level ?? -120, sqv = S.squelch ?? -120;
   const sg = pct(lvl), sq = sqv <= -119 ? 0 : pct(sqv);
-  $("ropeSig").style.clipPath = `inset(0 ${(100 - sg).toFixed(1)}% 0 0)`;
-  $("ropeSql").style.clipPath = `inset(0 ${(100 - sq).toFixed(1)}% 0 0)`;
+  // the colours stay put along the tube and are revealed as the signal rises
+  for (const id of ["ropeSig", "ropeGlow"]) {
+    const e = $(id); e.style.width = sg.toFixed(1) + "%"; e.style.backgroundSize = (10000 / Math.max(sg, 1)).toFixed(0) + "% 100%";
+  }
+  $("ropeSql").style.width = sq.toFixed(1) + "%";
   $("ropeTick").style.left = sq.toFixed(1) + "%"; $("ropeTick").style.display = sq > 0 ? "block" : "none";
   $("ropeDb").textContent = lvl.toFixed(0);
   $("ropeSqDb").textContent = sqv <= -119 ? "OPEN" : sqv.toFixed(0);
