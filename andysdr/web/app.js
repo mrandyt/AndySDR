@@ -1982,7 +1982,14 @@ buildQuick(); bwInit(); renderClock(); setInterval(renderClock, 1000);
 /* ======================================================= updates */
 let UPD = { state: "idle", progress: 0 };
 const updDismissed = () => sessionStorage.getItem("andysdr_upd_later");
+const ANDROID_APP = /AndySDRRemote/.test(navigator.userAgent);   // the phone app is only a window onto the PC: updates are installed on the PC
 function onUpdate(u, hello = false) {
+  if (ANDROID_APP) {
+    $("updCur").textContent = "v" + u.current;
+    $("updLine").textContent = u.state === "available" || u.state === "ready" ? `– version ${u.latest} is available. Update it on the PC running AndySDR.` : "– updates are installed on the PC running AndySDR";
+    $("updShow").hidden = true; $("updateModal").hidden = true;
+    return;
+  }
   const prev = UPD.state;
   UPD = Object.assign({}, u);
   $("updCur").textContent = "v" + u.current;
