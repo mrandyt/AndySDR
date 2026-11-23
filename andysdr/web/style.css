@@ -1201,3 +1201,10 @@ body.customise #qJump .key::after { content: none; }
 #repTable .btn.mini { padding: 1px 7px; font-size: 12px; }
 #tab-rep .tablewrap { overflow-x: auto; overflow-y: visible; max-height: none; }
 #repPosRow { align-items: center; gap: 6px; }
+
+/* tables that scroll sideways inside their own box keep their heading row at the top of that box (a sticky heading offset by the top bar would sit on top of the first rows) */
+#tab-sch .tablewrap th, #tab-rep .tablewrap th { top: 0; }
+/* side-by-side styles: the spectrum panel used to stay pinned while you scrolled and sat on top of the tables below it (memory list, scheduler ...) - now it scrolls away with the page */
+@media (min-width: 1101px) {
+  :is([data-theme="modern"], [data-theme="modernlight"], [data-theme="sdrpp"]) .wrap > .scope { position: static; height: auto; min-height: 420px; max-height: none; }
+}
