@@ -767,6 +767,8 @@
       <label>PPM <input class="inp" id="ppmInp" type="number" style="width:5em" value="0"></label>
       <button class="btn" id="ppmSet">Set</button>
       <label><input type="checkbox" id="agcChk"> Hardware AGC</label>
+      <label title="Keeps RF GAIN as the most gain you want, and eases it down by itself when a signal is strong enough to distort (digital decoders will not lock on a distorted signal). Going to another frequency starts again from the knob."><input type="checkbox" id="autoGain"> Ease RF gain down on strong signals</label>
+      <span class="muted small" id="autoGainInfo"></span>
     </div>
     <div class="devsettings" id="devSettings"></div>
     <div class="card bias-card" id="biasCard" data-help="biaspanel" hidden>

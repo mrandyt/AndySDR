@@ -32,6 +32,11 @@ from .sstv import SstvDecoder
 log = logging.getLogger("andysdr.engine")
 
 SPEC_MIN_DB, SPEC_MAX_DB = -130.0, -10.0
+AG_HIGH_DB = -45.0       # auto RF gain: a signal stronger than this (in the channel, dB from full scale) is eased down
+AG_BLOCKS = 6            # ... if it stays that strong for this many 50 ms blocks
+AG_SETTLE_S = 1.0        # ... and then waits this long for the radio to settle before the next step
+AG_STEP_FRAC = 0.06      # each step lowers the gain by this fraction of the receiver's gain range
+AG_MAX_DROP = 0.35       # ... but never by more than this fraction of the range in total
 MUTE_WHEN_DECODING = ("dsd", "tetra", "tetrapol", "pager", "data")
 REPLAY_MAX_S = 120                    # the replay buffer remembers up to two minutes of what you heard
 
@@ -85,6 +90,11 @@ class Radio:
         self.priority = None              # (bank, ch)
         self._last_state = 0
         self.level_db = -120.0
+        self.ag_cur = None        # auto RF gain: the gain actually in use (None = the knob's value)
+        self.ag_freq = None
+        self.ag_over = 0
+        self.ag_t = 0.0
+        self.ag_log_t = 0.0
         self.sq_open = False
         self.channel = None               # (bank, ch, entry) when on a memory channel
         self.classifier = SignalClassifier()
@@ -431,6 +441,8 @@ class Radio:
             self._push_state(True)
         elif active and self.auto_owned and r["kind"] in ("FM voice", "AM voice", "SSB voice"):
             # back to plain voice: stop what auto-identify started (an SSTV picture in progress is kept)
+            if active == "dsd" and self.decoders.dsd_recent_sync(30):
+                return                          # it locked a moment ago: a fading call can look like voice - do not drop the decoder
             if not (active == "sstv" and self.decoders.sstv and self.decoders.sstv.state == "image"):
                 self.decoders.stop()
                 self.auto_owned = False
@@ -560,10 +572,47 @@ class Radio:
     def set_gain(self, g):
         def do():
             self.s["rf_gain"] = float(g)
+            self.ag_cur = None
             if self.dev:
                 self.dev.set_gain(float(g))
             self._push_state(True)
         self.call(do)
+
+    def _autogain_tick(self, now):
+        """Auto RF gain (optional): the RF GAIN knob is the most gain you want. When a signal in the channel is so strong that it
+        distorts (a digital decoder will not lock on a distorted signal), ease the gain down a step at a time; going to another
+        frequency starts again from the knob's value. It never raises the gain above the knob."""
+        dev = self.dev
+        if dev is None:
+            return
+        ceiling = float(self.s["rf_gain"])
+        if not self.s.get("auto_gain") or self.s["agc"] or getattr(dev, "agc", False) or self.scan["state"] != "manual":
+            if self.ag_cur is not None:                  # switched off or not applicable: the knob's value comes back
+                self.ag_cur = None
+                dev.set_gain(ceiling)
+            self.ag_over = 0
+            return
+        if self.ag_cur is None or self.freq != self.ag_freq:
+            self.ag_freq = self.freq
+            self.ag_over = 0
+            if self.ag_cur is not None and self.ag_cur != ceiling:
+                dev.set_gain(ceiling)
+            self.ag_cur = ceiling
+        self.ag_over = self.ag_over + 1 if self.level_db > AG_HIGH_DB else 0
+        if self.ag_over < AG_BLOCKS or now - self.ag_t < AG_SETTLE_S:
+            return
+        lo, hi = dev.gain_range()
+        span = max(1.0, float(hi) - float(lo))
+        floor = max(float(lo), ceiling - AG_MAX_DROP * span)
+        if self.ag_cur <= floor:
+            return
+        self.ag_cur = max(floor, self.ag_cur - max(1.0, AG_STEP_FRAC * span))
+        self.ag_t = now
+        self.ag_over = 0
+        dev.set_gain(self.ag_cur)
+        if now - self.ag_log_t > 5:
+            self.ag_log_t = now
+            log.info("auto RF gain: strong signal (%.0f dB) - gain eased to %.1f (knob %.1f)", self.level_db, self.ag_cur, ceiling)
 
     def set_agc(self, on):
         def do():
@@ -1280,6 +1329,8 @@ class Radio:
         return {
             "freq": self.freq, "mode": self.mode, "step": int(self.s["step"]),
             "gain": float(self.s["rf_gain"]), "agc": bool(self.s["agc"]),
+            "gain_eff": (round(self.ag_cur, 1) if self.ag_cur is not None and self.ag_cur != float(self.s["rf_gain"]) else None),
+            "auto_gain": bool(self.s.get("auto_gain")),
             "squelch": float(self.s["squelch"]), "level": round(self.level_db, 1),
             "sq_open": bool(self.sq_open), "scan": sc, "scan_prev": self.scan.get("prev"),
             "channel": ch, "decoder": self.decoders.active, "decoder_sub": self.decoders.sub,
@@ -1364,6 +1415,7 @@ class Radio:
             out = self.rx.process(iq, self.offset())
             self.level_db = out["level_db"]
             self.sq_open = out["squelch_open"]
+            self._autogain_tick(time.time())
 
             produce = True
             if self.scan["state"] != "manual":

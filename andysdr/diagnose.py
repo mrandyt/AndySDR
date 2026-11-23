@@ -426,7 +426,7 @@ def _tail(path, n=LOG_TAIL_BYTES):
         return b""
 
 
-def build_zip(rep, settings_data, folder=None):
+def build_zip(rep, settings_data, folder=None, extra=None):
     """-> bytes of a zip with the report, recent logs and the settings (secrets removed)."""
     folder = folder or data_dir()
     buf = io.BytesIO()
@@ -434,6 +434,9 @@ def build_zip(rep, settings_data, folder=None):
         z.writestr("report.txt", report_text(rep))
         z.writestr("report.json", json.dumps(rep, indent=1))
         z.writestr("settings.json", json.dumps(redact(dict(settings_data)), indent=1, default=str))
+        for name, text in (extra or {}).items():
+            if text:
+                z.writestr(name, text)
         logs = os.path.join(folder, "logs")
         try:
             names = sorted(os.listdir(logs))

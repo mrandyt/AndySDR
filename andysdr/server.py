@@ -90,6 +90,15 @@ def downloads_dir():
     return os.path.join(os.path.expanduser("~"), "Downloads")
 
 
+def _diag_extra():
+    """Extra files for the diagnostics zip: what the decoders printed recently (it never reaches andysdr.log)."""
+    try:
+        from .decoders import RECENT
+        return {"decoder-recent.txt": "\n".join(RECENT)}
+    except Exception:              # noqa: BLE001 - the zip must still be made
+        return {}
+
+
 class Server:
     def __init__(self, radio, settings):
         self.radio = radio
@@ -237,7 +246,7 @@ class Server:
             if rep is None:
                 rep = await asyncio.get_running_loop().run_in_executor(None, self._run_checks)
             data = await asyncio.get_running_loop().run_in_executor(
-                None, lambda: diagnose.build_zip(rep, self.s.data))
+                None, lambda: diagnose.build_zip(rep, self.s.data, extra=_diag_extra()))
             fname = time.strftime("AndySDR-diagnostics-%Y%m%d-%H%M.zip")
             await self._send(writer, 200, data, "application/zip",
                              extra={"Content-Disposition": f'attachment; filename="{fname}"', "Cache-Control": "no-store"})
@@ -646,7 +655,7 @@ class Server:
             elif cmd == "settings":
                 allowed = {"scan_delay": float, "scan_dwell": float, "search_threshold_db": float,
                            "require_password_local": bool, "deemphasis_us": int, "theme": str,
-                           "password": str, "mute_digital_audio": bool, "update_check": bool, "update_auto_download": bool,
+                           "password": str, "mute_digital_audio": bool, "auto_gain": bool, "update_check": bool, "update_auto_download": bool,
                            "alert_pager": bool, "alert_emergency": bool, "alert_priority": bool, "alert_capture": bool,
                            "alert_watch": bool, "watch_list": clean_watch_list,
                            "dmr_db_auto": bool}
@@ -709,7 +718,7 @@ class Server:
                 def save_diag():
                     try:
                         rep = self._last_check if (self._last_check and time.time() - self._last_check["when"] < 120) else self._run_checks()
-                        data = diagnose.build_zip(rep, self.s.data)
+                        data = diagnose.build_zip(rep, self.s.data, extra=_diag_extra())
                         dest_dir = downloads_dir()
                         os.makedirs(dest_dir, exist_ok=True)
                         dest = os.path.join(dest_dir, time.strftime("AndySDR-diagnostics-%Y%m%d-%H%M.zip"))

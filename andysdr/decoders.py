@@ -45,6 +45,9 @@ from .tetrapol import TetrapolDemod
 
 log = logging.getLogger("andysdr.decoders")
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+# the last few hundred lines of decoder output, kept in memory so CHECK MY SYSTEM can include them in the diagnostics zip
+RECENT = deque(maxlen=400)
+
 ISM_RATE = 250000          # rtl_433's usual sample rate; fine for the 433 / 868 / 315 / 915 MHz sensors
 ISM_AGC = 12.0             # keep the background noise at about this many 8-bit steps (a dongle at normal gain gives 5-15)
 
@@ -334,6 +337,8 @@ class DecoderManager:
 
     def log(self, text, kind="decoder"):
         self.emit(kind, {"t": time.strftime("%H:%M:%S"), "text": text, "decoder": self.active})
+        if kind == "decoder":
+            RECENT.append(time.strftime("%Y-%m-%d %H:%M:%S ") + "[" + str(self.active or "-") + "] " + str(text)[:300])
 
     # ------------------------------------------------------------------
     def _acars_msg(self, m):
@@ -433,7 +438,14 @@ class DecoderManager:
                 self.dsd_gen = getattr(self, "dsd_gen", 0) + 1
                 self.dsd_try = 0
                 self.dsd_restarts = 0
-                self._launch_dsd(sub)
+                first = None
+                if sub == "auto":
+                    idx = self._dsd_recall()
+                    if idx is not None:                 # this frequency has locked before: start with that frame type
+                        self.dsd_try = idx
+                        first = self.DSD_CYCLE[idx]
+                        self.log("DSD-FME: this frequency locked on " + " ".join(first) + " before - trying that first")
+                self._launch_dsd(sub, first)
                 if sub == "auto":
                     threading.Thread(target=self._dsd_cycle, args=(self.dsd_gen,), name="dsd-cycle", daemon=True).start()
             elif dec_id in ("pager", "data"):
@@ -805,15 +817,60 @@ class DecoderManager:
             argv += extra.split()
         self.dsd_t0 = time.time()
         self.dsd_sync_t = 0.0
+        self.dsd_saved = False
         self.proc = _popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
         _Reader(self.proc.stdout, self.log, self._dsd_filter).start()
         self.log("DSD-FME started: " + " ".join(os.path.basename(a) for a in argv))
+
+    DSD_MEMORY_MAX = 300
+
+    def _dsd_key(self):
+        f = self.freq_fn() if self.freq_fn else 0
+        return str(int(round(f / 1000.0))) if f else ""
+
+    def _dsd_remember(self):
+        """Auto found the frame type that locks on this frequency: keep it, so the next call starts straight on it."""
+        key = self._dsd_key()
+        if not key:
+            return
+        try:
+            mem = dict(self.settings.get("dsd_memory") or {})
+            flags = list(self.DSD_CYCLE[self.dsd_try])
+            if mem.get(key) == flags:
+                return
+            mem.pop(key, None)
+            mem[key] = flags
+            while len(mem) > self.DSD_MEMORY_MAX:
+                mem.pop(next(iter(mem)))
+            self.settings["dsd_memory"] = mem
+            self.settings.save()
+            self.log("DSD-FME: locked on " + " ".join(flags) + " - remembered for this frequency")
+        except Exception:               # noqa: BLE001 - never upset the decoder
+            pass
+
+    def _dsd_recall(self):
+        """-> index into DSD_CYCLE of the frame type that locked here before, or None."""
+        key = self._dsd_key()
+        flags = (self.settings.get("dsd_memory") or {}).get(key) if key else None
+        if flags in self.DSD_CYCLE:
+            return self.DSD_CYCLE.index(flags)
+        return None
+
+    def dsd_recent_sync(self, seconds=30.0):
+        """True if DSD-FME has been locked onto something within the last few seconds."""
+        return bool(self.active == "dsd" and getattr(self, "dsd_sync_t", 0.0)
+                    and time.time() - self.dsd_sync_t < seconds)
 
     def _dsd_cycle(self, gen):
         """Auto mode: if DSD-FME has not locked onto anything after a few seconds, try the next frame type."""
         while self.active == "dsd" and self.dsd_gen == gen and self.sub == "auto":
             time.sleep(0.5)
-            if self.dsd_sync_t or time.time() - self.dsd_t0 < self.DSD_TRY_S:
+            if self.dsd_sync_t:
+                if not getattr(self, "dsd_saved", False):
+                    self.dsd_saved = True
+                    self._dsd_remember()
+                continue
+            if time.time() - self.dsd_t0 < self.DSD_TRY_S:
                 continue
             if not (self.tcp and self.tcp.clients):          # still starting up
                 if time.time() - self.dsd_t0 < 8:
