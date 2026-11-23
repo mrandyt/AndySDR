@@ -2009,7 +2009,6 @@ function buildQuick() {
   $("qLock").innerHTML = [
     "SKIP|next|Leave this channel / frequency and carry on scanning straight away (nothing is locked out – it is visited again next time round). Same as the SKIP key or N on the keyboard.",
     "SKIP 10 MIN|t10|Ignore the channel you are stopped on (or the current one) for 10 minutes, then scan it again. Works while scanning and searching.",
-    "SKIP 1 HOUR|t60|Ignore it for an hour.", "SKIP TODAY|t0|Ignore it until AndySDR is closed or you press UNSKIP.",
     "LOCK OUT|perm|Permanent lockout (same as the L/O key): a memory channel stays locked out until you untick L/O in the MEMORY tab; a searched frequency is ignored until UNSKIP.",
     "UNSKIP|clr|Stop ignoring everything you skipped or locked out while searching."]
     .map((x) => { const [l, k, t] = x.split("|"); return `<button class="key q ${k === "clr" || k === "next" ? "" : "danger"}" data-l="${k}" title="${t}">${l}</button>`; }).join("");
@@ -2202,18 +2201,56 @@ function renderBw() {
     send({ cmd: "bandwidth", bw: sug.hz, auto: true });
   }
 }
+/* ----- customise: hide the buttons you never use (kept per browser) ----- */
+function customInit() {
+  const KEY = "andysdr.hidden";
+  const btnId = (b) => {
+    const g = (b.closest("[data-help]") || {}).dataset ? b.closest("[data-help]").dataset.help : "";
+    const a = b.closest("#qDec") ? b.textContent.trim() : (["m", "b", "d", "l", "t", "f", "k"].map((k) => b.dataset[k]).find(Boolean) || b.id || b.textContent.trim());
+    return g + ":" + a;
+  };
+  let hidden;
+  try { const v = localStorage.getItem(KEY); hidden = v === null ? ["qdec:TETRAPOL"] : JSON.parse(v); } catch (e) { hidden = []; }   // first run: TETRAPOL is not used in the UK
+  if (!Array.isArray(hidden)) hidden = [];
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(hidden)); } catch (e) { /* ignore */ } };
+  const keys = () => document.querySelectorAll(".radio .key:not(.key-power)");
+  function apply() {
+    keys().forEach((b) => b.classList.toggle("u-hide", hidden.includes(btnId(b))));
+    document.querySelectorAll("#quick .q-group").forEach((g) => {
+      const any = [...g.querySelectorAll(".key:not(.u-hide)")].some((k) => !k.closest("[hidden]")) || [...g.querySelectorAll("select")].length;
+      g.classList.toggle("u-hide", !any);
+    });
+    $("qRestore").textContent = `SHOW HIDDEN (${hidden.length})`;
+    $("qRestore").hidden = !(document.body.classList.contains("customise") && hidden.length);
+  }
+  $("qCust").addEventListener("click", () => {
+    const on = document.body.classList.toggle("customise");
+    $("qCust").classList.toggle("on", on); $("qCust").textContent = on ? "✓ DONE" : "⚙ CUSTOMISE";
+    if (on) toast("Click any button to hide it. Press DONE when finished.", "info");
+    apply();
+  });
+  $("qRestore").addEventListener("click", () => { hidden = []; save(); apply(); });
+  document.querySelector(".radio").addEventListener("click", (e) => {
+    if (!document.body.classList.contains("customise")) return;
+    const b = e.target.closest(".key:not(.key-power)"); if (!b || b.closest("#qJump")) return;
+    e.preventDefault(); e.stopPropagation();
+    const id = btnId(b); if (!hidden.includes(id)) hidden.push(id);
+    save(); apply();
+  }, true);
+  new MutationObserver(() => apply()).observe($("quick"), { childList: true, subtree: true });
+  apply();
+}
 function bwInit() {
   notchInit(); hotspotInit();
-  $("qJump").addEventListener("click", (e) => {
-    const b = e.target.closest("button"); if (!b) return;
-    const g = document.querySelector(`.q-group[data-help="${b.dataset.j}"]`); if (!g) return;
-    const card = document.querySelector(".wrap > .radio");
-    if (card && card.scrollHeight > card.clientHeight + 4 && getComputedStyle(card).overflowY !== "visible") {
-      // the controls card scrolls on its own: move only that, so the page does not jump
-      card.scrollTo({ top: g.getBoundingClientRect().top - card.getBoundingClientRect().top + card.scrollTop - 12, behavior: "smooth" });
-    } else g.scrollIntoView({ behavior: "smooth", block: "center" });
-    g.classList.add("flash"); setTimeout(() => g.classList.remove("flash"), 1600);
-  });
+  const setPage = (pg) => {
+    $("quick").dataset.page = pg;
+    $("qJump").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x.dataset.pg === pg));
+    try { localStorage.setItem("andysdr.qpage", pg); } catch (e) { /* storage can be unavailable */ }
+  };
+  $("qJump").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b && b.dataset.pg) setPage(b.dataset.pg); });
+  customInit();
+  let savedPg = "tune"; try { savedPg = localStorage.getItem("andysdr.qpage") || "tune"; } catch (e) { /* ignore */ }
+  setPage(["tune", "digital", "tools"].includes(savedPg) ? savedPg : "tune");
   $("bwSel").addEventListener("change", (e) => {
     const v = e.target.value;
     if (v === "auto") { const sug = suggestBw(); send({ cmd: "bandwidth", bw: sug ? sug.hz : 0, auto: true }); }
@@ -2805,11 +2842,11 @@ const HELP = {
   qmode: ["Mode buttons", "One click to choose how the signal is demodulated – no need to press MODE repeatedly. NFM/FM for most two-way radio, AM for airband, WFM for FM broadcast, USB/LSB for HF voice and weather fax, CW for Morse, DIG and DIG25 for digital signals (DIG25 is the wider one for TETRA and satellites). The current mode is lit."],
   qband: ["Band buttons", "Jump straight to a popular UK band with the right mode and tuning step already set: AIR (121.500 MHz), MARINE (channel 16), PMR446, 2M, 70CM, CB, FM BC, PAGER and weather SATS. Then step with ▲ ▼, press SCAN, or use SRCH to find what is active. The button for the band you are in stays lit."],
   qdec: ["Decoder buttons", "Start a decoder with one click: DMR, P25, NXDN, dPMR, M17 (digital voice), TETRA and TETRAPOL (network, call and message signalling), PAGER (POCSAG/FLEX), APRS (also DTMF/ZVEI/EAS), WEFAX, SSTV, LRPT (Meteor-M) and ADS-B (aircraft). AUTO (Auto ID) lets AndySDR identify signals and pick the decoder itself. OFF stops the decoder. A dimmed button means its program is not installed yet – see the DECODERS tab."],
-  qjump: ["Jump buttons", "These small buttons under the display take you straight to a group of quick buttons further down the controls card: MODE, BAND, HOTSPOT, DIGITAL VOICE (DMR, P25, M17, TETRA bands), DECODE, NOTCH, SKIP and AUDIO. The group you jump to is outlined for a moment."],
+  qjump: ["Tune / Digital / Tools pages", "The three buttons under the display switch the group of quick buttons below them, so nothing has to be scrolled. TUNE: mode, filter width and band. DIGITAL: your hotspot, the digital voice bands (DMR, P25, M17, TETRA) and the decoder buttons. TOOLS: notch filters, skip / lock-out, audio switches and the pictures, replay and recordings buttons. AndySDR remembers the page you used last."],
   qhot: ["My hotspot", "Your saved DMR hotspot. Press the big button to tune to it, switch to digital mode and start the DMR decoder in one go – the callsigns and talkgroups your hotspot passes appear in the decoder list. EDIT lets you change the name, frequency (MHz), colour code, timeslot and talkgroup; SAVE keeps them for next time. Keep RF GAIN low when the hotspot is close to the receiver."],
   qdigi: ["Digital voice band", "Pick DMR, dPMR, P25, M17, NXDN or TETRA (Airwave) from the list: AndySDR tunes to the bottom of that band, sets the mode and step for it and starts the matching decoder. SEARCH BAND then sweeps the whole band and stops on any activity so the decoder can lock on (SKIP moves on to the next one). TETRA and TETRAPOL show signalling only; encrypted voice cannot be decoded."],
   qnotch: ["Notch filters", "Cut an annoying steady whistle or carrier out of what you hear (it does not touch what the decoders receive). NOTCH is one filter you aim yourself: switch it on, then drag the slider until the whistle disappears – the pitch shows in Hz; NARROW removes only that pitch, WIDE also takes a little around it. AUTO listens for steady whistles, heterodynes and carriers in the audio and notches them by itself (up to three, released a couple of seconds after the whistle goes); speech passes through. Both work in every mode. The Hz are the pitch of the audio, not the radio frequency – to get rid of a carrier that is a different signal, move the receiver or narrow the WIDTH. The radio's own FM / DAB broadcast notches are separate switches under Device settings (RSP2 / RSPdx etc.)."],
-  qlock: ["Skip / lock out", "Stops the scanner dwelling on something you don't want to hear. While it is stopped on a transmission (or searching) press SKIP and it carries straight on to the next channel – nothing is locked out, so it is visited again next time round. SKIP 10 MIN, SKIP 1 HOUR and SKIP TODAY also carry straight on, but then ignore that channel for a while; it is scanned again when the time is up (or when AndySDR is restarted). LOCK OUT is the permanent version (the L/O key): a memory channel stays locked out until you untick L/O in the MEMORY tab. UNSKIP clears all temporary skips and search lockouts at once – the number shows how many are being ignored and hovering lists them. Keyboard: N = skip to the next channel, I = skip for 10 minutes."],
+  qlock: ["Skip / lock out", "Stops the scanner dwelling on something you don't want to hear. While it is stopped on a transmission (or searching) press SKIP and it carries straight on to the next channel – nothing is locked out, so it is visited again next time round. SKIP 10 MIN also carries straight on, but then ignores that channel for ten minutes; it is scanned again when the time is up (or when AndySDR is restarted). LOCK OUT is the permanent version (the L/O key): a memory channel stays locked out until you untick L/O in the MEMORY tab. UNSKIP clears all temporary skips and search lockouts at once – the number shows how many are being ignored and hovering lists them. Keyboard: N = skip to the next channel, I = skip for 10 minutes."],
   replay: ["Instant replay", "AndySDR keeps the last two minutes of everything you heard (silences left out). Press ⏪ REPLAY under the display, or Replay here, to hear the last 15 s, 30 s, 60 s or 2 minutes again – handy when the scanner passes a conversation you wanted. Keep as recording saves it as a normal sound file in the list below. Only what came through the speaker is remembered, so turn SQUELCH up just enough to hear stations, not noise."],
   qfiles: ["Files buttons", "IMAGES – shows the WEATHER IMAGES tab: every received picture (WEFAX charts, SSTV, satellite images) with the satellite or station name, frequency and time, and a Download button that saves it to the device you are using. RECORDINGS – shows the RECORDINGS tab: your sound recordings with Play and Download buttons. Both work the same on the radio PC and on remote PCs, tablets and phones."],
   meshsdr: ["MeshCore with just the SDR", "Receive-only MeshCore using your SDR – no LoRa board. Press Start listening (UK/EU narrow is 869.618 MHz, 62.5 kHz, SF8). NODES lists every repeater, room server, companion and sensor heard advertising, with its position (click it for a map). MESSAGES shows channel messages for the Public channel and any #hashtag channel you add (or a 32-digit key). PACKET LOG lists everything heard including encrypted direct messages (which cannot be read) and damaged frames. Needs a decent 869 MHz antenna; the SDR must run at 250 kS/s or more."],

@@ -126,18 +126,18 @@
         </div>
       </div>
       <div class="q-jump" id="qJump" data-help="qjump">
-        <button data-j="qmode">MODE</button><button data-j="qband">BAND</button><button data-j="qhot">HOTSPOT</button><button data-j="qdigi">DIGITAL VOICE</button>
-        <button data-j="qdec">DECODE</button><button data-j="qnotch">NOTCH</button><button data-j="qlock">SKIP</button><button data-j="qtog">AUDIO</button>
+        <button data-pg="tune" class="on">TUNE</button><button data-pg="digital">DIGITAL</button><button data-pg="tools">TOOLS</button>
+        <span class="grow"></span><button id="qRestore" hidden title="Show every button you hid">SHOW HIDDEN</button><button id="qCust" title="Customise: hide the buttons you never use (click a button to hide it)">⚙ CUSTOMISE</button>
       </div>
       <!-- quick-access buttons (built in app.js) -->
-      <div class="quick" id="quick">
-        <div class="q-group" data-help="qmode"><span class="q-lab">MODE</span><div class="q-row" id="qMode"></div></div>
-        <div class="q-group" data-help="qbw"><span class="q-lab">WIDTH</span>
+      <div class="quick" id="quick" data-page="tune">
+        <div class="q-group" data-help="qmode" data-pg="tune"><span class="q-lab">MODE</span><div class="q-row" id="qMode"></div></div>
+        <div class="q-group" data-help="qbw" data-pg="tune"><span class="q-lab">WIDTH</span>
           <div class="q-row bw-row"><select id="bwSel" title="Channel bandwidth (filter width) for this mode"></select>
             <button class="key q" id="bwSug" title="Use the suggested bandwidth">★</button></div>
           <div class="bw-why" id="bwWhy"></div></div>
-        <div class="q-group" data-help="qband"><span class="q-lab">BAND</span><div class="q-row" id="qBand"></div></div>
-        <div class="q-group" data-help="qhot"><span class="q-lab">MY HOTSPOT</span>
+        <div class="q-group" data-help="qband" data-pg="tune"><span class="q-lab">BAND</span><div class="q-row" id="qBand"></div></div>
+        <div class="q-group" data-help="qhot" data-pg="digital"><span class="q-lab">MY HOTSPOT</span>
           <div class="q-row hot-row">
             <button class="key q" id="hotGo" title="Tune to your saved DMR hotspot and start the DMR decoder">HOTSPOT</button>
             <button class="key q" id="hotEdit" title="Change the saved hotspot details">EDIT</button>
@@ -151,14 +151,14 @@
             <button class="key q" id="hotSave">SAVE</button>
           </div>
           <div class="bw-why" id="hotInfo"></div></div>
-        <div class="q-group" data-help="qdigi"><span class="q-lab">DIGITAL VOICE BAND</span>
+        <div class="q-group" data-help="qdigi" data-pg="digital"><span class="q-lab">DIGITAL VOICE BAND</span>
           <div class="q-row digi-row">
             <select id="qDigi" title="Pick a digital voice band: tunes to it, sets the mode and step and starts the right decoder"></select>
             <button class="key q" id="qDigiSrch" title="Search the whole band for active digital signals (stops on a hit, SKIP moves on)">SEARCH BAND</button>
           </div>
           <div class="bw-why" id="qDigiInfo"></div></div>
-        <div class="q-group" data-help="qdec"><span class="q-lab">DECODE</span><div class="q-row" id="qDec"></div></div>
-        <div class="q-group" data-help="qnotch"><span class="q-lab">NOTCH</span>
+        <div class="q-group" data-help="qdec" data-pg="digital"><span class="q-lab">DECODE</span><div class="q-row" id="qDec"></div></div>
+        <div class="q-group" data-help="qnotch" data-pg="tools"><span class="q-lab">NOTCH</span>
           <div class="q-row notch-row">
             <button class="key q" id="notchMan" title="Notch filter: cuts one steady pitch (a whistle or heterodyne) out of the audio">NOTCH</button>
             <button class="key q" id="notchAuto" title="Auto-notch: finds steady whistles and carriers in the audio and removes them">AUTO</button>
@@ -166,9 +166,9 @@
             <div class="notch-slide"><input type="range" id="notchHz" min="200" max="3800" step="10" value="1000" title="Pitch to cut out"><output id="notchHzTxt">1000 Hz</output></div>
           </div>
           <div class="bw-why" id="notchInfo"></div></div>
-        <div class="q-group" data-help="qlock"><span class="q-lab">SKIP</span><div class="q-row" id="qLock"></div></div>
-        <div class="q-group" data-help="qtog"><span class="q-lab">AUDIO</span><div class="q-row" id="qTog"></div></div>
-        <div class="q-group" data-help="qfiles"><span class="q-lab">FILES</span><div class="q-row" id="qFiles">
+        <div class="q-group" data-help="qlock" data-pg="tools"><span class="q-lab">SKIP</span><div class="q-row" id="qLock"></div></div>
+        <div class="q-group" data-help="qtog" data-pg="tools"><span class="q-lab">AUDIO</span><div class="q-row" id="qTog"></div></div>
+        <div class="q-group" data-help="qfiles" data-pg="tools"><span class="q-lab">FILES</span><div class="q-row" id="qFiles">
           <button class="key q" data-f="images" title="Show the received weather pictures and captures (WEFAX, SSTV, satellite images) with a Download button on each">IMAGES</button>
           <button class="key q" data-f="replay" title="Play back what you heard in the last 30 seconds (length is set in the RECORDINGS tab) - for stations you just missed">⏪ REPLAY</button>
           <button class="key q" data-f="recordings" title="Show the sound recordings (REC and scheduled recordings) - play or download them">RECORDINGS</button></div></div>

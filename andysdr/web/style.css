@@ -1003,7 +1003,7 @@ html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spec
 }
 
 /* jump chips under the display: the quick-pick groups are far down the card, these take you straight to one */
-.q-jump { display: none; }
+.q-jump { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0 6px; }
 :is([data-theme="modern"], [data-theme="modernlight"]) .q-jump { display: flex; flex-wrap: wrap; gap: 6px; order: 1; }
 .q-jump button { cursor: pointer; font: inherit; font-size: 11px; font-weight: 600; letter-spacing: .6px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel2); color: var(--text); }
 .q-jump button:hover { border-color: var(--accent); color: var(--accent); }
@@ -1086,3 +1086,46 @@ body.sz-wf #wf { height: var(--user-wf) !important; min-height: 0 !important; fl
 .decdetails > summary { cursor: pointer; color: var(--muted, #8a93a6); font-size: 12px; padding: 4px 0; }
 .decdetails.warn > summary { color: #ff9a6a; }
 .decdetails .declist { margin-top: 8px; }
+
+/* ---- every style: pages instead of long button lists, and one page scroll instead of scrolling boxes ---- */
+.q-jump button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink, #fff); }
+.quick[data-page="tune"] > .q-group:not([data-pg="tune"]),
+.quick[data-page="digital"] > .q-group:not([data-pg="digital"]),
+.quick[data-page="tools"] > .q-group:not([data-pg="tools"]) { display: none; }
+.tablewrap { max-height: none; overflow: visible; }
+.pagwrap { max-height: none; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .q-jump { order: 1; margin: 0; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .quick { order: 1; }
+@media (min-width: 1101px) {
+  :is([data-theme="modern"], [data-theme="modernlight"]) .wrap { grid-template-rows: auto auto; align-items: start; }
+  :is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .radio { position: static; height: auto; max-height: none; overflow: visible; align-self: start; }
+  :is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .scope { position: sticky; top: 76px; height: calc(100vh - 92px); max-height: none; align-self: start; overflow: visible; }
+}
+/* customise mode: hidden buttons stay hidden; in customise mode every button gets a cross */
+.u-hide { display: none !important; }
+#qCust, #qRestore { cursor: pointer; font: inherit; font-size: 11px; font-weight: 600; letter-spacing: .6px; padding: 5px 11px; border-radius: 999px; border: 1px dashed var(--line); background: transparent; color: var(--muted, #8a93a6); }
+#qCust.on { background: var(--accent); color: var(--accent-ink, #fff); border-style: solid; border-color: var(--accent); }
+body.customise .radio .key:not(.key-power):not(#qCust) { position: relative; outline: 1px dashed rgba(255,154,106,.7); outline-offset: 2px; cursor: crosshair; }
+body.customise .radio .key:not(.key-power)::after { content: "✕"; position: absolute; top: -6px; right: -4px; width: 16px; height: 16px; border-radius: 50%; background: #d4553b; color: #fff; font-size: 10px; line-height: 16px; text-align: center; pointer-events: none; }
+body.customise #qJump .key::after { content: none; }
+.q-jump .grow { flex: 1; }
+
+/* ---- Modern: compact controls card (fits one screen) ---- */
+:is([data-theme="modern"], [data-theme="modernlight"]) .leds { display: none; }                      /* the display flags and the status cards already show this */
+:is([data-theme="modern"], [data-theme="modernlight"]) .radio-right .fkeys { grid-template-columns: repeat(6, 1fr); gap: 8px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .radio-right .fkeys .key { min-height: 38px; padding: 8px 0; font-size: 13px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .radio-right .fkeys .key-skip { min-height: 40px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .arrows .key { min-height: 34px; padding: 4px 0; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .radio-right { gap: 10px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .key.q { min-height: 38px; padding: 8px 6px; font-size: 13px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .quick .q-group { padding: 10px 12px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .knob { width: 64px; height: 64px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .knob-wrap { width: 90px; gap: 5px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .knobs { padding: 10px 6px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .bw-why:empty { display: none; }
+
+/* Modern: one slim status row (the clocks and STATE/LINKS are already on the display) and tighter button rows */
+:is([data-theme="modern"], [data-theme="modernlight"]) .top-status { grid-template-columns: repeat(4, 1fr); }
+:is([data-theme="modern"], [data-theme="modernlight"]) .top-status .tchip.clock, :is([data-theme="modern"], [data-theme="modernlight"]) .top-status .tchip:nth-child(6), :is([data-theme="modern"], [data-theme="modernlight"]) .top-status .tchip:nth-child(8) { display: none; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .quick :is(#qMode, #qBand, #qDec, #qLock, #qTog, #qFiles) { grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)); gap: 6px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) .quick .key.q { padding: 8px 2px; font-size: 12px; }
