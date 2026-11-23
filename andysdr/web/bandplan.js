@@ -240,7 +240,6 @@ const BANDPLAN = [
   [1710.000, 1785.000, "1800 MHz mobile (uplink)", "cellular", 0, "DIG25", 200000, "Band 3"],
   [1785.000, 1805.000, "PMSE / guard", "pmr", 0, "DIG25", 100000, ""],
   [1805.000, 1880.000, "1800 MHz mobile (downlink)", "cellular", 0, "DIG25", 200000, ""],
-  [1880.000, 1900.000, "DECT cordless phones", "licfree", 0, "DIG25", 1728000, ""],
   [1900.000, 1920.000, "TDD mobile", "cellular", 0, "DIG25", 200000, ""],
   [1920.000, 1980.000, "2100 MHz mobile (uplink)", "cellular", 0, "DIG25", 200000, "Band 1"],
   [1980.000, 2110.000, "Satellite / space ops", "satellite", 0, "DIG25", 100000, ""],
