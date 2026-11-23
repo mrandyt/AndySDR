@@ -55,6 +55,8 @@ jobs:
           python tests/test_lockout.py
           python tests/test_skip.py
           python tests/test_notch.py
+          python tests/test_sdrplay_lna.py
+          python tests/test_sdrplay_open.py
 
       - name: New-feature self-tests (informational)
         continue-on-error: true

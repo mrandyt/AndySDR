@@ -508,8 +508,13 @@ class SdrplayDevice(BaseDevice):
     def set_center(self, f):
         self.center = f
         if self.params:
-            self.params.rxChannelA.contents.tunerParams.rfFreq.rfHz = float(f)
-            self._update(UPD_FRF)
+            rx = self.params.rxChannelA.contents
+            rx.tunerParams.rfFreq.rfHz = float(f)
+            if self.agc:
+                self._update(UPD_FRF)
+            else:                                     # LNA states differ per band - keep the state in range
+                self._apply_gain_values(rx)
+                self._update(UPD_FRF | UPD_GR)
 
     def set_sample_rate(self, sr):
         # sample rate changes need a full restart of the stream
@@ -521,9 +526,29 @@ class SdrplayDevice(BaseDevice):
     def gain_range(self):
         return (0.0, 100.0)
 
+    def _lna_max(self):
+        """Highest LNA state the receiver accepts at the current frequency (API 3.15 gain-reduction tables).
+        A higher value makes sdrplay_api_Init fail outright."""
+        f = float(self.center or 0)
+        hw = self.hw
+        if hw == 2:                                   # RSP2 / RSP2 Pro
+            if f < 420e6:
+                return 4 if (f < 60e6 and self.antenna == "Hi-Z") else 8
+            return 5
+        if hw in (255, 6):                            # RSP1A / RSP1B
+            return 6 if f < 50e6 else (9 if f < 1000e6 else 8)
+        if hw == 3:                                   # RSPduo
+            return (4 if self.antenna == "Hi-Z" else 6) if f < 60e6 else (9 if f < 1000e6 else 8)
+        if hw in (4, 7):                              # RSPdx / RSPdx-R2
+            for top, m in ((12e6, 18), (50e6, 19), (60e6, 24), (250e6, 26), (420e6, 27), (1000e6, 20)):
+                if f < top:
+                    return m
+            return 18
+        return LNA_STATES.get(hw, 9) - 1
+
     def _apply_gain_values(self, rx):
         p = min(1.0, max(0.0, (self.gain or 0) / 100.0))
-        lna_max = LNA_STATES.get(self.hw, 9) - 1
+        lna_max = self._lna_max()
         # top half of the knob trims IF gain, bottom half adds LNA attenuation
         rx.tunerParams.gain.gRdB = int(round(20 + (1 - p) * 39))
         rx.tunerParams.gain.LNAstate = int(round((1 - p) ** 1.5 * lna_max))
