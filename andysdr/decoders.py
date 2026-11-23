@@ -45,6 +45,8 @@ from .tetrapol import TetrapolDemod
 
 log = logging.getLogger("andysdr.decoders")
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+ISM_RATE = 250000          # rtl_433's usual sample rate; fine for the 433 / 868 / 315 / 915 MHz sensors
+ISM_AGC = 12.0             # keep the background noise at about this many 8-bit steps (a dongle at normal gain gives 5-15)
 
 DSD_MODES = {
     "auto": ["-ft"], "dmr": ["-fs"], "p25p1": ["-f1"], "p25p2": ["-f2"],
@@ -85,6 +87,9 @@ DECODERS = {
                "help": "Tunes to 1090 MHz and tracks aircraft (callsign, position, altitude, speed). See the ADS-B tab."},
     "meshsdr": {"name": "MeshCore with just an SDR (built in, receive only)", "exe": None,
                "help": "Decodes MeshCore LoRa packets straight from the SDR: lists repeaters, room servers and other nodes from their adverts and reads public / #hashtag channel messages. No LoRa board needed. See the MESHCORE tab."},
+    "ism":    {"name": "ISM sensors: weather stations, thermometers, TPMS, doorbells (rtl_433)", "exe": "rtl_433",
+               "help": "433.92 / 868.3 / 315 / 915 MHz. Runs the free rtl_433 program on your receiver and lists every sensor it recognises "
+                       "(several hundred kinds) with its latest readings. See the SENSORS tab."},
     "tetra":  {"name": "TETRA (built-in demodulator + osmo-tetra)", "exe": "tetra-rx",
                "help": "Decodes the TETRA downlink (25 kHz, DIG25 mode, tune to the carrier centre): network codes (MCC/MNC), "
                        "cell and call set-up and text messages. Encrypted traffic (UK Airwave) shows signalling only, no speech."},
@@ -288,6 +293,7 @@ class DecoderManager:
         self._watch_stop = True
         self.adsb = None           # set by the radio: the ADS-B engine (takes IQ, not audio)
         self.meshsdr = None        # set by the radio: the SDR-only MeshCore receiver (takes IQ)
+        self.ism = None            # set by the radio: the ISM sensor table (IsmSensors) that rtl_433's output fills
 
     # ------------------------------------------------------------------
     def available(self):
@@ -500,6 +506,23 @@ class DecoderManager:
                 _Reader(self.proc.stdout, self.log, lambda l: "(D)" not in l).start()
                 self._watch_images(out)
                 self.log(f"SatDump ({label}) started on {mhz} MHz – images appear in Weather images as they complete")
+            elif dec_id == "ism":
+                exe = find_exe("rtl_433", ov)
+                if not exe:
+                    raise FileNotFoundError("rtl_433.exe not found – press Download missing decoders in the DECODERS tab")
+                if self.ism is None:
+                    raise RuntimeError("ISM sensor table not available")
+                f = int(self.freq_fn() if self.freq_fn else 433920000) or 433920000
+                self.bridge = IqBridge(out_rate=ISM_RATE, agc_target=ISM_AGC)
+                port = self.bridge.start()
+                args = [exe, "-d", f"rtl_tcp:127.0.0.1:{port}", "-s", str(ISM_RATE), "-f", f"{f / 1e6:.6g}M",
+                        "-F", "json", "-M", "level", "-C", "si"]
+                self.proc = _popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+                self._ism_note = 0
+                threading.Thread(target=self._ism_read, args=(self.proc,), name="ism-reader", daemon=True).start()
+                self.ism.set_status(True, f, "")
+                self.log(f"rtl_433 started on {f / 1e6:.4f} MHz – sensors appear in the SENSORS tab as they transmit "
+                         "(many send only every 30-60 seconds, so give it a few minutes)")
             elif dec_id == "meshsdr":
                 if self.meshsdr is None:
                     raise RuntimeError("MeshCore SDR receiver not available")
@@ -549,6 +572,24 @@ class DecoderManager:
             self.active = None
             self.status = "error"
             return False
+
+    def _ism_read(self, proc):
+        """rtl_433's output: a JSON line per sensor message; everything else is its own chatter (shown briefly, then only problems)."""
+        try:
+            for raw in iter(proc.stdout.readline, b""):
+                line = ANSI.sub("", raw.decode("utf-8", "replace")).strip()
+                if not line or self.ism is None:
+                    continue
+                if self.ism.feed_line(line) is None and not line.startswith("{"):
+                    self._ism_note += 1
+                    if self._ism_note <= 12 or re.search(r"error|fail|unable|cannot|can't|warning|lost|timeout", line, re.I):
+                        self.log("rtl_433: " + line[:200])
+        except (OSError, ValueError):
+            pass
+        if self.proc is proc and self.active == "ism":           # it stopped by itself: tell the person, not just the log
+            self.log("rtl_433 stopped by itself – see the lines above; press Start again after fixing the cause", "warn")
+            if self.ism:
+                self.ism.set_status(False, 0, "rtl_433 stopped by itself")
 
     def _pager_line(self, line):
         self.log(line)
@@ -862,6 +903,8 @@ class DecoderManager:
             self.adsb.stop()
         if self.active == "meshsdr" and self.meshsdr:
             self.meshsdr.stop()
+        if self.active == "ism" and self.ism:
+            self.ism.set_status(False, 0, "")
         if self.bridge:
             self.bridge.stop()
             self.bridge = None
@@ -923,7 +966,7 @@ class DecoderManager:
             self.adsb.feed(iq, fs)
         elif self.active == "meshsdr" and self.meshsdr:
             self.meshsdr.feed(iq, fs, offset)
-        elif self.active in ("goes", "metop") and self.bridge:
+        elif self.active in ("goes", "metop", "ism") and self.bridge:
             self.bridge.feed(iq, fs, offset)
 
     def _watch_images(self, out):

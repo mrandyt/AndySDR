@@ -63,6 +63,7 @@ jobs:
           python tests/test_dmrdb.py
           python tests/test_diagnose.py
           python tests/test_repeaters.py
+          python tests/test_ism.py
 
       - name: New-feature self-tests (informational)
         continue-on-error: true

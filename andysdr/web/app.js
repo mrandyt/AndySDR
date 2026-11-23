@@ -7,10 +7,6 @@ const MODES = ["NFM", "FM", "AM", "WFM", "USB", "LSB", "CW", "DIG", "DIG25"];
 const MODE_BW = { NFM: 6000, FM: 8500, WFM: 100000, AM: 4500, USB: 1500, LSB: 1500, CW: 250, DIG: 6250, DIG25: 12500 };
 const STEPS = [100, 500, 1000, 5000, 6250, 8330, 10000, 12500, 25000, 50000, 100000];
 const THEME_TEXT = {
-  pro2045: ["1000 CHANNEL · PROGRAMMABLE", "SDR SCANNER"],
-  ubcd260: ["DIGITAL BASE/MOBILE · DMR · P25 · NXDN", "SDR DIGITAL SCANNER"],
-  trx2: ["DIGITAL TRUNKING · DMR · NXDN · P25", "SDR SCANNER-RECEIVER"],
-  sdrpp: ["RADIO", ""],
   bluedark: ["1000 CHANNEL · PROGRAMMABLE", "SDR SCANNER"],
   bluelight: ["1000 CHANNEL · PROGRAMMABLE", "SDR SCANNER"],
   modern: ["1000 CHANNEL · PROGRAMMABLE", "SDR SCANNER"],
@@ -108,10 +104,15 @@ function onJSON(m) {
     case "adsb_cfg": ADS.cfg = d; adsbCfg(); adsbStat(); break;
     case "check_result": chkShow(d); break;
     case "heard": lhUpsert(d); break;
+    case "ism": ismUpsert(d); break;
+    case "ism_status": ISM.status = d; ismStat(); break;
+    case "ism_all": ismHello(d); break;
+    case "watch_alert": watchPopup(d); break;
     case "heard_all": LH.rows = d || []; renderHeard(); break;
     case "dmrdb": lhDb(d); break;
     case "repeaters": repShow(d); break;
-    case "repeaters_status": REP.st = d; repStatus(); break;
+    case "repeaters_status": REP.st = d; repStatus(); repMarksStatus(d); break;
+    case "rep_marks": repMarksGot(d); break;
     case "pager": addPager(d); break;
     case "pager_cfg": PAG.cfg = d; renderPager(); break;
     case "pager_all": PAG.msgs = d.messages || []; PAG.cfg = d; renderPager(); break;
@@ -146,6 +147,10 @@ function onHello(h) {
   $("chkZipLink").hidden = !!isLocal; $("chkZipLocal").hidden = !isLocal;
   LH.rows = (h.lastheard || []).map((r) => Object.assign(r, { _rx: Date.now() - (r.live ? 0 : 60000) })); renderHeard(); lhDb(h.dmrdb);
   $("lhAuto").checked = (h.settings || {}).dmr_db_auto !== false;
+  repMarksAsk();
+  if (h.ism) ismHello(h.ism);
+  $("ismExport").href = `/api/ism.csv?token=${encodeURIComponent(token)}`;
+  $("lhExport").href = `/api/heard.csv?token=${encodeURIComponent(token)}`;
   $("acarsExport").href = `/api/acars.csv?token=${encodeURIComponent(token)}`;
   $("sondeExport").href = `/api/sondes.csv?token=${encodeURIComponent(token)}`;
   if (h.pager) { PAG.msgs = h.pager.messages || []; PAG.cfg = h.pager; PAG.unseen = 0; renderPager(); }
@@ -158,6 +163,7 @@ function onHello(h) {
   custRemote(st.hidden_buttons);
   $("alPager").checked = st.alert_pager !== false; $("alEmerg").checked = st.alert_emergency !== false;
   $("alPri").checked = st.alert_priority !== false; $("alCap").checked = st.alert_capture !== false;
+  $("alWatch").checked = st.alert_watch !== false; watchSet(st.watch_list);
   $("updAuto").checked = st.update_check !== false; $("updDl").checked = !!st.update_auto_download;
   if (h.update) onUpdate(h.update, true);
   $("setDelay").value = st.scan_delay; $("setDwell").value = st.scan_dwell;
@@ -726,8 +732,9 @@ for (const c of [specC, wfC]) {
     }
     if (!pointers.size) {
       const f = scopeFreq(e, c); if (!f) return;
-      const b = bandsAt(f).filter((x) => !x.point)[0];
-      c.title = fmtMHz(f, 4) + " MHz" + (b ? " · " + b.name : "") + " – click to tune · scroll to move · pinch or Ctrl+scroll to zoom";
+      const b = bandsAt(f).filter((x) => !x.point)[0], rp = c === specC ? repNear(c, e) : null;
+      c.title = rp ? `${rp.call}${rp.where ? " · " + rp.where : ""} · ${rp.out.toFixed(4)} MHz · ${rp.modes.join(" / ") || "FM"}${rp.tone ? " · tone " + rp.tone + " Hz" : ""} – click to tune`
+        : fmtMHz(f, 4) + " MHz" + (b ? " · " + b.name : "") + " – click to tune · scroll to move · pinch or Ctrl+scroll to zoom";
     }
   });
   const up = (e) => {
@@ -743,6 +750,8 @@ for (const c of [specC, wfC]) {
         if (b) { setPick(b); toast(`${b.name} · ${fmtRange(b)} – see UK BAND PLAN tab`); }
       }
     }
+    const rp = c === specC ? repNear(c, e) : null;
+    if (rp) { repTune(rp, repModeOf(rp)); toast(`${rp.call}${rp.where ? " · " + rp.where : ""} – ${rp.out.toFixed(4)} MHz`); return; }
     send({ cmd: "tune", freq: f });
   };
   c.addEventListener("pointerup", up);
@@ -755,7 +764,7 @@ const BP_FONT = [0, 10, 13, 17, 23];       // band names on the strip (CSS px)
 const BP_LABEL = [0, 0, 0, 12, 16];        // key-frequency labels under the strip (0 = none)
 const BP_MAP = [0, 22, 34, 56, 76];        // overview band map height
 const BP_MAPFONT = [0, 9.5, 10.5, 13, 16]; // overview band map text
-let MAP_LO = 9e3, MAP_HI = 6.5e9;        // overview covers 9 kHz – 6.5 GHz on a log scale
+let MAP_LO = 9e3, MAP_HI = 6.5e9;        // the overview covers 9 kHz – 6.5 GHz, in named zones (see MAP_ZONES)
 let bpSize = +(localStorage.getItem("andysdr_bpsize") ?? 2);
 let bpHidden = new Set();
 try { bpHidden = new Set(JSON.parse(localStorage.getItem("andysdr_bphide") || "[]")); } catch (e) { /* first run */ }
@@ -802,19 +811,113 @@ function drawBandStrip(ctx, f0, span, W, dpr) {
       }
     }
   }
+  drawRepeaterMarks(ctx, f0, span, W, H, dpr);
   ctx.textBaseline = "alphabetic";
   return H;
 }
+/* repeater outputs on the band plan: a tick for each, a callsign when there is room, click to tune */
+const REPM = { on: localStorage.getItem("andysdr_repmarks") !== "0", km: localStorage.getItem("andysdr_repmarks_km") ?? "100", list: [], seen: "", labels: false };
+function repMarksAsk() {
+  if (!REPM.on) return;
+  send({ cmd: "rep_marks", max_km: +REPM.km || 0 });
+}
+function repMarksGot(d) {
+  REPM.list = (d.marks || []).map((m) => ({ out: m[0], call: m[1], where: m[2], modes: m[3] ? m[3].split(",") : [], tone: m[4] || 0 }));
+  REPM.seen = d.status ? d.status.count + ":" + d.status.updated : "";
+  queueDraw();
+}
+function repMarksStatus(st) {
+  if (REPM.on && st && st.state === "ready" && st.count + ":" + st.updated !== REPM.seen) repMarksAsk();
+}
+function repMarksIn(f0, f1) {
+  const a = REPM.list; let lo = 0, hi = a.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (a[mid].out * 1e6 < f0) lo = mid + 1; else hi = mid; }
+  const out = [];
+  for (let i = lo; i < a.length && a[i].out * 1e6 <= f1; i++) out.push(a[i]);
+  return out;
+}
+function drawRepeaterMarks(ctx, f0, span, W, H, dpr) {
+  REPM.labels = false;
+  if (!REPM.on || !REPM.list.length) return;
+  const list = repMarksIn(f0, f0 + span); if (!list.length) return;
+  const X = (f) => (f - f0) / span * W;
+  const tick = Math.max(5, (BP_FONT[bpSize] || 10) * 0.55) * dpr;
+  ctx.fillStyle = "#4de1ff";
+  for (const r of list) { const x = X(r.out * 1e6); ctx.fillRect(x - dpr * 0.75, H - tick, dpr * 1.5, tick); }
+  const fs = 10.5 * dpr, y = H + (BP_LABEL[bpSize] ? BP_LABEL[bpSize] + 4 : 2) * dpr;
+  ctx.save(); ctx.font = `600 ${fs}px Segoe UI, Arial, sans-serif`; ctx.textBaseline = "top"; ctx.shadowColor = "#000"; ctx.shadowBlur = 4 * dpr;
+  let lastEnd = -1e9, drawn = 0;
+  for (const r of list) {
+    const x = X(r.out * 1e6), w = ctx.measureText(r.call).width;
+    if (x < lastEnd + 6 * dpr) continue;
+    ctx.fillStyle = "rgba(77,225,255,.95)"; ctx.fillText(r.call, x + 3 * dpr, y); lastEnd = x + 3 * dpr + w; drawn++;
+  }
+  ctx.restore(); REPM.labels = drawn > 0;
+}
+function repNear(c, e) {
+  if (!REPM.on || !REPM.list.length || !spec) return null;
+  const r = c.getBoundingClientRect(), V = viewOf(spec), hz = V.span / r.width * 7;       // within 7 px
+  const x = V.f0 + ((e.clientX - r.left) / r.width) * V.span;
+  let best = null;
+  for (const m of repMarksIn(x - hz, x + hz)) if (!best || Math.abs(m.out * 1e6 - x) < Math.abs(best.out * 1e6 - x)) best = m;
+  return best;
+}
+function repModeOf(r) { return r.modes.includes("FM") || !r.modes.length ? "FM" : r.modes[0]; }
+$("repMarks").checked = REPM.on; $("repMarksKm").value = REPM.km;
+$("repMarks").onchange = () => { REPM.on = $("repMarks").checked; localStorage.setItem("andysdr_repmarks", REPM.on ? "1" : "0"); if (REPM.on) repMarksAsk(); queueDraw(); };
+$("repMarksKm").onchange = () => { REPM.km = $("repMarksKm").value; localStorage.setItem("andysdr_repmarks_km", REPM.km); repMarksAsk(); };
 function drawVfoFlag(ctx, xf, top, W, freq, dpr) {
   const t = "VFO " + fmtMHz(freq, 5);
   ctx.font = `bold ${10.5 * dpr}px Consolas, monospace`;
   const w = ctx.measureText(t).width + 10 * dpr, h = 16 * dpr;
-  const x = Math.min(W - w, Math.max(0, xf - w / 2)), y = top + 3 * dpr + (BP_LABEL[bpSize] ? (BP_LABEL[bpSize] + 5) * dpr : 0);
+  const x = Math.min(W - w, Math.max(0, xf - w / 2)), y = top + 3 * dpr + (BP_LABEL[bpSize] ? (BP_LABEL[bpSize] + 5) * dpr : 0) + (REPM.labels ? 14 * dpr : 0);
   ctx.fillStyle = "#ff4040"; ctx.fillRect(x, y, w, h);
   ctx.fillStyle = "#fff"; ctx.textBaseline = "middle"; ctx.fillText(t, x + 5 * dpr, y + h / 2); ctx.textBaseline = "alphabetic";
 }
-const mapX = (f, W) => (Math.log10(Math.max(MAP_LO, f)) - Math.log10(MAP_LO)) / (Math.log10(MAP_HI) - Math.log10(MAP_LO)) * W;
-const mapF = (x, W) => Math.pow(10, Math.log10(MAP_LO) + x / W * (Math.log10(MAP_HI) - Math.log10(MAP_LO)));
+/* The overview is not one straight log scale any more: nearly everything a scanner listens to sits between 30 MHz and 2 GHz, which a
+   log scale squashes into a few pixels. Each zone below gets a share of the width (w) so its name and range can be read; inside a
+   zone the scale is linear, or log where the zone covers a huge range. Zones outside what the receiver can tune are left out. */
+const MAP_ZONES = [   // name, short name, from Hz, to Hz, share of the width, log inside?
+  ["Long & medium wave", "LF · MW", 9e3, 1.7e6, 1.0, true], ["HF shortwave", "HF shortwave", 1.7e6, 30e6, 2.0, true],
+  ["VHF low · 6 m · 4 m", "VHF low", 30e6, 88e6, 1.1, false], ["FM broadcast", "FM", 88e6, 108e6, 0.9, false],
+  ["Airband", "Air", 108e6, 137e6, 1.0, false], ["Satellites · 2 m · marine · PMR", "2 m · marine", 137e6, 174e6, 1.4, false],
+  ["DAB & TV", "DAB", 174e6, 230e6, 0.9, false], ["Military air & satellites", "Mil air", 230e6, 400e6, 1.1, false],
+  ["70 cm · PMR446 · sondes · UHF business", "70 cm · PMR", 400e6, 470e6, 1.6, false], ["UHF TV", "UHF TV", 470e6, 790e6, 0.9, false],
+  ["Mobile & 868 MHz ISM", "868 · GSM", 790e6, 960e6, 0.9, false], ["ADS-B 1090 · L-band", "ADS-B", 960e6, 1.3e9, 1.0, false],
+  ["L-band · GPS · weather satellites", "L-band", 1.3e9, 2e9, 1.0, false], ["S, C-band and above", "2 GHz +", 2e9, 6.5e9, 0.9, false],
+];
+let _mz = { key: "", z: [] };
+function mapZones() {
+  const key = MAP_LO + ":" + MAP_HI;
+  if (_mz.key === key) return _mz.z;
+  const z = [];
+  for (const [name, short, lo0, hi0, w, lg] of MAP_ZONES) {
+    const lo = Math.max(lo0, MAP_LO), hi = Math.min(hi0, MAP_HI);
+    if (hi - lo < (hi0 - lo0) * 0.04) continue;                     // (almost) nothing of this zone is in the receiver's range
+    z.push({ name, short, lo, hi, w: w * Math.min(1, (lg ? Math.log(hi / lo) / Math.log(hi0 / lo0) : (hi - lo) / (hi0 - lo0)) * 1.15 + 0.15), lg });
+  }
+  if (!z.length) z.push({ name: "All", short: "All", lo: MAP_LO, hi: MAP_HI, w: 1, lg: true });
+  const tot = z.reduce((a, c) => a + c.w, 0); let at = 0;
+  for (const c of z) { c.a = at / tot; at += c.w; c.b = at / tot; }
+  _mz = { key, z };
+  return z;
+}
+function mapX(f, W) {
+  const z = mapZones();
+  if (f <= z[0].lo) return 0;
+  for (const c of z) {
+    if (f <= c.hi) { const t = c.lg ? Math.log(f / c.lo) / Math.log(c.hi / c.lo) : (f - c.lo) / (c.hi - c.lo); return (c.a + t * (c.b - c.a)) * W; }
+  }
+  return W;
+}
+function mapF(x, W) {
+  const z = mapZones(), u = Math.min(1, Math.max(0, x / W));
+  const c = z.find((q) => u <= q.b) || z[z.length - 1], t = (u - c.a) / (c.b - c.a);
+  return c.lg ? c.lo * Math.pow(c.hi / c.lo, t) : c.lo + t * (c.hi - c.lo);
+}
+const mapZoneAt = (f) => mapZones().find((c) => f <= c.hi) || mapZones().slice(-1)[0];
+const fmtMapF = (f) => f >= 1e9 ? +(f / 1e9).toFixed(2) + " GHz" : f >= 1e6 ? +(f / 1e6).toFixed(3) + " MHz" : +(f / 1e3).toFixed(1) + " kHz";
+const fmtMapEdge = (f) => f >= 1e9 ? +(f / 1e9).toFixed(1) + "G" : f >= 1e6 ? +(f / 1e6).toFixed(f < 1e7 ? 1 : 0) + "M" : +(f / 1e3).toFixed(0) + "k";
 function drawBandMap() {
   if (!bpSize) return;
   const dpr = window.devicePixelRatio || 1, W = bandmapC.width, H = bandmapC.height;
@@ -830,11 +933,14 @@ function drawBandMap() {
     if (b.point || !b.level || bpHidden.has(b.cat)) continue;
     ctx.fillStyle = bpColor(b, 1); ctx.fillRect(mapX(b.start, W), barTop, Math.max(1, mapX(b.stop, W) - mapX(b.start, W)), 3 * dpr);
   }
-  ctx.font = `${mf * dpr}px Consolas, monospace`; ctx.fillStyle = "rgba(255,255,255,.7)"; ctx.strokeStyle = "rgba(255,255,255,.25)";
-  for (const [f, l] of [[1e4, "10k"], [1e5, "100k"], [1e6, "1M"], [3e6, "3M"], [1e7, "10M"], [3e7, "30M"], [1e8, "100M"], [3e8, "300M"], [1e9, "1G"], [3e9, "3G"]]) {
-    const x = mapX(f, W);
-    ctx.beginPath(); ctx.moveTo(x, barTop + barH); ctx.lineTo(x, barTop + barH + 3 * dpr); ctx.stroke();
-    ctx.fillText(l, x + 2 * dpr, H - 2 * dpr);
+  ctx.font = `600 ${mf * dpr}px Segoe UI, Arial, sans-serif`; ctx.textBaseline = "alphabetic";
+  for (const c of mapZones()) {      // zone borders and names, so the strip can be read
+    const x0 = c.a * W, x1 = c.b * W;
+    if (c.a > 0) { ctx.fillStyle = "#07090b"; ctx.fillRect(x0 - dpr, 0, 2 * dpr, barTop + barH); ctx.fillStyle = "rgba(255,255,255,.45)"; ctx.fillRect(x0, barTop + barH, dpr, 4 * dpr); }
+    const room = x1 - x0 - 6 * dpr;
+    const names = [`${c.short} ${fmtMapEdge(c.lo)}–${fmtMapEdge(c.hi)}`, c.short, c.short.split(" ")[0]];
+    const t = names.find((n) => ctx.measureText(n).width <= room) || "";
+    if (t) { ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.fillText(t, x0 + 3 * dpr, H - 2 * dpr); }
   }
   if (spec) {   // what the spectrum is showing
     const a = mapX(spec.center - spec.fs / 2, W), b = mapX(spec.center + spec.fs / 2, W);
@@ -849,8 +955,8 @@ function drawBandMap() {
     const t = fmtMHz(f, 4) + " MHz";
     ctx.font = `bold ${(mf + 0.5) * dpr}px Consolas, monospace`;
     const tw = ctx.measureText(t).width + 8 * dpr, th = (mf + 3) * dpr, tx = Math.min(W - tw, Math.max(0, x + 8 * dpr));
-    ctx.fillStyle = "rgba(255,64,64,.92)"; ctx.fillRect(tx, H - th - dpr, tw, th);
-    ctx.fillStyle = "#fff"; ctx.textBaseline = "middle"; ctx.fillText(t, tx + 4 * dpr, H - th / 2 - dpr); ctx.textBaseline = "alphabetic";
+    ctx.fillStyle = "rgba(255,64,64,.92)"; ctx.fillRect(tx, dpr, tw, th);          // at the top, so it never hides a zone name
+    ctx.fillStyle = "#fff"; ctx.textBaseline = "middle"; ctx.fillText(t, tx + 4 * dpr, th / 2 + dpr); ctx.textBaseline = "alphabetic";
   }
 }
 function mapBandAt(e) {
@@ -861,7 +967,7 @@ function mapBandAt(e) {
 bandmapC.addEventListener("mousemove", (e) => {
   const { f, b } = mapBandAt(e);
   if (b && bpHidden.has(b.cat)) { bandmapC.title = ""; return; }
-  bandmapC.title = (f >= 1e6 ? fmtMHz(f, 3) + " MHz" : (f / 1e3).toFixed(1) + " kHz") + (b ? ` · ${b.name} (${fmtMHz(b.start, 3)}–${fmtMHz(b.stop, 3)} MHz) – click to go there` : "");
+  bandmapC.title = fmtMapF(f) + " · " + mapZoneAt(f).name + (b ? ` · ${b.name} (${fmtMHz(b.start, 3)}–${fmtMHz(b.stop, 3)} MHz) – click to go there` : " – click to tune here");
 });
 bandmapC.addEventListener("click", (e) => {
   if (explainOn) return;
@@ -1044,6 +1150,7 @@ function tabEffects(name) {
   if (name === "pag") { PAG.unseen = 0; pagBadge(); }
   if (name === "acars") { DL.unA = 0; dlBadges(); renderAcars(); }
   if (name === "sonde") { DL.unS = 0; dlBadges(); renderSondes(); }
+  if (name === "ism") { ISM.unseen = 0; ismBadge(); renderIsm(); ismStat(); }
   if (name === "adsb") setTimeout(() => { adsbBadge(); renderAdsbTable(); adsbStat(); adsDraw(); }, 0);
   sizeCanvases();
 }
@@ -1962,7 +2069,7 @@ $("loginPass").addEventListener("keydown", (e) => { if (e.key === "Enter") $("lo
 
 /* ----- theme ----- */
 function setTheme(t, save = true) {
-  if (!THEME_TEXT[t]) t = "pro2045";
+  if (!THEME_TEXT[t]) t = "modern";          // a style that no longer exists (e.g. PRO-2045, SDR++) falls back to Modern
   document.body.dataset.theme = t;
   $("themeSel").value = t;
   $("modelTag").textContent = THEME_TEXT[t][0];
@@ -2454,9 +2561,68 @@ $("updCheck").onclick = () => send({ cmd: "update_check" });
 $("updShow").onclick = () => { renderUpdateModal(); };
 $("updAuto").onchange = () => send({ cmd: "settings", values: { update_check: $("updAuto").checked }, quiet: true });
 $("updDl").onchange = () => send({ cmd: "settings", values: { update_auto_download: $("updDl").checked }, quiet: true });
-[["alPager", "alert_pager"], ["alEmerg", "alert_emergency"], ["alPri", "alert_priority"], ["alCap", "alert_capture"]].forEach(([id, key]) =>
+[["alPager", "alert_pager"], ["alEmerg", "alert_emergency"], ["alPri", "alert_priority"], ["alCap", "alert_capture"], ["alWatch", "alert_watch"]].forEach(([id, key]) =>
   ($(id).onchange = () => send({ cmd: "settings", values: { [key]: $(id).checked }, quiet: true })));
 $("alTest").onclick = () => send({ cmd: "alert_test" });
+
+/* ----- watch list: callsigns / IDs / talkgroups to be told about (same rules as andysdr/alerts.py) ----- */
+const WATCH = { list: [] };
+function watchParse(e) {
+  const t = String(e || "").toUpperCase().split(/\s+/).filter(Boolean).join(" ");
+  if (!t) return null;
+  for (const [pre, what] of [["TG", "tg"], ["ID", "id"]]) { const r = t.slice(pre.length).trim(); if (t.startsWith(pre) && /^\d+$/.test(r)) return [what, +r]; }
+  if (/^\d+$/.test(t)) return ["num", +t];
+  return ["call", t];
+}
+function watchHit(r) {
+  const call = String(r.call || (typeof r.src === "string" ? r.src : "")).toUpperCase();
+  const src = typeof r.src === "number" ? r.src : null;
+  const tgt = typeof r.tgt === "number" && r.kind === "group" ? r.tgt : null;
+  for (const e of WATCH.list) {
+    const p = watchParse(e); if (!p) continue;
+    const [w, v] = p;
+    if (w === "call" && call && (call === v || (v.endsWith("*") && call.startsWith(v.slice(0, -1))))) return e;
+    if ((w === "id" && src === v) || (w === "tg" && tgt === v) || (w === "num" && (src === v || tgt === v))) return e;
+  }
+  return null;
+}
+function watchSet(list) {
+  WATCH.list = Array.isArray(list) ? list : [];
+  const box = $("watchList");
+  if (document.activeElement !== box) box.value = WATCH.list.join("\n");
+  $("watchInfo").textContent = WATCH.list.length ? `${WATCH.list.length} on the list` : "Nothing on the list yet";
+  $("watchBeep").checked = localStorage.getItem("andysdr_watch_beep") !== "0";
+  if (typeof renderHeard === "function") renderHeard();
+}
+function watchSave(list) {
+  const lines = list.map((x) => String(x).trim()).filter(Boolean);
+  WATCH.list = lines;                                   // used straight away; the server tidies it and sends it back
+  send({ cmd: "settings", values: { watch_list: lines }, quiet: true });
+  watchSet(lines);
+}
+function watchBeep() {
+  if (localStorage.getItem("andysdr_watch_beep") === "0") return;
+  try {
+    const ac = new (window.AudioContext || window.webkitAudioContext)(); const t = ac.currentTime;
+    [880, 1175].forEach((f, i) => { const o = ac.createOscillator(), g = ac.createGain(); o.frequency.value = f; o.connect(g); g.connect(ac.destination);
+      g.gain.setValueAtTime(0.0001, t + i * 0.16); g.gain.exponentialRampToValueAtTime(0.25, t + i * 0.16 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.16 + 0.15);
+      o.start(t + i * 0.16); o.stop(t + i * 0.16 + 0.17); });
+    setTimeout(() => ac.close(), 800);
+  } catch (e) { /* no sound available */ }
+}
+function watchPopup(a) {
+  const t = document.createElement("div"); t.className = "toast info watch"; t.textContent = "🔔 " + a.title + " – " + a.text;
+  $("toasts").appendChild(t); setTimeout(() => t.remove(), 12000);
+  watchBeep();
+}
+$("watchSave").onclick = () => { watchSave($("watchList").value.split(/[\n,]/)); toast("Watch list saved"); };
+$("watchBeep").onchange = () => localStorage.setItem("andysdr_watch_beep", $("watchBeep").checked ? "1" : "0");
+$("lhTable").addEventListener("click", (e) => {
+  const b = e.target.closest("button.wl[data-w]"); if (!b) return;
+  const w = b.dataset.w, i = WATCH.list.findIndex((x) => x.toUpperCase() === w.toUpperCase());
+  watchSave(i >= 0 ? WATCH.list.filter((_, j) => j !== i) : WATCH.list.concat(w));
+  toast(i >= 0 ? `${w} taken off the watch list` : `${w} added to the watch list`);
+});
 
 /* ======================================================= check my system */
 const CHK_ICON = { ok: "✅", warn: "⚠️", bad: "❌", info: "ℹ️" };
@@ -2492,6 +2658,63 @@ function chkShow(rep) {
 $("chkRun").onclick = () => { $("chkRun").disabled = true; $("chkRun").textContent = "Checking …"; send({ cmd: "check_system" }); setTimeout(() => { $("chkRun").disabled = false; }, 30000); };
 $("chkZipLocal").onclick = () => send({ cmd: "diag_save" });
 
+/* ======================================================= ISM sensors (rtl_433) */
+const ISM = { rows: [], status: { running: false }, total: 0, skew: 0, t: null, unseen: 0 };
+const ISM_UNIT = { temperature_C: "°C", temperature_1_C: "°C", temperature_2_C: "°C", humidity: "%", pressure_hPa: " hPa", pressure_kPa: " kPa",
+  wind_avg_km_h: " km/h", wind_max_km_h: " km/h", wind_dir_deg: "°", rain_mm: " mm", light_lux: " lux", uv: " UV", moisture: "%", power_W: " W",
+  energy_kWh: " kWh", current_A: " A", voltage_V: " V", noise_dB: " dB", depth_cm: " cm", co2_ppm: " ppm", pm2_5_ug_m3: " µg/m³", pm10_ug_m3: " µg/m³" };
+function ismHello(d) {
+  ISM.rows = d.rows || []; ISM.total = d.total || 0; if (d.status) ISM.status = d.status;
+  if (d.now) ISM.skew = d.now - Date.now() / 1000;
+  renderIsm(); ismStat(); ismBadge();
+}
+function ismUpsert(r) {
+  const i = ISM.rows.findIndex((x) => x.key === r.key);
+  if (i >= 0) ISM.rows.splice(i, 1); else if ($("tab-ism").classList.contains("active") === false) ISM.unseen++;
+  ISM.rows.unshift(r); ISM.total++;
+  if (ISM.rows.length > 300) ISM.rows.length = 300;
+  if (!ISM.t) ISM.t = setTimeout(() => { ISM.t = null; renderIsm(); ismStat(); ismBadge(); }, 300);
+}
+function ismBadge() { const b = $("ismBadge"); b.hidden = !ISM.rows.length; b.textContent = ISM.rows.length; }
+function ismReading(k, v) {
+  if (k === "battery_ok") return `<span class="ism-v ${v ? "" : "low"}" title="Battery">${v ? "🔋 OK" : "🪫 LOW"}</span>`;
+  const name = k.replace(/_(C|F|kPa|hPa|km_h|mm|lux|W|kWh|A|V|dB|cm|ppm|deg|ug_m3)$/, "").replace(/_/g, " ");
+  const val = typeof v === "boolean" ? (v ? "yes" : "no") : typeof v === "number" ? (Number.isInteger(v) ? v : +v.toFixed(2)) : v;
+  return `<span class="ism-v"><span class="muted">${esc(name)}</span> ${esc(val)}${esc(ISM_UNIT[k] || "")}</span>`;
+}
+function ismAgo(t) {
+  const s = Math.max(0, Date.now() / 1000 + ISM.skew - t);
+  return s < 5 ? "now" : s < 90 ? Math.round(s) + " s ago" : s < 5400 ? Math.round(s / 60) + " min ago" : new Date(t * 1000).toLocaleTimeString();
+}
+function ismMatch(r) {
+  const q = $("ismFind").value.trim().toLowerCase();
+  return !q || [r.model, r.id, r.channel, Object.keys(r.values).join(" "), Object.values(r.values).join(" ")].join(" ").toLowerCase().includes(q);
+}
+function renderIsm() {
+  const rows = ISM.rows.filter(ismMatch);
+  $("ismTable").querySelector("tbody").innerHTML = rows.map((r) => {
+    const live = Date.now() / 1000 + ISM.skew - r.last < 5;
+    const sig = r.rssi != null ? `${r.rssi} dB${r.snr != null ? ` <span class="muted small">SNR ${r.snr}</span>` : ""}` : "";
+    return `<tr class="${live ? "live" : ""}"><td class="t">${ismAgo(r.last)}</td><td><b>${esc(r.model)}</b></td><td>${esc(r.id)}</td><td>${esc(r.channel)}</td>` +
+      `<td>${Object.entries(r.values).map(([k, v]) => ismReading(k, v)).join(" ")}</td><td class="small">${sig}</td><td>${r.n}</td><td class="small">${r.freq != null ? r.freq : ""}</td></tr>`;
+  }).join("") || `<tr><td colspan="8" class="muted">${ISM.rows.length ? "Nothing matches the search." : "No sensors heard yet. Press ▶ 433.92 MHz – thermometers, weather stations, doorbells and remote controls appear here as they transmit."}</td></tr>`;
+  const dec = (typeof decoders !== "undefined" && decoders) ? decoders.find((x) => x.id === "ism") : null;
+  $("ismMissing").hidden = !(dec && !dec.ready);
+}
+function ismStat() {
+  const st = ISM.status || {};
+  $("ismStat").textContent = st.running ? `● listening on ${(st.freq / 1e6).toFixed(4)} MHz · ${ISM.rows.length} sensor${ISM.rows.length === 1 ? "" : "s"} · ${ISM.total} messages`
+    : (st.msg ? "stopped – " + st.msg : `stopped${ISM.rows.length ? " · " + ISM.rows.length + " sensors kept" : ""}`);
+  $("ismStart433").classList.toggle("on", !!st.running && Math.abs(st.freq - 433920000) < 1e6);
+  $("ismStat").className = "adsb-stat" + (st.running ? " run" : "");
+}
+[["ismStart433", 433920000], ["ismStart868", 868300000], ["ismStart315", 315000000], ["ismStart915", 915000000]].forEach(([id, f]) =>
+  ($(id).onclick = () => send({ cmd: "ism_start", freq: f })));
+$("ismStop").onclick = () => send({ cmd: "ism_stop" });
+$("ismClear").onclick = () => { if (!ISM.rows.length || confirm("Clear the sensor list?")) send({ cmd: "ism_clear" }); };
+$("ismFind").oninput = renderIsm;
+setInterval(() => { if (ISM.rows.length && $("tab-ism").classList.contains("active")) renderIsm(); }, 5000);
+
 /* ======================================================= last heard (DMR / P25 / NXDN / M17) */
 const LH = { rows: [], db: null, t: null };
 function lhUpsert(r) {
@@ -2513,8 +2736,11 @@ function lhRow(r) {
     : r.kind === "private" ? `<span class="muted">private →</span> ${esc(r.tgt)}`
     : `TG ${esc(r.tgt)}${r.tgname ? ` <span class="muted">${esc(r.tgname)}</span>` : ""}`;
   const flags = (r.emerg ? " 🚨" : "") + (r.enc ? " 🔒" : "");
+  const wkey = r.call || (typeof r.src === "number" ? "ID" + r.src : String(r.src));
+  const watched = WATCH.list.some((x) => x.toUpperCase() === wkey.toUpperCase()) || !!watchHit(r);
+  const bell = `<button class="wl${watched ? " on" : ""}" data-w="${esc(wkey)}" title="${watched ? "On your watch list – click to remove" : "Tell me when this person is heard again (add to the watch list)"}">🔔</button>`;
   const sys = `${esc(r.proto)}${r.slot ? " · slot " + r.slot : ""}${r.cc ? " · " + esc(r.cc) : ""}`;
-  return `<tr class="${live ? "live" : ""}"><td class="t">${esc(r.t)}</td><td>${who}${idTxt}${flags}</td>` +
+  return `<tr class="${live ? "live" : ""}${watched ? " watched" : ""}"><td class="t">${esc(r.t)}</td><td>${who}${idTxt}${flags} ${bell}</td>` +
     `<td>${esc(r.name)}${r.place ? ` <span class="muted small">${esc(r.place)}</span>` : ""}</td><td>${to}</td><td class="small">${sys}</td>` +
     `<td class="f" ${r.freq ? `data-f="${r.freq}"` : ""} title="Click to tune here">${r.freq ? fmtMHz(r.freq, 4) : "—"}</td><td>${live ? "● " : ""}${r.secs ?? 0} s</td></tr>`;
 }
@@ -3044,7 +3270,7 @@ setInterval(() => { if (MESH && meshTabOpen()) renderMeshList(); }, 30000);
 /* ======================================================= help */
 const HELP = {
   conn: ["Connection light", "Green CONNECTED means this screen is talking to the AndySDR receiver (on this PC or across the network). If it shows OFFLINE, AndySDR is not running or the network is down – it reconnects by itself."],
-  theme: ["Style", "Changes the look: PRO-2045 style (amber LCD, silver band), UBCD260DN style (black base/mobile with white-blue display), TRX-2 style (rugged gunmetal with green-grey display) or SDR++ style (flat dark panels, side bar of controls on the left and a big spectrum and waterfall). Controls work the same in every style; each computer remembers its own choice."],
+  theme: ["Style", "Changes the colours: Modern dark or light, Blue dark or light, Soft dark (warm amber) or Soft light (cream and green). The layout and the controls are identical in every style – only the colours change. Each computer remembers its own choice."],
   help: ["HELP", "Opens this guide. Tick 'Explain mode' and then click any knob, key or panel to get a description of just that control. Press Esc to leave Explain mode."],
   volume: ["VOLUME knob", "Loudness on THIS computer only (each remote listener has their own). Drag up/down, use the mouse wheel, or click it and use the arrow keys. Double-click resets to 70%."],
   squelch: ["SQUELCH knob", "Mutes the hiss when nobody is transmitting. Turn it up until the noise just disappears – the little raised bar on the S-meter shows where it is set. OPEN (fully left) = always hear everything. Scanning and searching need squelch set above the noise so they know when a channel is quiet."],
@@ -3087,7 +3313,7 @@ const HELP = {
   bppick: ["Plan › Band › Section", "Drill down through the UK band plan: pick a Plan (amateur, aviation, marine, PMR…), then a Band in it, then a Section (sub-band or key frequency). Tune goes there in the right mode and step; Search section loads it into the Live Activity search; 'Add key frequencies to bank' stores every key frequency in that band (e.g. marine Ch 16/70/AIS, airband 121.5/123.1) into the memory bank you choose. Clicking a coloured strip on the spectrum or a band name in the list also selects it here. Tap the coloured plan buttons underneath to show or hide each plan on the spectrum."],
   bandplan: ["Band plan size", "Shows the UK band plan as coloured strips across the top of the spectrum and in the band map above it. Off hides it; Small shows main allocations only; Medium adds sub-bands (e.g. 2 m FM simplex) and markers for key frequencies (Ch 16, 121.5, APRS…); Large makes the strips bigger and names the key frequencies. Each computer remembers its own choice."],
   vfo: ["VFO bar", "The VFO is the frequency you are tuned to. This bar shows it, which UK band and sub-band it is in, and – if the band normally uses a different mode or step – a 'Use' button that sets them for you. The red line and red VFO flag on the spectrum mark the same frequency."],
-  bandmap: ["Band map", "The whole radio spectrum the receiver can tune (e.g. RSP2 Pro: 1 kHz to 2 GHz) on one strip, coloured by who uses it (see the legend in the UK BAND PLAN tab). The red needle is your VFO and the white box is the part the spectrum display is showing. Hover to see a band's name; click a band to jump there in the right mode and step."],
+  bandmap: ["Band map", "The whole radio spectrum the receiver can tune (e.g. RSP2 Pro: 1 kHz to 2 GHz) on one strip, split into named zones (FM broadcast, Airband, 70 cm …) so you can read where you are – each zone is stretched to the same kind of width, so it is not one even scale. Coloured by who uses it (see the legend in the UK BAND PLAN tab). The red needle is your VFO and the white box is the part the spectrum display is showing. Hover to see a band's name; click a band to jump there in the right mode and step."],
   bptab: ["UK band plan list", "Every UK allocation, amateur sub-band and key frequency the receiver can tune (e.g. RSP2 Pro: 1 kHz to 2 GHz). Type a name or a frequency (e.g. 156.8) to find it, pick a category or click the coloured legend, untick sub-bands for the big picture. Tune goes straight there in the right mode; Search loads the band into the Live Activity search so you can find everything active in it. 'Where am I?' lists the bands your VFO is in."],
   mesh: ["MeshCore messaging", "Text chat over the MeshCore LoRa mesh. Your SDRs can only receive, so AndySDR sends and receives through a MeshCore companion board (Heltec V3/V4, RAK4631, T-Deck, T-Beam, Xiao…) flashed with Companion firmware from flasher.meshcore.co.uk – USB Serial firmware for a cable, Bluetooth or Wi-Fi firmware otherwise. Plug it in, pick its COM port (★ = looks like a radio board) and press Connect; AndySDR reconnects by itself next time. Channels on the left: Public and any #hashtag channel anyone can join (+ Join, e.g. #uk), or private channels with a shared key. Contacts are nodes heard advertising – click one for a private, end-to-end encrypted message (✓ = sent, ✓✓ = delivered). Send advert announces you to nearby nodes. UK users normally use the UK/EU narrow preset (869.618 MHz, 62.5 kHz, SF8, CR8) – licence-exempt, the board keeps to the power and duty-cycle limits. Watch on SDR tunes your receiver to the mesh frequency so you can see the packets on the waterfall. Messages are kept in %APPDATA%\\AndySDR\\meshcore_messages.jsonl and work from remote PCs and phones too."],
   adsb: ["ADS-B aircraft (1090 MHz)", "Tracks aircraft that broadcast ADS-B (nearly every airliner and many smaller aircraft). Press ▶ Start ADS-B: AndySDR tunes to 1090 MHz, centres the receiver exactly on it and decodes the aircraft messages itself – no other program is needed. The table shows callsign, hex address (ICAO), airline and country (from the callsign/address), altitude, speed, heading, climb rate, squawk, distance from you and how long ago it was heard; click a heading to sort. The map shows each aircraft as a plane pointing the way it is flying, coloured by height (orange = low, green = middle, blue = high) with a trail behind it. Squawks 7500, 7600 and 7700 flash red and pop up a warning. You need a receiver running at 2 MS/s or more (any SDRplay RSP, RTL-SDR, Airspy, HackRF) and an antenna that works at 1090 MHz – a short 6.9 cm whip or a proper 1090 MHz collinear, as high and clear of buildings as you can get it. Use the RSP's Antenna A/B (50 Ω) socket, not Hi-Z. Turn RF GAIN up fairly high; if you see lots of messages but few aircraft, turn it down a little. Press Stop (or tune somewhere else) to go back to normal scanning. With the Simulator receiver you get ten practice aircraft."],
@@ -3102,7 +3328,11 @@ const HELP = {
   alerts: ["Alerts for the AndySDR Remote app", "Choose what the Android app may notify you about: a page for a capcode you starred, an aircraft squawking 7500 / 7600 / 7700, activity on the priority channel, or a scheduled capture starting. In the app, switch on Alerts on the connect screen. Send a test alert shows a notice on the tablet within a few seconds. The alerts are collected on this PC and fetched by the app over your own network."],
   checksys: ["Check my system", "Press Check my system and AndySDR looks over the things that most often go wrong, then lists them with the worst first: is a real receiver open (or only the simulator), is the SDRplay driver installed and its service running (RSP receivers), is the receiver being overloaded by strong signals, are the decoder programs installed, can other devices get through the Windows Firewall, is the remote password strong, is there disk space, is AndySDR up to date, are the satellite settings complete. Each problem says what it means and what to do; where a command is needed it is shown in a box with a Copy button (paste it into a Command Prompt run as Administrator). Nothing is changed by the check. Save diagnostics (zip) puts the result, the recent log files and your settings (the password is removed) in one zip – send it to whoever is helping you."],
   repeaters: ["UK repeaters", "The RSGB's list of UK amateur repeaters (about a thousand: 2 m, 70 cm, 4 m, 6 m and more; FM, DMR, D-STAR and Fusion). The PC downloads it by itself from ukrepeater.net the first time you open this tab and then every two weeks (or press Update list); if the internet is down the old list is kept. LISTEN MHZ is what the repeater transmits – the frequency AndySDR tunes. TONE is the CTCSS tone a radio needs to open the repeater if you transmit with your own radio (AndySDR only listens). Set MY POSITION (type it, press Use my location, or tick USB GPS in the Scheduler page – a plugged-in GPS unit sets it automatically) and the list sorts nearest first with the distance and compass direction; WITHIN limits it to a distance. The ▶ buttons tune the repeater in that mode – FM sets narrow FM, DMR / D-STAR / C4FM tune digital and start that decoder. ★ stores it in the memory bank chosen at the top right, with its tone; SCAN THESE puts the nearest 100 repeaters currently shown into the chosen memory bank (renamed NEAR REPEATERS; it replaces what was in that bank, after asking) and starts the scanner on just that bank, so AndySDR hops between your local repeaters and stops on any that are in use – set SQUELCH up first, and try Within 50 km with Mode FM. Press SCAN on the main panel afterwards to go back to scanning all your banks. STORE SHOWN IN BANK stores everything currently listed (up to 100, nearest first – try Within 50 km and Mode FM). Click a frequency to tune it. A ~ after the town means the keeper asked for privacy, so the position is only approximate. Tablet and phone show the same list through the PC."],
-  lastheard: ["Last heard", "Every DMR, P25, NXDN or M17 transmission AndySDR decodes becomes one row: the time, who was talking (callsign and name from the RadioID list, or just the ID if they are not registered), the talkgroup it was sent to (or the person for a private call), the system (DMR slot, colour code, P25 NAC, M17 channel access number), the frequency and how long they talked. Newest is at the top; a dot marks a call in progress. Click a frequency to tune to it, a callsign to look it up on QRZ.com. 🔒 means encrypted – the IDs show but the speech cannot be decoded; 🚨 is an emergency call. The callsign list is downloaded by the PC itself from RadioID.net the first time, then refreshed every four weeks (or press Update callsign list now); if the internet is down the old list is kept. Talkgroup names come from the BrandMeister list and from any talkgroups you imported from RadioReference. The tablet and phone show the same list through the PC, so they need no download of their own. M17 stations send their callsign in the signal, so they are shown even without the list."],
+  ism: ["ISM sensors (rtl_433)", "Listens for the little wireless sensors around you using the free rtl_433 program on the receiver you already have open: garden and home weather stations, thermometers, fridge and pool sensors, tyre-pressure sensors (TPMS), doorbells, remote controls, energy monitors and smart meters – several hundred kinds. Press ▶ 433.92 MHz (the UK / Europe band) – or 868.3, 315 or 915 MHz – and each sensor is listed with its latest readings, signal strength and how often it has been heard. Many only send every 30–60 seconds, so wait a few minutes. Your receiver needs a sample rate of 250 kS/s or more (the usual 2.4 MS/s is fine) and a decent antenna for the band: a 17 cm whip for 433 MHz, 8.6 cm for 868 MHz. Tuning more than 1 MHz away stops it. Export CSV saves the table as a spreadsheet; sensors are also listed in the DECODERS log as they are heard. rtl_433 is downloaded with the other decoders (DECODERS tab, Download missing decoders)."],
+  ismtable: ["Sensor list", "One row per sensor (device model + ID + channel), most recently heard at the top. Readings are whatever that sensor sends: temperature, humidity, pressure, wind, rain, battery and so on. Signal is the strength rtl_433 measured. A green dot row means it was heard in the last few seconds. Neighbours' sensors appear too. The list is kept in memory until you press Clear or restart AndySDR."],
+  repmarks: ["Repeaters on the spectrum", "Turns on a blue tick and callsign on the spectrum for every UK repeater output in view (from the same RSGB list as the REPEATERS tab). Hover one to see its place, frequency, modes and CTCSS tone; click it to tune straight to it (FM in NFM, digital repeaters in DIG with DSD-FME). The drop-down limits it to repeaters within that distance of the position you set in the Scheduler or REPEATERS tab – choose all to see everything. Zoom in on a band like 2 m or 70 cm to see the callsigns. The marks sit on the band-plan strip, so Band plan must not be Off. The list downloads by itself the first time (needs the internet once)."],
+  watchlist: ["Watch list", "Type the callsigns, radio IDs and talkgroups you want to be told about, one per line. M7FEP is one callsign; G4* is every callsign starting G4; 2356184 is a radio ID or a talkgroup with that number; TG235 means talkgroup 235 only. The moment one of them is heard on DMR, P25, NXDN or M17 you get a pop-up and a short beep on every screen that has AndySDR open, and the Android app sends a notification. The same person is only announced again after three minutes. Click the 🔔 beside anybody in Last heard to add or remove them. Turn the beep off with the Beep on this screen box."],
+  lastheard: ["Last heard", "Every DMR, P25, NXDN or M17 transmission AndySDR decodes becomes one row: the time, who was talking (callsign and name from the RadioID list, or just the ID if they are not registered), the talkgroup it was sent to (or the person for a private call), the system (DMR slot, colour code, P25 NAC, M17 channel access number), the frequency and how long they talked. Newest is at the top; a dot marks a call in progress. Export CSV saves the whole list as a spreadsheet. Click a frequency to tune to it, a callsign to look it up on QRZ.com. 🔒 means encrypted – the IDs show but the speech cannot be decoded; 🚨 is an emergency call. The callsign list is downloaded by the PC itself from RadioID.net the first time, then refreshed every four weeks (or press Update callsign list now); if the internet is down the old list is kept. Talkgroup names come from the BrandMeister list and from any talkgroups you imported from RadioReference. The tablet and phone show the same list through the PC, so they need no download of their own. M17 stations send their callsign in the signal, so they are shown even without the list."],
   qjump: ["Tune / Digital / Tools pages", "The three buttons under the display switch the group of quick buttons below them, so nothing has to be scrolled. TUNE: mode, filter width and band. DIGITAL: your hotspot, the digital voice bands (DMR, P25, M17, TETRA) and the decoder buttons. TOOLS: notch filters, skip / lock-out, audio switches and the pictures, replay and recordings buttons. AndySDR remembers the page you used last. ⚙ CUSTOMISE hides the buttons you will never use: press it, tap any button to hide it, then press DONE; SHOW HIDDEN brings them all back. The list is kept on the radio PC, so the PC, the tablet and the phone all show the same buttons."],
   qhot: ["My hotspot", "Your saved DMR hotspot. Press the big button to tune to it, switch to digital mode and start the DMR decoder in one go – the callsigns and talkgroups your hotspot passes appear in the decoder list. EDIT lets you change the name, frequency (MHz), colour code, timeslot and talkgroup; SAVE keeps them for next time. Keep RF GAIN low when the hotspot is close to the receiver."],
   qdigi: ["Digital voice band", "Pick DMR, dPMR, P25, M17, NXDN or TETRA (Airwave) from the list: AndySDR tunes to the bottom of that band, sets the mode and step for it and starts the matching decoder. SEARCH BAND then sweeps the whole band and stops on any activity so the decoder can lock on (SKIP moves on to the next one). TETRA and TETRAPOL show signalling only; encrypted voice cannot be decoded."],

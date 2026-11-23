@@ -206,6 +206,25 @@ class Repeaters:
         total = len(res)
         return res[:max(1, int(limit))], total
 
+    def marks(self, max_km=0, lat=None, lon=None):
+        """Every repeater output as a small list for the spectrum's band plan:
+        [MHz, callsign, place, "FM,DMR", CTCSS Hz or 0].  With a distance limit and a position only the ones inside it."""
+        have_pos = lat is not None and lon is not None
+        out, seen = [], set()
+        for r in self.rows:
+            key = (round(r["out"], 5), r["call"])
+            if key in seen:
+                continue
+            seen.add(key)
+            if max_km and have_pos:
+                if r.get("lat") is None or r.get("lon") is None:
+                    continue
+                if distance_bearing(lat, lon, r["lat"], r["lon"])[0] > max_km:
+                    continue
+            out.append([r["out"], r["call"], r.get("where", ""), ",".join(r.get("modes", [])), r.get("tone") or 0])
+        out.sort(key=lambda m: m[0])
+        return out
+
     def bands(self):
         return sorted({r["band"] for r in self.rows if r.get("band")},
                       key=lambda b: (len(b), b))

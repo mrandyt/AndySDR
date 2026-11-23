@@ -25,10 +25,6 @@
       <select id="themeSel">
         <option value="modern">Modern – dark</option>
         <option value="modernlight">Modern – light</option>
-        <option value="pro2045">PRO-2045 style</option>
-        <option value="ubcd260">UBCD260DN style</option>
-        <option value="trx2">TRX-2 style</option>
-        <option value="sdrpp">SDR++ style</option>
         <option value="bluedark">Blue – dark</option>
         <option value="bluelight">Blue – light</option>
         <option value="softdark">Soft – dark</option>
@@ -214,6 +210,9 @@
     <label class="mini keep" data-help="bandplan">Band plan <select id="bpSize">
       <option value="0">Off</option><option value="1">Small</option><option value="2" selected>Medium</option><option value="3">Large</option><option value="4">Extra large</option>
     </select></label>
+    <label class="mini keep" data-help="repmarks"><input type="checkbox" id="repMarks" checked> Repeaters <select id="repMarksKm" title="Only show repeaters this close to your position (set it in the Scheduler tab or the REPEATERS tab)">
+      <option value="0">all</option><option value="25">≤25 km</option><option value="50">≤50 km</option><option value="100" selected>≤100 km</option><option value="200">≤200 km</option>
+    </select></label>
     <label class="mini keep" data-help="wfsize">Waterfall <select id="wfSize">
       <option value="0" selected>Auto (fill)</option><option value="200">Small</option><option value="340">Medium</option><option value="520">Large</option><option value="760">Huge</option>
     </select></label>
@@ -244,6 +243,7 @@
     <button class="tab" data-tab="adsb">ADS-B <span class="tab-badge" id="adsbBadge" hidden>0</span></button>
     <button class="tab" data-tab="acars">AIRCRAFT TEXT <span class="tab-badge" id="acarsBadge" hidden>0</span></button>
     <button class="tab" data-tab="sonde">SONDES <span class="tab-badge" id="sondeBadge" hidden>0</span></button>
+    <button class="tab" data-tab="ism">SENSORS <span class="tab-badge" id="ismBadge" hidden>0</span></button>
     <button class="tab" data-tab="ft8">FT8 / FT4 <span class="tab-badge" id="ft8Badge" hidden>0</span></button>
     <button class="tab" data-tab="img">WEATHER IMAGES</button>
     <button class="tab" data-tab="rec">RECORDINGS</button>
@@ -339,6 +339,7 @@
         <span class="grow"></span>
         <input class="inp" id="lhSearch" type="search" placeholder="Search callsign, name, talkgroup" style="width:15em">
         <span class="muted small" id="lhCount"></span>
+        <a class="btn" id="lhExport" href="#" download title="Save the whole Last heard list as a spreadsheet (CSV)">Export CSV</a>
         <button class="btn danger" id="lhClear">Clear list</button>
       </div>
       <div class="tablewrap lhwrap">
@@ -627,6 +628,30 @@
   </div>
 
   <!-- REPEATERS -->
+  <div class="tabpage" id="tab-ism">
+    <div class="row wrapline" data-help="ism">
+      <b>🌡 ISM sensors</b>
+      <button class="btn primary" id="ismStart433" title="Tunes to 433.92 MHz (UK / Europe: weather stations, thermometers, doorbells, remotes) and starts rtl_433">▶ 433.92 MHz</button>
+      <button class="btn" id="ismStart868" title="868.3 MHz: newer European sensors, smart meters, alarms">▶ 868.3 MHz</button>
+      <button class="btn" id="ismStart315" title="315 MHz: car key fobs and TPMS from some imports">▶ 315 MHz</button>
+      <button class="btn" id="ismStart915" title="915 MHz: US / Australian sensors">▶ 915 MHz</button>
+      <button class="btn" id="ismStop">■ Stop</button>
+      <span class="adsb-stat" id="ismStat"></span>
+      <span class="grow"></span>
+      <input class="inp" id="ismFind" type="search" placeholder="Find device, ID, reading" style="width:14em">
+      <a class="btn" id="ismExport" href="#" download title="Save the sensor table as a spreadsheet (CSV)">Export CSV</a>
+      <button class="btn danger" id="ismClear">Clear</button>
+    </div>
+    <p class="small muted" id="ismMissing" hidden>rtl_433 is not installed yet – open the DECODERS tab and press <b>⬇ Download missing decoders</b> (needs the internet once).</p>
+    <div class="tablewrap" data-help="ismtable">
+      <table class="grid" id="ismTable">
+        <thead><tr><th>Last heard</th><th>Device</th><th>ID</th><th>Ch</th><th>Readings</th><th>Signal</th><th>Messages</th><th>MHz</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="small muted">Many sensors only transmit every 30–60 seconds, so give it a few minutes. rtl_433 recognises several hundred kinds; anything it does not know is simply not listed. Your neighbours' sensors will show up too – that is normal.</p>
+  </div>
+
   <div class="tabpage" id="tab-rep">
     <div class="row wrapline" data-help="repeaters">
       <b>UK repeaters</b>
@@ -805,7 +830,14 @@
         <label><input type="checkbox" id="alEmerg"> An aircraft squawking 7500 / 7600 / 7700</label>
         <label><input type="checkbox" id="alPri"> Activity on the priority channel</label>
         <label><input type="checkbox" id="alCap"> A scheduled capture (satellite pass, WEFAX, SSTV…) starting</label>
+        <label><input type="checkbox" id="alWatch"> Someone on your <b>watch list</b> is heard (DMR · P25 · NXDN · M17)</label>
         <div class="row wrapline"><button class="btn" id="alTest">Send a test alert</button></div>
+        <h3 data-help="watchlist">🔔 Watch list</h3>
+        <p class="small muted">One per line: a callsign (<code>M7FEP</code>, or <code>G4*</code> for every callsign starting G4), a radio ID or talkgroup number (<code>2356184</code>), or <code>TG235</code> for a talkgroup only. When one is heard AndySDR pops up a notice and beeps here, and the phone app notifies you too.</p>
+        <textarea class="inp" id="watchList" rows="5" spellcheck="false" placeholder="M7FEP&#10;TG235&#10;2356184" style="width:100%;max-width:24em"></textarea>
+        <div class="row wrapline"><button class="btn" id="watchSave">Save watch list</button>
+          <label class="small"><input type="checkbox" id="watchBeep" checked> Beep on this screen</label>
+          <span class="muted small" id="watchInfo"></span></div>
         <p class="small muted">The Android app shows these as notifications, even with the screen off, once you switch on <b>Alerts</b> on its connect screen. Nothing leaves your network.</p>
       </div>
       <div class="card" data-help="adsbshare">

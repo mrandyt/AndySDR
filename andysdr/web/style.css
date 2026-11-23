@@ -1,6 +1,7 @@
 /* ============================================================
-   AndySDR – three faceplate styles share one layout.
-   Colours live in tokens; each [data-theme] swaps them.
+   AndySDR – one layout (the "Modern" layout), six colour themes.
+   Colours live in tokens; each [data-theme] swaps them:
+   modern (dark), modernlight, bluedark, bluelight, softdark, softlight.
    ============================================================ */
 :root {
   --font: "Bahnschrift", "Segoe UI", system-ui, sans-serif;
@@ -8,56 +9,11 @@
   --radius: 10px;
 }
 
-/* ---------- PRO-2045 style: brushed silver band, charcoal body, amber LCD ---------- */
-[data-theme="pro2045"] {
-  --page: #121417; --panel: #1b1e23; --panel2: #23272d; --line: #31363e;
-  --text: #e4e7eb; --muted: #8d96a3; --accent: #ff9a2e; --accent-ink: #1a0d00;
-  --top: linear-gradient(180deg, #e2e4e6 0%, #b9bdc1 45%, #a3a8ad 100%);
-  --top-ink: #202326; --top-ink2: #4a4f55;
-  --body: linear-gradient(180deg, #2a2c30 0%, #1c1e21 100%);
-  --body-edge: #0d0e10; --radio-radius: 6px;
-  --key: linear-gradient(180deg, #4b4f55, #34373c); --key-ink: #f1f1f1; --key-edge: #1a1b1e;
-  --key-hot: linear-gradient(180deg, #e2742b, #b9561a); --key-hot-ink: #fff;
-  --lcd: radial-gradient(120% 140% at 50% 0%, #ffbf5c 0%, #f29a32 55%, #d97e20 100%);
-  --lcd-on: #2b1403; --lcd-off: rgba(70, 35, 0, .13); --lcd-frame: #0b0b0c;
-  --knob: #141518; --knob-ring: #8f969d; --knob-mark: #e9edf0;
-  --grille: radial-gradient(circle, #0b0c0e 38%, transparent 42%) 0 0 / 9px 9px, #2c2f33;
-  --scope-line: #ffb04a; --scope-fill: rgba(255, 160, 50, .18);
-}
 
-/* ---------- UBCD260DN style: glossy black, blue accents, white-blue dot-matrix LCD ---------- */
-[data-theme="ubcd260"] {
-  --page: #0a0d12; --panel: #121820; --panel2: #18202a; --line: #24303d;
-  --text: #e3ecf5; --muted: #7f93a8; --accent: #3aa3ff; --accent-ink: #00101f;
-  --top: linear-gradient(180deg, #15181d 0%, #0b0c0f 100%);
-  --top-ink: #e9f2fb; --top-ink2: #3aa3ff;
-  --body: linear-gradient(180deg, #121417 0%, #08090b 100%);
-  --body-edge: #000; --radio-radius: 26px;
-  --key: linear-gradient(180deg, #23272d, #15181c); --key-ink: #8fcbff; --key-edge: #000;
-  --key-hot: linear-gradient(180deg, #1f80e0, #1360ad); --key-hot-ink: #fff;
-  --lcd: linear-gradient(180deg, #f2f7fc 0%, #d9e6f2 100%);
-  --lcd-on: #0b1a2b; --lcd-off: rgba(11, 26, 43, .06); --lcd-frame: #000;
-  --knob: #101114; --knob-ring: #2b3a4a; --knob-mark: #3aa3ff;
-  --grille: repeating-linear-gradient(90deg, #050607 0 3px, #1a1d22 3px 6px);
-  --scope-line: #5cb6ff; --scope-fill: rgba(60, 160, 255, .16);
-}
 
-/* ---------- TRX-2 style: rugged gunmetal, orange accents, grey-green LCD ---------- */
-[data-theme="trx2"] {
-  --page: #12110e; --panel: #1c1b18; --panel2: #24231f; --line: #34322c;
-  --text: #ecebe6; --muted: #9b978c; --accent: #f07c1b; --accent-ink: #1d0c00;
-  --top: linear-gradient(180deg, #3a3c3f 0%, #26282a 100%);
-  --top-ink: #f3f1ea; --top-ink2: #f07c1b;
-  --body: linear-gradient(180deg, #303235 0%, #222426 100%);
-  --body-edge: #0e0e0f; --radio-radius: 18px;
-  --key: linear-gradient(180deg, #2e2f31, #1e1f21); --key-ink: #f39a4b; --key-edge: #0b0b0c;
-  --key-hot: linear-gradient(180deg, #f38a2e, #c9610f); --key-hot-ink: #1b0b00;
-  --lcd: linear-gradient(180deg, #c8d3b2 0%, #aebd94 100%);
-  --lcd-on: #141c0c; --lcd-off: rgba(20, 28, 12, .10); --lcd-frame: #0d0e0c;
-  --knob: #1a1a1b; --knob-ring: #f07c1b; --knob-mark: #f6c08f;
-  --grille: radial-gradient(circle, #0e0e0f 30%, transparent 34%) 0 0 / 12px 12px, #2a2b2d;
-  --scope-line: #f5a25a; --scope-fill: rgba(240, 124, 27, .16);
-}
+
+
+
 
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--page); color: var(--text); font-family: var(--font); font-size: 14px; }
@@ -173,117 +129,98 @@ button, select, input { font-family: inherit; font-size: 13px; }
 .lcd-skip { flex: 1; cursor: pointer; font: inherit; font-weight: 800; letter-spacing: 1.5px; font-size: 13px; padding: 9px 12px; border-radius: 6px;
   border: 1px solid rgba(0,0,0,.35); background: var(--key, #ddd); color: var(--key-ink, #111); }
 .lcd-skip:active { transform: translateY(1px); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-skip { border-radius: 999px; border: 0; background: var(--accent); color: var(--accent-ink, #fff); font-size: 14px; padding: 11px 16px; }
+[data-theme] .lcd-skip { border-radius: 999px; border: 0; background: var(--accent); color: var(--accent-ink, #fff); font-size: 14px; padding: 11px 16px; }
 .lcd-decode { font-family: var(--mono); font-size: 12px; min-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 
-/* ---------- SDR++ style: flat dark ImGui look, side bar of controls on the left, big FFT + waterfall ---------- */
-[data-theme="sdrpp"] {
-  --page: #0b0b0b; --panel: #121212; --panel2: #1a1a1a; --line: #2b2b2b;
-  --text: #f0f0f0; --muted: #9a9a9a; --accent: #4296fa; --accent-ink: #fff;
-  --top: #0a0a0a; --top-ink: #f0f0f0; --top-ink2: #4296fa;
-  --body: #0f0f0f; --body-edge: #262626; --radio-radius: 0px;
-  --key: #1d3f6a; --key-ink: #eaf2ff; --key-edge: #1d3f6a;
-  --key-hot: #4296fa; --key-hot-ink: #fff;
-  --lcd: #050505; --lcd-on: #f4f4f4; --lcd-off: rgba(255, 255, 255, .09); --lcd-frame: #1f1f1f;
-  --knob: #1d3f6a; --knob-ring: #4296fa; --knob-mark: #ffffff;
-  --grille: #0f0f0f;
-  --scope-line: #ffffff; --scope-fill: rgba(66, 150, 250, .28);
-  --radius: 4px;
-}
-[data-theme="sdrpp"] .topbar { background: #0a0a0a; border-bottom: 1px solid #262626; }
-[data-theme="sdrpp"] .wrap { max-width: none; display: grid; grid-template-columns: 340px minmax(0, 1fr); grid-template-areas: "radio scope" "tabs tabs"; align-items: start; gap: 10px; padding: 8px; }
-[data-theme="sdrpp"] .wrap > .radio { grid-area: radio; }
-[data-theme="sdrpp"] .wrap > .scope { grid-area: scope; position: sticky; top: 6px; }
-[data-theme="sdrpp"] .wrap > .tabs { grid-area: tabs; }
-@media (max-width: 1000px) {
-  [data-theme="sdrpp"] .wrap { grid-template-columns: 1fr; grid-template-areas: "scope" "radio" "tabs"; }
-}
-[data-theme="sdrpp"] .radio { border-radius: 4px; border: 1px solid #2b2b2b; box-shadow: none; background: #101010; }
-[data-theme="sdrpp"] .radio-top { background: #0a0a0a; padding: 6px 10px; border-bottom: 1px solid #2b2b2b; display: block; }
-[data-theme="sdrpp"] .model-badge span { font-size: 15px; }
-[data-theme="sdrpp"] .model-badge em, [data-theme="sdrpp"] .model-sub { display: none; }
-[data-theme="sdrpp"] .top-status { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 6px; }
-[data-theme="sdrpp"] .radio-body { grid-template-columns: 1fr; grid-template-areas: "center" "left" "right"; gap: 12px; padding: 10px; }
-/* frequency read-out at the top of the side bar, like SDR++'s digit selector */
-[data-theme="sdrpp"] .lcd { border: 1px solid #2b2b2b; border-radius: 4px; box-shadow: none; min-height: 0; padding: 8px 10px; font-family: var(--mono); }
-[data-theme="sdrpp"] .lcd::after { display: none; }
-[data-theme="sdrpp"] .lcd-flags span { border-radius: 3px; }
-[data-theme="sdrpp"] .lcd-flags span.on { color: #fff; background: #4296fa; border-color: #4296fa; }
-[data-theme="sdrpp"] .lcd-main { flex: 0 0 auto; }
-[data-theme="sdrpp"] .lcd-freq { height: 62px; }
-[data-theme="sdrpp"] .lcd-tag { font-size: 14px; letter-spacing: 1px; }
-[data-theme="sdrpp"] .lcd-mode { border-color: #4296fa; color: #fff; }
-[data-theme="sdrpp"] .smeter i.on { background: #4296fa; }
-[data-theme="sdrpp"] .lcd-meter, [data-theme="sdrpp"] .lcd-decode { color: #cfcfcf; }
-[data-theme="sdrpp"] .radio-center { gap: 8px; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /* "menu" look for the quick button groups */
-[data-theme="sdrpp"] .quick { display: flex; flex-direction: column; gap: 6px; }
-[data-theme="sdrpp"] .q-group { background: #161616; border: 1px solid #262626; border-radius: 4px; padding: 6px 8px; display: block; }
-[data-theme="sdrpp"] .q-lab { display: block; color: #4296fa; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; margin-bottom: 4px; }
-[data-theme="sdrpp"] .radio-left { gap: 10px; background: #161616; border: 1px solid #262626; border-radius: 4px; padding: 8px; }
-[data-theme="sdrpp"] .radio-left .grille { display: none; }
-[data-theme="sdrpp"] .knobs { justify-content: space-around; }
-[data-theme="sdrpp"] .knob { width: 54px; height: 54px; background: conic-gradient(from 225deg, #4296fa 0 calc(var(--pct, 50) * 2.7deg), #2a2a2a 0 270deg, transparent 0); box-shadow: none; }
-[data-theme="sdrpp"] .knob-cap { inset: 6px; background: #1b1b1b; box-shadow: none; }
-[data-theme="sdrpp"] .key { border-radius: 4px; box-shadow: none; letter-spacing: .5px; border: 1px solid #2d5b94; }
-[data-theme="sdrpp"] .key:hover { background: #2a5a96; }
-[data-theme="sdrpp"] .key:active, [data-theme="sdrpp"] .key.pressed { transform: none; background: #4296fa; }
-[data-theme="sdrpp"] .key.on { outline: 0; background: #4296fa; color: #fff; }
-[data-theme="sdrpp"] .key.q { font-size: 11px; padding: 5px 3px; }
-[data-theme="sdrpp"] #qLock { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-[data-theme="sdrpp"] #qLock .key { white-space: nowrap; }
-[data-theme="sdrpp"] .key.danger { background: #6a1d1d; border-color: #943030; }
-[data-theme="sdrpp"] .radio-right { background: #161616; border: 1px solid #262626; border-radius: 4px; padding: 8px; }
-[data-theme="sdrpp"] .led.on { background: #4296fa; box-shadow: 0 0 6px #4296fa; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /* spectrum + waterfall take the stage */
-[data-theme="sdrpp"] .scope { padding: 6px; background: #0b0b0b; border-radius: 4px; }
-[data-theme="sdrpp"] #spec { height: calc(300px + var(--bp-strip, 30px)); background: #000; border-radius: 0; }
-[data-theme="sdrpp"] #wf { height: max(420px, calc(100vh - 600px)); border-radius: 0; }
-[data-theme="sdrpp"] #bandmap { border-radius: 0; }
-[data-theme="sdrpp"] .vfo-chip { background: #4296fa; }
-[data-theme="sdrpp"] .tabs { border-radius: 4px; }
-[data-theme="sdrpp"] .tab.active { border-bottom-color: #4296fa; }
-[data-theme="sdrpp"] .btn.primary, [data-theme="sdrpp"] .btn.on { background: #4296fa; border-color: #4296fa; color: #fff; }
+
+
+
+
+
+
+
+
 
 /* ---------- theme layout differences ---------- */
-/* dot-matrix displays (UBCD260DN / TRX-2 styles): text lines instead of 7-segment digits */
-[data-theme="ubcd260"] .lcd-freq, [data-theme="trx2"] .lcd-freq { display: none; }
-[data-theme="ubcd260"] .lcd-freq-txt, [data-theme="trx2"] .lcd-freq-txt { display: block; flex: 1; text-align: right; font-family: var(--mono); font-weight: 700; font-size: 62px; line-height: 1; letter-spacing: 2px; }
-[data-theme="ubcd260"] .lcd-info, [data-theme="trx2"] .lcd-info { order: 1; }
-[data-theme="ubcd260"] .lcd-main, [data-theme="trx2"] .lcd-main { order: 2; flex: 0; align-items: center; }
-[data-theme="ubcd260"] .lcd-banks, [data-theme="trx2"] .lcd-banks { order: 3; }
-[data-theme="ubcd260"] .lcd-meter, [data-theme="trx2"] .lcd-meter { order: 4; }
-[data-theme="ubcd260"] .lcd-decode, [data-theme="trx2"] .lcd-decode { order: 5; font-size: 14px; }
-[data-theme="ubcd260"] .lcd-tag, [data-theme="trx2"] .lcd-tag { font-size: 30px !important; }
-[data-theme="ubcd260"] .lcd-freq-txt, [data-theme="ubcd260"] .lcd-tag { text-shadow: 0 0 1px rgba(11,26,43,.4); }
-[data-theme="trx2"] .lcd { background-image: radial-gradient(circle, rgba(20,28,12,.07) 1px, transparent 1.3px), var(--lcd); background-size: 4px 4px, auto; }
-[data-theme="trx2"] .lcd-flags span { border-radius: 0; }
-/* UBCD260DN style: display + knob strip on the left, tall keypad on the right */
-[data-theme="ubcd260"] .radio-body { grid-template-columns: 1fr 300px; grid-template-areas: "center right" "left right"; }
-[data-theme="ubcd260"] .radio-left { flex-direction: row; align-items: center; gap: 22px; }
-[data-theme="ubcd260"] .radio-left .grille { flex: 1; height: 54px; order: 3; }
-[data-theme="ubcd260"] .knobs { gap: 18px; }
-[data-theme="ubcd260"] .key-power { order: 2; min-width: 170px; }
-/* TRX-2 style: knob strip across the top like a handheld's top panel */
-[data-theme="trx2"] .radio-body { grid-template-columns: 1fr 290px; grid-template-areas: "left left" "center right"; }
-[data-theme="trx2"] .radio-left { flex-direction: row; align-items: center; gap: 22px; background: #1d1e20; border-radius: 12px; padding: 8px 16px; box-shadow: inset 0 2px 6px rgba(0,0,0,.6); }
-[data-theme="trx2"] .radio-left .grille { width: 220px; height: 40px; order: 3; margin-left: auto; }
-[data-theme="trx2"] .knobs { gap: 22px; }
-[data-theme="trx2"] .key-power { min-width: 170px; }
-[data-theme="trx2"] .fkeys .key { border-radius: 999px; }
-[data-theme="ubcd260"] .grille { height: 26px; border-radius: 13px; }
-[data-theme="ubcd260"] .knob { width: 66px; height: 66px; background: radial-gradient(circle, #1b1d21 60%, #050506 62%); }
-[data-theme="ubcd260"] .lcd { border-radius: 14px; font-family: var(--mono); }
-[data-theme="ubcd260"] .lcd-tag { font-size: 20px; letter-spacing: 3px; }
-[data-theme="ubcd260"] .key { border-radius: 14px; }
-[data-theme="ubcd260"] .model-badge em { color: #3aa3ff; }
-[data-theme="ubcd260"] .lcd { background-image: radial-gradient(circle, rgba(11,26,43,.05) 1px, transparent 1.2px), var(--lcd); background-size: 4px 4px, auto; }
-[data-theme="trx2"] .radio { border-width: 8px; box-shadow: 0 18px 40px rgba(0,0,0,.55), inset 0 0 0 3px #3e4043; }
-[data-theme="trx2"] .knob { background: repeating-conic-gradient(from 0deg, #0a0a0a 0 6deg, #3a3b3d 6deg 12deg); border: 2px solid var(--knob-ring); }
-[data-theme="trx2"] .key { border-radius: 10px; }
-[data-theme="trx2"] .lcd { border-radius: 12px; }
-[data-theme="trx2"] .lcd-tag { font-size: 17px; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /* ============================================================
    PANELS
@@ -474,7 +411,7 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 .smeter { height: 8px; gap: 2px; }
 .smeter i.sq { box-shadow: 0 -3px 0 0 var(--lcd-on); }
 .lcd-decode, [data-theme] .lcd-decode { font-size: 10px; min-height: 12px; }
-[data-theme="ubcd260"] .lcd-freq-txt, [data-theme="trx2"] .lcd-freq-txt { font-size: 31px; letter-spacing: 1px; }
+
 @media (max-width: 1150px) { .lcd, [data-theme] .lcd, .quick { max-width: none; } }
 @media (max-width: 600px) { .lcd-freq-txt { font-size: 28px !important; } .lcd-freq .seg { height: 36px; } }
 
@@ -608,7 +545,7 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 .led.amber { background: #3a2a05; } .led.blue { background: #0a2236; } .led.red { background: #3b0d0d; }
 .led.blink.on { animation: ledblink 1s steps(2, start) infinite; }
 @keyframes ledblink { 50% { opacity: .25; } }
-[data-theme="ubcd260"] .leds, [data-theme="trx2"] .leds { order: 4; min-width: 190px; }
+
 
 /* ---------- quick-access buttons (under the LCD) ---------- */
 .quick { display: flex; flex-direction: column; gap: 7px; padding: 10px 12px; border-radius: 8px; background: rgba(0,0,0,.22);
@@ -620,7 +557,7 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 .key.q.na { opacity: .45; }
 .key.q.on { background: var(--key-hot); color: var(--key-hot-ink); outline: none; }
 .key.q.danger.on { background: linear-gradient(180deg, #d84040, #a52424); color: #fff; }
-[data-theme="trx2"] .key.q { border-radius: 999px; }
+
 @media (max-width: 600px) { .key.q { white-space: normal; line-height: 1.1; padding: 6px 1px; } .q-group { grid-template-columns: 1fr; gap: 3px; } .q-row { grid-template-columns: repeat(auto-fit, minmax(46px, 1fr)); } }
 
 .key.q.danger { color: #ffb3a8; }
@@ -646,7 +583,7 @@ tr.cq td { color: var(--accent); }
 .notch-slide { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; }
 .notch-slide input { flex: 1; min-width: 0; }
 .notch-slide output { font-family: var(--mono); font-size: 12px; min-width: 62px; text-align: right; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .notch-row { grid-template-columns: auto auto 1fr; }
+[data-theme] .notch-row { grid-template-columns: auto auto 1fr; }
 .bw-why { grid-column: 1 / -1; font-size: 11px; color: var(--muted); min-height: 14px; }
 #bwSug.suggest { box-shadow: 0 0 0 1px #f2c94c inset; color: #f2c94c; }
 #bwSug:disabled { opacity: .35; }
@@ -697,56 +634,6 @@ body.cr body.cr .fkeys .key, body.cr .arrows .key { height: 34px; padding: 0; }
 body.cr .fkeys, body.cr .arrows { gap: 6px; }
 body.cr .knob { transform: scale(.85); }
 
-/* ---------- Colour themes: Blue (dark / light) and Soft, easy-on-the-eyes (dark / light) ---------- */
-[data-theme="bluedark"] {
-  --page: #0a111d; --panel: #111b2e; --panel2: #18253d; --line: #263754;
-  --text: #e6edf7; --muted: #8fa3c0; --accent: #4da3ff; --accent-ink: #00122a;
-  --top: linear-gradient(180deg, #14213a, #0d1628); --top-ink: #e6edf7; --top-ink2: #4da3ff;
-  --body: linear-gradient(180deg, #14213a, #0e1829); --body-edge: #070c15; --radio-radius: 14px;
-  --key: linear-gradient(180deg, #24385a, #192a45); --key-ink: #dbeaff; --key-edge: #0a1424;
-  --key-hot: linear-gradient(180deg, #2f8cf0, #1b66c4); --key-hot-ink: #fff;
-  --lcd: linear-gradient(180deg, #0a1a30, #06101f); --lcd-on: #7cc4ff; --lcd-off: rgba(124, 196, 255, .08); --lcd-frame: #050a14;
-  --knob: #0f1a2d; --knob-ring: #3c5a86; --knob-mark: #4da3ff;
-  --grille: radial-gradient(circle, #060b14 38%, transparent 42%) 0 0 / 9px 9px, #14213a;
-  --scope-line: #7cc4ff; --scope-fill: rgba(77, 163, 255, .22); --ok: #4cd08a; --warn: #ffb454;
-}
-[data-theme="bluelight"] {
-  --page: #e9f0fa; --panel: #ffffff; --panel2: #f1f6fd; --line: #c6d6ec;
-  --text: #14233a; --muted: #566b88; --accent: #1f6fe0; --accent-ink: #ffffff;
-  --top: linear-gradient(180deg, #f6f9fe, #dbe6f6); --top-ink: #14233a; --top-ink2: #1f6fe0;
-  --body: linear-gradient(180deg, #f4f8fd, #e3ecf8); --body-edge: #b3c6e3; --radio-radius: 14px;
-  --key: linear-gradient(180deg, #ffffff, #dbe7f8); --key-ink: #14233a; --key-edge: #aebfdc;
-  --key-hot: linear-gradient(180deg, #3b86f0, #1f6fe0); --key-hot-ink: #fff;
-  --lcd: linear-gradient(180deg, #e8f3ff, #cfe3fa); --lcd-on: #0b3a7a; --lcd-off: rgba(11, 58, 122, .08); --lcd-frame: #9db8dc;
-  --knob: #dfe9f8; --knob-ring: #1f6fe0; --knob-mark: #14233a;
-  --grille: radial-gradient(circle, #aebfdc 38%, transparent 42%) 0 0 / 9px 9px, #eef3fb;
-  --scope-line: #7cc4ff; --scope-fill: rgba(77, 163, 255, .25); --ok: #12804a; --warn: #b36a00;
-}
-[data-theme="softdark"] {
-  --page: #1c1b1a; --panel: #252321; --panel2: #2d2a27; --line: #3d3a36;
-  --text: #d9d4cb; --muted: #9a938a; --accent: #d9a35b; --accent-ink: #1c1208;
-  --top: linear-gradient(180deg, #2f2c29, #262422); --top-ink: #d9d4cb; --top-ink2: #d9a35b;
-  --body: linear-gradient(180deg, #2a2724, #211f1d); --body-edge: #151413; --radio-radius: 12px;
-  --key: linear-gradient(180deg, #3b3834, #2d2a27); --key-ink: #e3ded4; --key-edge: #171615;
-  --key-hot: linear-gradient(180deg, #c98d43, #a8722f); --key-hot-ink: #1c1208;
-  --lcd: linear-gradient(180deg, #23221e, #1a1916); --lcd-on: #dcc58f; --lcd-off: rgba(220, 197, 143, .07); --lcd-frame: #141311;
-  --knob: #1f1d1b; --knob-ring: #6f6860; --knob-mark: #d9a35b;
-  --grille: radial-gradient(circle, #141311 38%, transparent 42%) 0 0 / 9px 9px, #2a2724;
-  --scope-line: #d9a35b; --scope-fill: rgba(217, 163, 91, .16); --ok: #8cc59a; --warn: #e0a85a;
-}
-[data-theme="softlight"] {
-  --page: #f1ede3; --panel: #faf7f0; --panel2: #efe9dc; --line: #d8cfbd;
-  --text: #38342d; --muted: #766f62; --accent: #3d7d68; --accent-ink: #ffffff;
-  --top: linear-gradient(180deg, #f3eee2, #e5ddcc); --top-ink: #38342d; --top-ink2: #3d7d68;
-  --body: linear-gradient(180deg, #f6f2e8, #e9e2d2); --body-edge: #c9bfa9; --radio-radius: 12px;
-  --key: linear-gradient(180deg, #faf7f0, #e6dfce); --key-ink: #38342d; --key-edge: #c4b9a3;
-  --key-hot: linear-gradient(180deg, #4d9079, #3d7d68); --key-hot-ink: #fff;
-  --lcd: linear-gradient(180deg, #e3ead6, #d2dcc3); --lcd-on: #2a3925; --lcd-off: rgba(42, 57, 37, .08); --lcd-frame: #a9b497;
-  --knob: #e6dfce; --knob-ring: #3d7d68; --knob-mark: #38342d;
-  --grille: radial-gradient(circle, #bdb29b 38%, transparent 42%) 0 0 / 9px 9px, #efe9dc;
-  --scope-line: #e0b878; --scope-fill: rgba(224, 184, 120, .2); --ok: #2f7a4f; --warn: #a86a10;
-}
-
 html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spectrum, not the window */
 
 /* wide monitors: the spectrum, waterfall and tables use the whole screen; the scanner body stays a sensible size in the middle */
@@ -786,7 +673,7 @@ html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spec
    MODERN style – flat, roomy, big readable controls.
    Same controls as every other style, just laid out with space to breathe.
    ============================================================ */
-[data-theme="modern"], [data-theme="modernlight"] {
+[data-theme] {
   --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --radius: 16px; --radio-radius: 20px; --radius-sm: 10px;
   --key-edge: transparent; --knob-mark: var(--accent);
@@ -812,109 +699,150 @@ html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spec
   --knob: #e4e9f1; --knob-ring: #c4ccd9; --grille: #fff;
   --scope-line: #2a6fdb; --scope-fill: rgba(42,111,219,.18);
 }
-:is([data-theme="modern"], [data-theme="modernlight"]) {
+/* colour variants of the same layout: Blue and Soft, each dark and light */
+[data-theme="bluedark"] {
+  --page: #0a111d; --panel: #111b2e; --panel2: #18253d; --line: #263754;
+  --text: #e6edf7; --muted: #8fa3c0; --accent: #4da3ff; --accent-ink: #00122a;
+  --top: transparent; --top-ink: #e6edf7; --top-ink2: #8fa3c0;
+  --body: #111b2e; --body-edge: #263754;
+  --key: #1f3150; --key-ink: #e6edf7; --key-hot: #4da3ff; --key-hot-ink: #00122a;
+  --lcd: #08121f; --lcd-on: #e8f3ff; --lcd-off: rgba(255,255,255,.07);
+  --knob: #1f3150; --knob-ring: #3c5a86; --grille: #111b2e;
+  --scope-line: #7cc4ff; --scope-fill: rgba(77,163,255,.22);
+}
+[data-theme="bluelight"] {
+  --page: #e9f0fa; --panel: #ffffff; --panel2: #f1f6fd; --line: #c6d6ec;
+  --text: #14233a; --muted: #566b88; --accent: #1f6fe0; --accent-ink: #ffffff;
+  --top: transparent; --top-ink: #14233a; --top-ink2: #566b88;
+  --body: #ffffff; --body-edge: #c6d6ec;
+  --key: #e8f0fb; --key-ink: #14233a; --key-hot: #1f6fe0; --key-hot-ink: #fff;
+  --lcd: #eef5fe; --lcd-on: #0b2a5a; --lcd-off: rgba(11,42,90,.07);
+  --knob: #dfe9f8; --knob-ring: #b4c6e2; --grille: #fff;
+  --scope-line: #7cc4ff; --scope-fill: rgba(77,163,255,.25); --ok: #12804a; --warn: #b36a00;
+}
+[data-theme="softdark"] {
+  --page: #1c1b1a; --panel: #252321; --panel2: #2d2a27; --line: #3d3a36;
+  --text: #d9d4cb; --muted: #9a938a; --accent: #d9a35b; --accent-ink: #1c1208;
+  --top: transparent; --top-ink: #d9d4cb; --top-ink2: #9a938a;
+  --body: #252321; --body-edge: #3d3a36;
+  --key: #3b3834; --key-ink: #e3ded4; --key-hot: #d9a35b; --key-hot-ink: #1c1208;
+  --lcd: #1a1916; --lcd-on: #f1e6c9; --lcd-off: rgba(241,230,201,.07);
+  --knob: #3b3834; --knob-ring: #6f6860; --grille: #252321;
+  --scope-line: #d9a35b; --scope-fill: rgba(217,163,91,.16); --ok: #8cc59a; --warn: #e0a85a;
+}
+[data-theme="softlight"] {
+  --page: #f1ede3; --panel: #faf7f0; --panel2: #efe9dc; --line: #d8cfbd;
+  --text: #38342d; --muted: #766f62; --accent: #3d7d68; --accent-ink: #ffffff;
+  --top: transparent; --top-ink: #38342d; --top-ink2: #766f62;
+  --body: #faf7f0; --body-edge: #d8cfbd;
+  --key: #ebe4d4; --key-ink: #38342d; --key-hot: #3d7d68; --key-hot-ink: #fff;
+  --lcd: #eef0e2; --lcd-on: #1f2d1b; --lcd-off: rgba(31,45,27,.07);
+  --knob: #e6dfce; --knob-ring: #c4b9a3; --grille: #faf7f0;
+  --scope-line: #e0b878; --scope-fill: rgba(224,184,120,.2); --ok: #2f7a4f; --warn: #a86a10;
+}
+[data-theme] {
   font-size: 15px;
 }
-:is([data-theme="modern"], [data-theme="modernlight"]) .topbar { padding: 12px 24px; gap: 22px; background: var(--panel); box-shadow: 0 1px 0 var(--line); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .brand-name { font-size: 22px; font-weight: 700; letter-spacing: 0; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .help-btn { border-radius: 999px; padding: 9px 20px; letter-spacing: 0; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .pill { padding: 5px 12px; letter-spacing: .5px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) select, :is([data-theme="modern"], [data-theme="modernlight"]) .inp { border-radius: var(--radius-sm); padding: 9px 12px; font-size: 14px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) button, :is([data-theme="modern"], [data-theme="modernlight"]) select, :is([data-theme="modern"], [data-theme="modernlight"]) input { font-size: 14px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .btn { border-radius: var(--radius-sm); padding: 9px 16px; font-weight: 600; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .btn.sm { padding: 5px 12px; }
+[data-theme] .topbar { padding: 12px 24px; gap: 22px; background: var(--panel); box-shadow: 0 1px 0 var(--line); }
+[data-theme] .brand-name { font-size: 22px; font-weight: 700; letter-spacing: 0; }
+[data-theme] .help-btn { border-radius: 999px; padding: 9px 20px; letter-spacing: 0; }
+[data-theme] .pill { padding: 5px 12px; letter-spacing: .5px; }
+[data-theme] select, [data-theme] .inp { border-radius: var(--radius-sm); padding: 9px 12px; font-size: 14px; }
+[data-theme] button, [data-theme] select, [data-theme] input { font-size: 14px; }
+[data-theme] .btn { border-radius: var(--radius-sm); padding: 9px 16px; font-weight: 600; }
+[data-theme] .btn.sm { padding: 5px 12px; }
 
 /* page: controls card on the left, big spectrum + waterfall on the right, tables underneath */
-:is([data-theme="modern"], [data-theme="modernlight"]) .wrap { display: grid; grid-template-columns: clamp(440px, 34vw, 660px) minmax(0, 1fr); grid-template-areas: "radio scope" "tabs tabs"; align-items: start; gap: 24px; padding: 24px; max-width: 2200px; margin: 0 auto; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .radio { grid-area: radio; width: auto; max-width: none; align-self: start; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .scope { grid-area: scope; position: sticky; top: 84px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .tabs { grid-area: tabs; }
+[data-theme] .wrap { display: grid; grid-template-columns: clamp(440px, 34vw, 660px) minmax(0, 1fr); grid-template-areas: "radio scope" "tabs tabs"; align-items: start; gap: 24px; padding: 24px; max-width: 2200px; margin: 0 auto; }
+[data-theme] .wrap > .radio { grid-area: radio; width: auto; max-width: none; align-self: start; }
+[data-theme] .wrap > .scope { grid-area: scope; position: sticky; top: 84px; }
+[data-theme] .wrap > .tabs { grid-area: tabs; }
 @media (max-width: 1100px) {
-  :is([data-theme="modern"], [data-theme="modernlight"]) .wrap { grid-template-columns: 1fr; grid-template-areas: "scope" "radio" "tabs"; padding: 14px; gap: 16px; }
-  :is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .scope { position: static; }
+  [data-theme] .wrap { grid-template-columns: 1fr; grid-template-areas: "scope" "radio" "tabs"; padding: 14px; gap: 16px; }
+  [data-theme] .wrap > .scope { position: static; }
 }
 
 /* the controls card */
-:is([data-theme="modern"], [data-theme="modernlight"]) .radio { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radio-radius); box-shadow: 0 10px 30px rgba(0,0,0,.18); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .radio-top { background: none; border: 0; padding: 20px 24px 0; display: block; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .model-badge { display: none; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .model-sub { display: none; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .top-status { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .tchip { min-width: 0; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .tchip b { max-width: 100%; white-space: nowrap; }   /* long values (receiver name) get an ellipsis, never push the strip wider than its card */
+[data-theme] .radio { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radio-radius); box-shadow: 0 10px 30px rgba(0,0,0,.18); }
+[data-theme] .radio-top { background: none; border: 0; padding: 20px 24px 0; display: block; }
+[data-theme] .model-badge { display: none; }
+[data-theme] .model-sub { display: none; }
+[data-theme] .top-status { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+[data-theme] .tchip { min-width: 0; }
+[data-theme] .tchip b { max-width: 100%; white-space: nowrap; }   /* long values (receiver name) get an ellipsis, never push the strip wider than its card */
 @media (max-width: 760px) {
-  :is([data-theme="modern"], [data-theme="modernlight"]) .top-status { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  [data-theme] .top-status { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   /* narrow window: tighter header so the CONNECTED pill, Style menu and HELP all fit */
-  :is([data-theme="modern"], [data-theme="modernlight"]) .topbar { padding: 10px 14px; gap: 12px; }
-  :is([data-theme="modern"], [data-theme="modernlight"]) .theme-pick { font-size: 0; }
-  :is([data-theme="modern"], [data-theme="modernlight"]) .theme-pick select { font-size: 13px; max-width: 135px; }
-  :is([data-theme="modern"], [data-theme="modernlight"]) .help-btn { padding: 8px 14px; }
+  [data-theme] .topbar { padding: 10px 14px; gap: 12px; }
+  [data-theme] .theme-pick { font-size: 0; }
+  [data-theme] .theme-pick select { font-size: 13px; max-width: 135px; }
+  [data-theme] .help-btn { padding: 8px 14px; }
 }
-:is([data-theme="modern"], [data-theme="modernlight"]) .top-status .tchip:nth-child(n+5) { display: inline-flex; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .tchip { flex-direction: column; align-items: flex-start; gap: 3px; padding: 9px 12px; border-radius: 12px; background: var(--panel2); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .tchip small { font-size: 10px; letter-spacing: 1.2px; color: var(--muted); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .tchip b { font-size: 14px; color: var(--text); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .radio-body { grid-template-columns: 1fr; grid-template-areas: "center" "left" "right"; gap: 22px; padding: 22px 24px 26px; }
+[data-theme] .top-status .tchip:nth-child(n+5) { display: inline-flex; }
+[data-theme] .tchip { flex-direction: column; align-items: flex-start; gap: 3px; padding: 9px 12px; border-radius: 12px; background: var(--panel2); }
+[data-theme] .tchip small { font-size: 10px; letter-spacing: 1.2px; color: var(--muted); }
+[data-theme] .tchip b { font-size: 14px; color: var(--text); }
+[data-theme] .radio-body { grid-template-columns: 1fr; grid-template-areas: "center" "left" "right"; gap: 22px; padding: 22px 24px 26px; }
 
 /* the big display */
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd { container-type: inline-size; border: 1px solid var(--line); border-radius: 18px; padding: 20px 22px; gap: 12px; width: 100%; max-width: none; box-shadow: none; font-family: var(--mono); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd::after { display: none; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-flags { flex-wrap: wrap; gap: 6px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-flags span { font-size: 11px; padding: 2px 8px; border-radius: 999px; letter-spacing: .5px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-flags span.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-banks { font-size: 12px; gap: 5px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-banks span { width: 18px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-main { gap: 14px; padding: 6px 0; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-ch small { font-size: 10px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-ch .seg { height: 26px; width: auto; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-freq { height: 78px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-freq .seg { height: 74px; width: auto; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-unit { font-size: 15px; padding-bottom: 8px; color: var(--muted); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-mode { font-size: 14px; padding: 3px 12px; border-width: 0; border-radius: 999px; background: var(--accent); color: var(--accent-ink); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-tag { font-size: 20px !important; letter-spacing: .5px; text-transform: none; font-family: var(--font); font-weight: 600; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-step, :is([data-theme="modern"], [data-theme="modernlight"]) .lcd-meter { font-size: 13px; color: var(--muted); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .smeter { height: 12px; gap: 3px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .smeter i { border-radius: 3px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .smeter i.on { background: var(--accent); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .smeter i.sq { box-shadow: 0 -4px 0 0 var(--muted); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-decode { font-size: 13px; min-height: 18px; color: var(--muted); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .radio-center { align-items: stretch; justify-content: flex-start; gap: 18px; }
+[data-theme] .lcd { container-type: inline-size; border: 1px solid var(--line); border-radius: 18px; padding: 20px 22px; gap: 12px; width: 100%; max-width: none; box-shadow: none; font-family: var(--mono); }
+[data-theme] .lcd::after { display: none; }
+[data-theme] .lcd-flags { flex-wrap: wrap; gap: 6px; }
+[data-theme] .lcd-flags span { font-size: 11px; padding: 2px 8px; border-radius: 999px; letter-spacing: .5px; }
+[data-theme] .lcd-flags span.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+[data-theme] .lcd-banks { font-size: 12px; gap: 5px; }
+[data-theme] .lcd-banks span { width: 18px; }
+[data-theme] .lcd-main { gap: 14px; padding: 6px 0; }
+[data-theme] .lcd-ch small { font-size: 10px; }
+[data-theme] .lcd-ch .seg { height: 26px; width: auto; }
+[data-theme] .lcd-freq { height: 78px; }
+[data-theme] .lcd-freq .seg { height: 74px; width: auto; }
+[data-theme] .lcd-unit { font-size: 15px; padding-bottom: 8px; color: var(--muted); }
+[data-theme] .lcd-mode { font-size: 14px; padding: 3px 12px; border-width: 0; border-radius: 999px; background: var(--accent); color: var(--accent-ink); }
+[data-theme] .lcd-tag { font-size: 20px !important; letter-spacing: .5px; text-transform: none; font-family: var(--font); font-weight: 600; }
+[data-theme] .lcd-step, [data-theme] .lcd-meter { font-size: 13px; color: var(--muted); }
+[data-theme] .smeter { height: 12px; gap: 3px; }
+[data-theme] .smeter i { border-radius: 3px; }
+[data-theme] .smeter i.on { background: var(--accent); }
+[data-theme] .smeter i.sq { box-shadow: 0 -4px 0 0 var(--muted); }
+[data-theme] .lcd-decode { font-size: 13px; min-height: 18px; color: var(--muted); }
+[data-theme] .radio-center { align-items: stretch; justify-content: flex-start; gap: 18px; }
 
 
 /* the display fills the card: digits, text and meters grow with its width */
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd { min-height: 300px; padding: 20px 24px; gap: 12px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-main { flex: 1; align-items: center; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-freq { height: min(13.5cqw, 112px); align-items: center; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-freq .seg { height: min(12.5cqw, 104px); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-ch .seg { height: min(5cqw, 34px); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-unit { font-size: clamp(15px, 3cqw, 24px); padding-bottom: 0; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-tag { font-size: clamp(18px, 4.4cqw, 30px) !important; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-mode { font-size: clamp(14px, 3cqw, 20px); padding: 4px 14px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-flags span { font-size: clamp(11px, 2.2cqw, 14px); padding: 3px 10px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-banks { font-size: clamp(12px, 2.6cqw, 16px); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-decode { font-size: clamp(13px, 2.6cqw, 16px); min-height: 22px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-rope { gap: 12px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .rope-row { font-size: clamp(12px, 2.6cqw, 16px); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .rope-row em { min-width: 56px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .rope { height: clamp(18px, 4.2cqw, 28px); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .rope.sql { height: clamp(8px, 1.6cqw, 11px); }
+[data-theme] .lcd { min-height: 300px; padding: 20px 24px; gap: 12px; }
+[data-theme] .lcd-main { flex: 1; align-items: center; }
+[data-theme] .lcd-freq { height: min(13.5cqw, 112px); align-items: center; }
+[data-theme] .lcd-freq .seg { height: min(12.5cqw, 104px); }
+[data-theme] .lcd-ch .seg { height: min(5cqw, 34px); }
+[data-theme] .lcd-unit { font-size: clamp(15px, 3cqw, 24px); padding-bottom: 0; }
+[data-theme] .lcd-tag { font-size: clamp(18px, 4.4cqw, 30px) !important; }
+[data-theme] .lcd-mode { font-size: clamp(14px, 3cqw, 20px); padding: 4px 14px; }
+[data-theme] .lcd-flags span { font-size: clamp(11px, 2.2cqw, 14px); padding: 3px 10px; }
+[data-theme] .lcd-banks { font-size: clamp(12px, 2.6cqw, 16px); }
+[data-theme] .lcd-decode { font-size: clamp(13px, 2.6cqw, 16px); min-height: 22px; }
+[data-theme] .lcd-rope { gap: 12px; }
+[data-theme] .rope-row { font-size: clamp(12px, 2.6cqw, 16px); }
+[data-theme] .rope-row em { min-width: 56px; }
+[data-theme] .rope { height: clamp(18px, 4.2cqw, 28px); }
+[data-theme] .rope.sql { height: clamp(8px, 1.6cqw, 11px); }
 
 /* OLED readout: black screen, white digits, thin cyan / violet accents, rope-light signal meter */
 .lcd-rope { display: none; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd { --lcd: #000; --lcd-on: #fff; --lcd-off: rgba(255,255,255,.09); background: #000; border: 1px solid #242830; border-radius: 20px; color: #fff; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-flags span { color: #4d5563; border-color: #262b34; background: transparent; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-flags span.on { background: transparent; color: #7ff0ff; border-color: #7ff0ff; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-banks span { color: #3a414d; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-banks span.on { color: #b79cff; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-banks span.cur { border-bottom-color: #7ff0ff; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-ch small { color: #b79cff; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-unit { color: #b79cff; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-mode { background: transparent; border: 1.5px solid #b79cff; color: #b79cff; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-tag { color: #d4d8df; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-step { color: #8a93a3; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-decode { color: #7ff0ff; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-meter { display: none; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd-rope { display: flex; flex-direction: column; gap: 9px; margin-top: 2px; }
+[data-theme] .lcd { --lcd: #000; --lcd-on: #fff; --lcd-off: rgba(255,255,255,.09); background: #000; border: 1px solid #242830; border-radius: 20px; color: #fff; }
+[data-theme] .lcd-flags span { color: #4d5563; border-color: #262b34; background: transparent; }
+[data-theme] .lcd-flags span.on { background: transparent; color: #7ff0ff; border-color: #7ff0ff; }
+[data-theme] .lcd-banks span { color: #3a414d; }
+[data-theme] .lcd-banks span.on { color: #b79cff; }
+[data-theme] .lcd-banks span.cur { border-bottom-color: #7ff0ff; }
+[data-theme] .lcd-ch small { color: #b79cff; }
+[data-theme] .lcd-unit { color: #b79cff; }
+[data-theme] .lcd-mode { background: transparent; border: 1.5px solid #b79cff; color: #b79cff; }
+[data-theme] .lcd-tag { color: #d4d8df; }
+[data-theme] .lcd-step { color: #8a93a3; }
+[data-theme] .lcd-decode { color: #7ff0ff; }
+[data-theme] .lcd-meter { display: none; }
+[data-theme] .lcd-rope { display: flex; flex-direction: column; gap: 9px; margin-top: 2px; }
 .rope-row { display: flex; align-items: center; gap: 10px; font-size: 12px; color: #8a93a3; }
 .rope-row b { width: 28px; font-weight: 600; letter-spacing: 1px; }
 .rope-row em { font-style: normal; min-width: 44px; text-align: right; color: #d4d8df; }
@@ -930,114 +858,114 @@ html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spec
 .rope-wrap u { position: absolute; top: -5px; bottom: -5px; width: 2px; margin-left: -1px; background: #fff; border-radius: 1px; text-decoration: none; z-index: 3; display: none; box-shadow: 0 0 6px rgba(255,255,255,.8); }
 
 /* knobs: three roomy dials */
-:is([data-theme="modern"], [data-theme="modernlight"]) .radio-left { gap: 18px; padding: 0; background: none; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .grille { display: none; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .knobs { justify-content: space-around; background: var(--panel2); border-radius: 18px; padding: 18px 10px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .knob-wrap { width: 100px; gap: 7px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .knob-wrap label { font-size: 11px; letter-spacing: 1.3px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .knob-wrap output { font-size: 13px; min-height: 18px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .knob { width: 76px; height: 76px; background: conic-gradient(from 225deg, var(--accent) 0 0deg, var(--knob-ring) 0 270deg, transparent 0); border: 3px solid var(--knob-ring); box-shadow: none; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .knob-cap { inset: 5px; background: var(--knob); box-shadow: 0 3px 8px rgba(0,0,0,.35); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .knob-cap i { width: 5px; height: 15px; margin-left: -2.5px; top: 6px; box-shadow: none; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .leds { background: var(--panel2); border-radius: 14px; padding: 12px 10px; gap: 8px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .ledbox { font-size: 10px; gap: 6px; }
+[data-theme] .radio-left { gap: 18px; padding: 0; background: none; }
+[data-theme] .grille { display: none; }
+[data-theme] .knobs { justify-content: space-around; background: var(--panel2); border-radius: 18px; padding: 18px 10px; }
+[data-theme] .knob-wrap { width: 100px; gap: 7px; }
+[data-theme] .knob-wrap label { font-size: 11px; letter-spacing: 1.3px; }
+[data-theme] .knob-wrap output { font-size: 13px; min-height: 18px; }
+[data-theme] .knob { width: 76px; height: 76px; background: conic-gradient(from 225deg, var(--accent) 0 0deg, var(--knob-ring) 0 270deg, transparent 0); border: 3px solid var(--knob-ring); box-shadow: none; }
+[data-theme] .knob-cap { inset: 5px; background: var(--knob); box-shadow: 0 3px 8px rgba(0,0,0,.35); }
+[data-theme] .knob-cap i { width: 5px; height: 15px; margin-left: -2.5px; top: 6px; box-shadow: none; }
+[data-theme] .leds { background: var(--panel2); border-radius: 14px; padding: 12px 10px; gap: 8px; }
+[data-theme] .ledbox { font-size: 10px; gap: 6px; }
 
 /* buttons: flat, pill-shaped, big enough to hit */
-:is([data-theme="modern"], [data-theme="modernlight"]) .key { background: var(--key); color: var(--key-ink); border: 1px solid var(--line); border-radius: 12px; box-shadow: none; letter-spacing: .3px; font-size: 14px; font-weight: 600; padding: 12px 8px; min-height: 46px; transition: background .12s, border-color .12s; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .key:hover { border-color: var(--accent); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .key:active, :is([data-theme="modern"], [data-theme="modernlight"]) .key.pressed { transform: none; background: var(--accent); color: var(--accent-ink); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .key.on, :is([data-theme="modern"], [data-theme="modernlight"]) .key.q.on, :is([data-theme="modern"], [data-theme="modernlight"]) .key-hot { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); outline: 0; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .key-power { min-height: 52px; font-size: 15px; border-radius: 14px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .fkeys { grid-template-columns: repeat(4, 1fr); gap: 10px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .key-skip { background: var(--accent); color: var(--accent-ink, #fff); }
-:is([data-theme="modern"], [data-theme="modernlight"]) :is([data-theme="modern"], [data-theme="modernlight"]) :is([data-theme="modern"], [data-theme="modernlight"]) .arrows { gap: 10px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .radio-right { gap: 14px; padding: 0; }
+[data-theme] .key { background: var(--key); color: var(--key-ink); border: 1px solid var(--line); border-radius: 12px; box-shadow: none; letter-spacing: .3px; font-size: 14px; font-weight: 600; padding: 12px 8px; min-height: 46px; transition: background .12s, border-color .12s; }
+[data-theme] .key:hover { border-color: var(--accent); }
+[data-theme] .key:active, [data-theme] .key.pressed { transform: none; background: var(--accent); color: var(--accent-ink); }
+[data-theme] .key.on, [data-theme] .key.q.on, [data-theme] .key-hot { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); outline: 0; }
+[data-theme] .key-power { min-height: 52px; font-size: 15px; border-radius: 14px; }
+[data-theme] .fkeys { grid-template-columns: repeat(4, 1fr); gap: 10px; }
+[data-theme] .key-skip { background: var(--accent); color: var(--accent-ink, #fff); }
+[data-theme] [data-theme] [data-theme] .arrows { gap: 10px; }
+[data-theme] .radio-right { gap: 14px; padding: 0; }
 
 /* quick groups: one calm card per group with a clear label */
-:is([data-theme="modern"], [data-theme="modernlight"]) .quick { max-width: none; display: flex; flex-direction: column; gap: 12px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .q-group { display: flex; flex-direction: column; align-items: stretch; gap: 8px; background: var(--panel2); border: 0; border-radius: 14px; padding: 12px 14px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .q-lab { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: 1.4px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .q-row { grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) #qDec .key.danger { grid-column: 1 / -1; }   /* OFF on its own full-width row, not an orphan */
-:is([data-theme="modern"], [data-theme="modernlight"]) .key.q { font-size: 13px; padding: 9px 6px; min-height: 40px; border-radius: 10px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .bw-row { grid-template-columns: 1fr auto; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .bw-why { font-size: 12px; }
+[data-theme] .quick { max-width: none; display: flex; flex-direction: column; gap: 12px; }
+[data-theme] .q-group { display: flex; flex-direction: column; align-items: stretch; gap: 8px; background: var(--panel2); border: 0; border-radius: 14px; padding: 12px 14px; }
+[data-theme] .q-lab { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: 1.4px; }
+[data-theme] .q-row { grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
+[data-theme] #qDec .key.danger { grid-column: 1 / -1; }   /* OFF on its own full-width row, not an orphan */
+[data-theme] .key.q { font-size: 13px; padding: 9px 6px; min-height: 40px; border-radius: 10px; }
+[data-theme] .bw-row { grid-template-columns: 1fr auto; }
+[data-theme] .bw-why { font-size: 12px; }
 
 /* spectrum + waterfall: big and calm */
-:is([data-theme="modern"], [data-theme="modernlight"]) .scope { padding: 18px 20px 20px; gap: 12px; border-radius: var(--radio-radius); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .scope-bar { flex-wrap: wrap; gap: 14px 22px; padding: 0 2px 4px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .scope-title { font-size: 13px; letter-spacing: 1.5px; color: var(--muted); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .mini { font-size: 13px; gap: 8px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .mini input[type=range] { width: 110px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .vfo-bar { gap: 14px; padding: 4px 2px 8px; min-height: 36px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .vfo-chip { background: var(--accent); color: var(--accent-ink); border-radius: 999px; padding: 6px 16px; font-size: 15px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .vfo-band { font-size: 14px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .sig-chip { padding: 5px 12px; border-radius: 999px; font-size: 13px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) #bandmap { height: 40px; border-radius: 10px; margin-bottom: 8px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) #spec { height: calc(300px + var(--bp-strip, 30px)); border-radius: 12px 12px 0 0; }
-:is([data-theme="modern"], [data-theme="modernlight"]) #wf { height: max(380px, calc(100vh - 560px)); border-radius: 0 0 12px 12px; }
+[data-theme] .scope { padding: 18px 20px 20px; gap: 12px; border-radius: var(--radio-radius); }
+[data-theme] .scope-bar { flex-wrap: wrap; gap: 14px 22px; padding: 0 2px 4px; }
+[data-theme] .scope-title { font-size: 13px; letter-spacing: 1.5px; color: var(--muted); }
+[data-theme] .mini { font-size: 13px; gap: 8px; }
+[data-theme] .mini input[type=range] { width: 110px; }
+[data-theme] .vfo-bar { gap: 14px; padding: 4px 2px 8px; min-height: 36px; }
+[data-theme] .vfo-chip { background: var(--accent); color: var(--accent-ink); border-radius: 999px; padding: 6px 16px; font-size: 15px; }
+[data-theme] .vfo-band { font-size: 14px; }
+[data-theme] .sig-chip { padding: 5px 12px; border-radius: 999px; font-size: 13px; }
+[data-theme] #bandmap { height: 40px; border-radius: 10px; margin-bottom: 8px; }
+[data-theme] #spec { height: calc(300px + var(--bp-strip, 30px)); border-radius: 12px 12px 0 0; }
+[data-theme] #wf { height: max(380px, calc(100vh - 560px)); border-radius: 0 0 12px 12px; }
 
 /* tabs + tables: more air */
-:is([data-theme="modern"], [data-theme="modernlight"]) .tabs { border-radius: var(--radio-radius); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .tabbar { padding: 8px 12px 0; gap: 4px; background: var(--panel); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .tab { padding: 14px 20px; font-size: 13px; letter-spacing: .6px; border-radius: 10px 10px 0 0; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .tabpage { padding: 22px 24px 26px; gap: 18px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .row { gap: 14px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .card { padding: 18px 20px; gap: 12px; border-radius: 16px; border: 0; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .cols { gap: 20px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .grid th { padding: 12px 14px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .grid td { padding: 10px 14px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) table.grid { font-size: 14px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .tablewrap { border-radius: 12px; max-height: 460px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .modal-box { border-radius: 20px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .modal-body { padding: 8px 28px 28px; }
+[data-theme] .tabs { border-radius: var(--radio-radius); }
+[data-theme] .tabbar { padding: 8px 12px 0; gap: 4px; background: var(--panel); }
+[data-theme] .tab { padding: 14px 20px; font-size: 13px; letter-spacing: .6px; border-radius: 10px 10px 0 0; }
+[data-theme] .tabpage { padding: 22px 24px 26px; gap: 18px; }
+[data-theme] .row { gap: 14px; }
+[data-theme] .card { padding: 18px 20px; gap: 12px; border-radius: 16px; border: 0; }
+[data-theme] .cols { gap: 20px; }
+[data-theme] .grid th { padding: 12px 14px; }
+[data-theme] .grid td { padding: 10px 14px; }
+[data-theme] table.grid { font-size: 14px; }
+[data-theme] .tablewrap { border-radius: 12px; max-height: 460px; }
+[data-theme] .modal-box { border-radius: 20px; }
+[data-theme] .modal-body { padding: 8px 28px 28px; }
 @media (max-width: 600px) {
-  :is([data-theme="modern"], [data-theme="modernlight"]) .topbar { padding: 8px 12px; gap: 10px; }
-  :is([data-theme="modern"], [data-theme="modernlight"]) .help-btn { padding: 8px 12px; }
-  :is([data-theme="modern"], [data-theme="modernlight"]) .theme-pick select { max-width: 112px; }
-  :is([data-theme="modern"], [data-theme="modernlight"]) .top-status { grid-template-columns: repeat(2, 1fr); }
-  :is([data-theme="modern"], [data-theme="modernlight"]) .radio-body { padding: 14px; }
-  :is([data-theme="modern"], [data-theme="modernlight"]) .lcd-freq-txt { font-size: 34px !important; }
-  :is([data-theme="modern"], [data-theme="modernlight"]) #spec { height: calc(160px + var(--bp-strip, 30px)); }
-  :is([data-theme="modern"], [data-theme="modernlight"]) #wf { height: 220px; }
+  [data-theme] .topbar { padding: 8px 12px; gap: 10px; }
+  [data-theme] .help-btn { padding: 8px 12px; }
+  [data-theme] .theme-pick select { max-width: 112px; }
+  [data-theme] .top-status { grid-template-columns: repeat(2, 1fr); }
+  [data-theme] .radio-body { padding: 14px; }
+  [data-theme] .lcd-freq-txt { font-size: 34px !important; }
+  [data-theme] #spec { height: calc(160px + var(--bp-strip, 30px)); }
+  [data-theme] #wf { height: 220px; }
 }
 
 /* jump chips under the display: the quick-pick groups are far down the card, these take you straight to one */
 .q-jump { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0 6px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .q-jump { display: flex; flex-wrap: wrap; gap: 6px; order: 1; }
+[data-theme] .q-jump { display: flex; flex-wrap: wrap; gap: 6px; order: 1; }
 .q-jump button { cursor: pointer; font: inherit; font-size: 11px; font-weight: 600; letter-spacing: .6px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel2); color: var(--text); }
 .q-jump button:hover { border-color: var(--accent); color: var(--accent); }
 .q-group.flash { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 10px; transition: outline-color .6s; }
 /* Modern: order = display, dials, keypad, then the quick-pick groups */
-:is([data-theme="modern"], [data-theme="modernlight"]) .radio-body { grid-template-areas: none; grid-template-columns: 1fr; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .radio-center { display: contents; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .radio-body > .radio-left, :is([data-theme="modern"], [data-theme="modernlight"]) .radio-body > .radio-right { grid-area: auto; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .lcd { order: 1; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .radio-left { order: 2; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .radio-right { order: 3; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .quick { order: 4; background: none; border: 0; padding: 0; box-shadow: none; }
+[data-theme] .radio-body { grid-template-areas: none; grid-template-columns: 1fr; }
+[data-theme] .radio-center { display: contents; }
+[data-theme] .radio-body > .radio-left, [data-theme] .radio-body > .radio-right { grid-area: auto; }
+[data-theme] .lcd { order: 1; }
+[data-theme] .radio-left { order: 2; }
+[data-theme] .radio-right { order: 3; }
+[data-theme] .quick { order: 4; background: none; border: 0; padding: 0; box-shadow: none; }
 
 /* Modern: the controls card scrolls on its own so the spectrum stays in view; long labels wrap instead of being cut off */
 @media (min-width: 1101px) {
-  :is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .radio { position: sticky; top: 84px; max-height: calc(100vh - 108px); overflow-y: auto; scrollbar-width: thin; }
+  [data-theme] .wrap > .radio { position: sticky; top: 84px; max-height: calc(100vh - 108px); overflow-y: auto; scrollbar-width: thin; }
 }
 /* (replaced below by a fixed-height work area – sticky panels slid over the tables when scrolling) */
-:is([data-theme="modern"], [data-theme="modernlight"]) .q-row { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .key.q { white-space: normal; line-height: 1.2; overflow: visible; text-overflow: clip; }
+[data-theme] .q-row { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
+[data-theme] .key.q { white-space: normal; line-height: 1.2; overflow: visible; text-overflow: clip; }
 
 /* Modern: Morse decoder in the theme colour instead of amber */
-:is([data-theme="modern"], [data-theme="modernlight"]) .ticker span { color: var(--accent); text-shadow: none; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .ticker { border-color: var(--line); background: var(--lcd); }
+[data-theme] .ticker span { color: var(--accent); text-shadow: none; }
+[data-theme] .ticker { border-color: var(--line); background: var(--lcd); }
 
 /* Modern, wide screens: the radio card and the spectrum fill one screen-high work area (each scrolls/shrinks inside it);
    the tabs and tables sit below it and scroll normally – nothing is sticky, so nothing can slide over the tables. */
 @media (min-width: 1101px) {
-  :is([data-theme="modern"], [data-theme="modernlight"]) .wrap { grid-template-rows: minmax(520px, calc(100vh - 124px)) auto; }
-  :is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .radio { position: static; top: auto; height: 100%; max-height: none; align-self: stretch; overflow-y: auto; scrollbar-width: thin; }
-  :is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .scope { position: static; top: auto; height: 100%; align-self: stretch; display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto; }
-  :is([data-theme="modern"], [data-theme="modernlight"]) .scope > * { flex: 0 0 auto; }
-  :is([data-theme="modern"], [data-theme="modernlight"]) #spec { height: calc(clamp(140px, 26vh, 300px) + var(--bp-strip, 30px)); }
-  :is([data-theme="modern"], [data-theme="modernlight"]) #wf { flex: 1 1 0; height: 0; min-height: 220px; }
+  [data-theme] .wrap { grid-template-rows: minmax(520px, calc(100vh - 124px)) auto; }
+  [data-theme] .wrap > .radio { position: static; top: auto; height: 100%; max-height: none; align-self: stretch; overflow-y: auto; scrollbar-width: thin; }
+  [data-theme] .wrap > .scope { position: static; top: auto; height: 100%; align-self: stretch; display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto; }
+  [data-theme] .scope > * { flex: 0 0 auto; }
+  [data-theme] #spec { height: calc(clamp(140px, 26vh, 300px) + var(--bp-strip, 30px)); }
+  [data-theme] #wf { flex: 1 1 0; height: 0; min-height: 220px; }
 }
 
 /* User-adjustable spectrum / waterfall size (drag the bar between them, or use the Waterfall menu) */
@@ -1057,14 +985,14 @@ body.sz-wf #wf { height: var(--user-wf) !important; min-height: 0 !important; fl
 /* Tablets (10 inch, touch): portrait keeps the spectrum compact so the radio controls are not far below,
    and every small button gets a finger-sized target. */
 @media (min-width: 761px) and (max-width: 1100px) {
-  :is([data-theme="modern"], [data-theme="modernlight"]) #spec { height: calc(200px + var(--bp-strip, 30px)); }
-  :is([data-theme="modern"], [data-theme="modernlight"]) #wf { height: clamp(180px, 20vh, 260px); }
+  [data-theme] #spec { height: calc(200px + var(--bp-strip, 30px)); }
+  [data-theme] #wf { height: clamp(180px, 20vh, 260px); }
   /* the controls card uses the width: display on top, dials and keypad side by side, quick groups in two columns */
-  :is([data-theme="modern"], [data-theme="modernlight"]) .radio-body { grid-template-columns: 1fr 1fr; align-items: start; }
-  :is([data-theme="modern"], [data-theme="modernlight"]) .lcd, :is([data-theme="modern"], [data-theme="modernlight"]) .q-jump,
-  :is([data-theme="modern"], [data-theme="modernlight"]) .quick { grid-column: 1 / -1; }
-  :is([data-theme="modern"], [data-theme="modernlight"]) .quick { display: grid; grid-template-columns: 1fr 1fr; align-items: start; gap: 14px; }
-  :is([data-theme="modern"], [data-theme="modernlight"]) .quick > :is(.q-group[data-help="qdec"], .q-group[data-help="qdigi"]) { grid-column: 1 / -1; }
+  [data-theme] .radio-body { grid-template-columns: 1fr 1fr; align-items: start; }
+  [data-theme] .lcd, [data-theme] .q-jump,
+  [data-theme] .quick { grid-column: 1 / -1; }
+  [data-theme] .quick { display: grid; grid-template-columns: 1fr 1fr; align-items: start; gap: 14px; }
+  [data-theme] .quick > :is(.q-group[data-help="qdec"], .q-group[data-help="qdigi"]) { grid-column: 1 / -1; }
 }
 @media (pointer: coarse) {
   .btn.sm, .q-jump button, #gainAgc, .lcd-flags span, .tabs button, select, .hot-form input, .hot-form select { min-height: 40px; }
@@ -1092,15 +1020,15 @@ body.sz-wf #wf { height: var(--user-wf) !important; min-height: 0 !important; fl
 .quick[data-page="tune"] > .q-group:not([data-pg="tune"]),
 .quick[data-page="digital"] > .q-group:not([data-pg="digital"]),
 .quick[data-page="tools"] > .q-group:not([data-pg="tools"]) { display: none; }
-.tablewrap, :is([data-theme="modern"], [data-theme="modernlight"]) .tablewrap { max-height: none; overflow: visible; }   /* the page scrolls, not the box (the modern max-height used to survive and let rows spill over the next block) */
+.tablewrap, [data-theme] .tablewrap { max-height: none; overflow: visible; }   /* the page scrolls, not the box (the modern max-height used to survive and let rows spill over the next block) */
 .pagwrap { max-height: none; }
 .grid th { top: var(--topbar-h, 0px); z-index: 2; }                                                             /* column headings stay just under the top bar while the page scrolls */
-:is([data-theme="modern"], [data-theme="modernlight"]) .q-jump { order: 1; margin: 0; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .quick { order: 1; }
+[data-theme] .q-jump { order: 1; margin: 0; }
+[data-theme] .quick { order: 1; }
 @media (min-width: 1101px) {
-  :is([data-theme="modern"], [data-theme="modernlight"]) .wrap { grid-template-rows: auto auto; align-items: start; }
-  :is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .radio { position: static; height: auto; max-height: none; overflow: visible; align-self: start; }
-  :is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .scope { position: sticky; top: 76px; height: calc(100vh - 92px); max-height: none; align-self: start; overflow: visible; }
+  [data-theme] .wrap { grid-template-rows: auto auto; align-items: start; }
+  [data-theme] .wrap > .radio { position: static; height: auto; max-height: none; overflow: visible; align-self: start; }
+  [data-theme] .wrap > .scope { position: sticky; top: 76px; height: calc(100vh - 92px); max-height: none; align-self: start; overflow: visible; }
 }
 /* customise mode: hidden buttons stay hidden; in customise mode every button gets a cross */
 .u-hide { display: none !important; }
@@ -1112,29 +1040,29 @@ body.customise #qJump .key::after { content: none; }
 .q-jump .grow { flex: 1; }
 
 /* ---- Modern: compact controls card (fits one screen) ---- */
-:is([data-theme="modern"], [data-theme="modernlight"]) .leds { display: none; }                      /* the display flags and the status cards already show this */
-:is([data-theme="modern"], [data-theme="modernlight"]) .radio-right .fkeys { grid-template-columns: repeat(6, 1fr); gap: 8px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .radio-right .fkeys .key { min-height: 38px; padding: 8px 0; font-size: 13px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .radio-right .fkeys .key-skip { min-height: 40px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .arrows .key { min-height: 34px; padding: 4px 0; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .radio-right { gap: 10px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .key.q { min-height: 38px; padding: 8px 6px; font-size: 13px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .quick .q-group { padding: 10px 12px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .knob { width: 64px; height: 64px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .knob-wrap { width: 90px; gap: 5px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .knobs { padding: 10px 6px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .bw-why:empty { display: none; }
+[data-theme] .leds { display: none; }                      /* the display flags and the status cards already show this */
+[data-theme] .radio-right .fkeys { grid-template-columns: repeat(6, 1fr); gap: 8px; }
+[data-theme] .radio-right .fkeys .key { min-height: 38px; padding: 8px 0; font-size: 13px; }
+[data-theme] .radio-right .fkeys .key-skip { min-height: 40px; }
+[data-theme] .arrows .key { min-height: 34px; padding: 4px 0; }
+[data-theme] .radio-right { gap: 10px; }
+[data-theme] .key.q { min-height: 38px; padding: 8px 6px; font-size: 13px; }
+[data-theme] .quick .q-group { padding: 10px 12px; }
+[data-theme] .knob { width: 64px; height: 64px; }
+[data-theme] .knob-wrap { width: 90px; gap: 5px; }
+[data-theme] .knobs { padding: 10px 6px; }
+[data-theme] .bw-why:empty { display: none; }
 
 /* Modern: one slim status row (the clocks and STATE/LINKS are already on the display) and tighter button rows */
-:is([data-theme="modern"], [data-theme="modernlight"]) .top-status { grid-template-columns: repeat(4, 1fr); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .top-status .tchip.clock, :is([data-theme="modern"], [data-theme="modernlight"]) .top-status .tchip:nth-child(6), :is([data-theme="modern"], [data-theme="modernlight"]) .top-status .tchip:nth-child(8) { display: none; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .quick :is(#qMode, #qBand, #qDec, #qLock, #qTog, #qFiles) { grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)); gap: 6px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .quick .key.q { padding: 8px 2px; font-size: 12px; }
+[data-theme] .top-status { grid-template-columns: repeat(4, 1fr); }
+[data-theme] .top-status .tchip.clock, [data-theme] .top-status .tchip:nth-child(6), [data-theme] .top-status .tchip:nth-child(8) { display: none; }
+[data-theme] .quick :is(#qMode, #qBand, #qDec, #qLock, #qTog, #qFiles) { grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)); gap: 6px; }
+[data-theme] .quick .key.q { padding: 8px 2px; font-size: 12px; }
 
 /* each of the spectrum and waterfall boxes can be sized on its own; once sized, the panel grows with them and the page scrolls */
 .splitter-end { margin: 2px 0 0; }
 @media (min-width: 1101px) {
-  :is(body.sz-spec, body.sz-wf):is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .scope { height: auto; position: static; }
+  :is(body.sz-spec, body.sz-wf)[data-theme] .wrap > .scope { height: auto; position: static; }
 }
 
 /* last heard */
@@ -1148,13 +1076,12 @@ body.customise #qJump .key::after { content: none; }
 .top-status .tchip.pass { cursor: pointer; max-width: 360px; }
 .top-status .tchip.pass b { white-space: nowrap; }
 .top-status .tchip.pass.live b { color: var(--ok, #4ddb7a); }
-:is([data-theme="modern"], [data-theme="modernlight"], [data-theme="sdrpp"]) .top-status .tchip.pass:not([hidden]) { grid-column: 1 / -1; max-width: none; min-width: 0; }
+
 @media (max-width: 1150px) { .top-status .tchip.pass:not([hidden]) { display: inline-flex; } }
-/* SDR++ style: the side bar is narrow, so the status chips are two to a row (long values get an ellipsis) */
-[data-theme="sdrpp"] .top-status { grid-template-columns: repeat(2, minmax(0, 1fr)); justify-content: stretch; min-width: 0; max-width: 100%; }
-[data-theme="sdrpp"] .top-status .tchip { min-width: 0; max-width: none; }
-[data-theme="sdrpp"] .top-status .tchip b { min-width: 0; white-space: nowrap; }
-[data-theme="sdrpp"] .top-status .tchip.pass:not([hidden]) { grid-column: 1 / -1; }
+
+
+
+
 
 /* check my system */
 .card.wide { grid-column: 1 / -1; }
@@ -1206,9 +1133,20 @@ body.customise #qJump .key::after { content: none; }
 #tab-sch .tablewrap th, #tab-rep .tablewrap th { top: 0; }
 /* side-by-side styles: the spectrum panel used to stay pinned while you scrolled and sat on top of the tables below it (memory list, scheduler ...) - now it scrolls away with the page */
 @media (min-width: 1101px) {
-  :is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .scope { position: static; height: auto; min-height: 420px; max-height: none; }
+  [data-theme] .wrap > .scope { position: static; height: auto; min-height: 420px; max-height: none; }
 }
-/* SDR++ style: never pinned (on a phone or tablet it took half the screen and the tab content slid under it) */
-[data-theme="sdrpp"] .wrap > .scope { position: static; }
+
 
 .chk-act { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* watch list */
+#lhTable button.wl { background: none; border: 0; padding: 0 2px; cursor: pointer; opacity: .25; font-size: .9em; filter: grayscale(1); }
+#lhTable button.wl:hover { opacity: .8; }
+#lhTable button.wl.on { opacity: 1; filter: none; }
+#lhTable tr.watched td { background: rgba(245,180,0,.16); }
+.toast.watch { border-left: 4px solid #f5b400; font-weight: 600; }
+
+/* ISM sensors */
+#ismTable .ism-v { display: inline-block; margin: 0 .5em .15em 0; white-space: nowrap; }
+#ismTable .ism-v.low { color: #ff7a5c; font-weight: 600; }
+#ismTable tr.live td { background: rgba(80, 220, 120, .10); }

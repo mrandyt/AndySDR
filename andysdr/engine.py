@@ -13,6 +13,7 @@ import numpy as np
 from . import capturemeta, devices, ft8
 from .adsb import ADSB_FREQ, Adsb
 from .meshsdr import MeshSdr
+from .ism import IsmSensors
 from .datalink import DatalinkStore
 from .dmrdb import DmrDb
 from .repeaters import Repeaters
@@ -53,6 +54,8 @@ class Radio:
         self.decoders.adsb = self.adsb
         self.meshsdr = MeshSdr(settings, self._emit)
         self.decoders.meshsdr = self.meshsdr
+        self.ism = IsmSensors(self._emit, freq_fn=lambda: self.freq, on_new=lambda row, text: self.decoders.log(text))
+        self.decoders.ism = self.ism
         self.decoders.freq_fn = lambda: self.freq
         self.decoders.job_fn = lambda: self.job
         self.decoders.dial_fn = lambda: (ft8.match_freq(self.freq, self.mode) or (None, self.freq))[1]
@@ -265,6 +268,8 @@ class Radio:
             self.decoders.stop()              # moved off the GOES channel
         if self.decoders.active == "meshsdr" and abs(f - self.freq) > 100000:
             self.decoders.stop()              # tuned away from the MeshCore channel
+        if self.decoders.active == "ism" and abs(f - self.freq) > 1000000:
+            self.decoders.stop()              # moved off the sensor band: rtl_433 would only be listening to nothing
         if self.decoders.active == "adsb" and abs(f - ADSB_FREQ) > 1000000:
             self.decoders.stop()              # tuned away from 1090 MHz: the aircraft decoder is no use here
         if abs(f - self.freq) > 1000:
@@ -312,7 +317,7 @@ class Radio:
         self.call(do)
 
     def _auto_feed(self, out):
-        if self.decoders.active in ("adsb", "ft8", "goes", "metop", "meshsdr"):
+        if self.decoders.active in ("adsb", "ft8", "goes", "metop", "meshsdr", "ism"):
             return
         # band plan says FT8 / FT4 here and something is on the air: start that decoder
         if (self.s.get("auto_identify", True) and self.decoders.active in (None, "") and not self.job
@@ -730,6 +735,8 @@ class Radio:
                 self._begin_adsb()
             elif dec_id == "meshsdr":
                 self.start_meshsdr()
+            elif dec_id == "ism":
+                self.start_ism()
             elif dec_id in ("goes", "metop"):
                 self._stop_scan()
                 self.channel = None
@@ -800,6 +807,35 @@ class Radio:
     def stop_meshsdr(self):
         def do():
             if self.decoders.active == "meshsdr":
+                self.decoders.stop()
+            self._push_state(True)
+        self.call(do)
+
+    # ------------------------------------------------------------------ ISM sensors (rtl_433)
+    def start_ism(self, freq=None):
+        """Tune to an ISM sensor frequency (433.92 MHz unless told otherwise) and start rtl_433 on the receiver."""
+        def do():
+            f = int(freq or 0)
+            if not 100e6 < f < 1.1e9:
+                f = 433920000
+            self._stop_scan()
+            self._auto_reset()
+            self.channel = None
+            if self.dev and self.dev.sample_rate < 250000:
+                self.s["sample_rate"] = 2400000
+                self._open_device(self.dev.key)
+            self.decoders.stop()
+            self._tune(f, "DIG", force=True)
+            if not self.decoders.start("ism"):
+                return
+            self.discard = 3
+            self._emit("event", {"level": "info", "text": "Sensors: listening on %.4f MHz with rtl_433" % (f / 1e6)})
+            self._push_state(True)
+        self.call(do)
+
+    def stop_ism(self):
+        def do():
+            if self.decoders.active == "ism":
                 self.decoders.stop()
             self._push_state(True)
         self.call(do)
@@ -1338,7 +1374,7 @@ class Radio:
                 last_pri = time.time()
                 self._priority_check(spec_db)
 
-            if self.decoders.active in ("adsb", "goes", "metop", "meshsdr"):
+            if self.decoders.active in ("adsb", "goes", "metop", "meshsdr", "ism"):
                 self.decoders.feed_iq(iq, fs, self.offset())    # these decoders work on the raw samples; no audio
             elif produce:
                 try:

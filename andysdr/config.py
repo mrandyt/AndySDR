@@ -6,7 +6,7 @@ import sys
 import threading
 
 APP_NAME = "AndySDR"
-VERSION = "1.20.12"
+VERSION = "1.21.0"
 GITHUB_REPO = "mrandyt/AndySDR"   # where updates are published (GitHub Releases)
 
 
@@ -72,7 +72,7 @@ DEFAULTS = {
     "decoder": "",                # active decoder id
     "decoder_paths": {},          # user overrides of external decoder exe paths
     "window_open_browser": False,
-    "theme": "pro2045",           # pro2045 | ubcd260 | trx2 | sdrpp | bluedark | bluelight | softdark | softlight
+    "theme": "modern",            # modern | modernlight | bluedark | bluelight | softdark | softlight
     "auto_decoder": True,         # start a memory channel's decoder automatically
     "auto_identify": True,        # identify signals and start the right decoder by itself
     "schedule": [],               # timed captures (WEFAX, SSTV, LRPT, recordings)
@@ -97,7 +97,8 @@ DEFAULTS = {
     "adsb_share": False,          # re-broadcast as SBS (30003) and raw AVR (30002) for other programs
     "adsb_sbs_port": 30003,
     "adsb_raw_port": 30002,
-    "alert_pager": True, "alert_emergency": True, "alert_priority": True, "alert_capture": True,   # what the tablet app is notified about
+    "alert_pager": True, "alert_emergency": True, "alert_priority": True, "alert_capture": True, "alert_watch": True,   # what the tablet app is notified about
+    "watch_list": [],             # callsigns, radio IDs and talkgroups to alert on when heard (DMR / P25 / NXDN / M17)
     "dmr_db_auto": True,          # download / refresh the RadioID callsign list by itself (names in DMR Last heard)
     "dmr_db_url": "",             # optional own address for that list (blank = RadioID.net)
     "hidden_buttons": None,       # front-panel buttons hidden with CUSTOMISE, shared by every screen (None = nobody has customised yet)

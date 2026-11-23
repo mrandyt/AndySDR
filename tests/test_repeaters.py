@@ -109,4 +109,15 @@ check(not rep4.due(), "fresh list not due")
 clock[0] += 15 * 86400 + 7 * 3600
 check(rep4.due(), "list older than 14 days is due again")
 check(R.memory_name({"call": "GB3SN", "where": "Southampton Water"}) == "GB3SN Southampto", "memory name fits 16 characters")
+# spectrum markers
+mk = rep.marks()
+check(len(mk) >= 300 and all(len(m) == 5 for m in mk), "marks: one small row per repeater output")
+check(all(mk[i][0] <= mk[i + 1][0] for i in range(len(mk) - 1)), "marks: sorted by frequency (the screen searches them)")
+check(len({(round(m[0], 5), m[1]) for m in mk}) == len(mk), "marks: no repeats")
+near = rep.marks(60, 50.9, -1.4)
+check(near and len(near) < len(mk) and any(m[1] == "G4EBD" for m in near) and not any(m[1] == "G3YPP" for m in near), "marks: within 60 km of Southampton")
+check(len(rep.marks(60)) == len(mk), "marks: a distance without a position shows everything")
+g = [m for m in mk if m[1] == "G4EBD"][0]
+check("FM" in g[3] and isinstance(g[0], float), "marks: modes and output MHz are there for tuning")
+
 print("ALL PASS")

@@ -23,7 +23,7 @@ import time
 import urllib.parse
 
 from . import capturemeta
-from .alerts import Alerts, KINDS as ALERT_KINDS
+from .alerts import Alerts, KINDS as ALERT_KINDS, clean_watch_list
 from . import diagnose
 from . import repeaters
 from .dsp import BANDWIDTHS
@@ -101,7 +101,7 @@ class Server:
         self.fail_times = {}
         radio.add_listener(self._from_radio)
         self.updater = Updater(settings, self._from_radio, shutdown=radio.stop)
-        self.alerts = Alerts(settings)
+        self.alerts = Alerts(settings, on_add=self._alert_added)
         self._last_check = None
 
     # ---------------------------------------------------------------- radio -> clients
@@ -115,6 +115,15 @@ class Server:
         try:
             self.loop.call_soon_threadsafe(self._broadcast, kind, payload)
         except RuntimeError:                 # the server loop has stopped: stop sending (and stop flooding the log)
+            self.loop = None
+
+    def _alert_added(self, item):
+        """A watch-list hit also pops up on every PC / tablet screen that has AndySDR open (the rest are for the phone app)."""
+        if item.get("kind") != "watch" or self.loop is None:
+            return
+        try:
+            self.loop.call_soon_threadsafe(self._broadcast, "watch_alert", item)
+        except RuntimeError:
             self.loop = None
 
     def _broadcast(self, kind, payload):
@@ -201,6 +210,18 @@ class Server:
         if path == "/api/pager.csv":
             data = self.radio.pager.export_csv().encode("utf-8-sig")
             fname = time.strftime("andysdr_pager_%Y%m%d_%H%M.csv")
+            await self._send(writer, 200, data, "text/csv",
+                             extra={"Content-Disposition": f'attachment; filename="{fname}"'})
+            return
+        if path == "/api/heard.csv":
+            data = self.radio.lastheard.export_csv().encode("utf-8-sig")
+            fname = time.strftime("andysdr_lastheard_%Y%m%d_%H%M.csv")
+            await self._send(writer, 200, data, "text/csv",
+                             extra={"Content-Disposition": f'attachment; filename="{fname}"'})
+            return
+        if path == "/api/ism.csv":
+            data = self.radio.ism.export_csv().encode("utf-8-sig")
+            fname = time.strftime("andysdr_sensors_%Y%m%d_%H%M.csv")
             await self._send(writer, 200, data, "text/csv",
                              extra={"Content-Disposition": f'attachment; filename="{fname}"'})
             return
@@ -383,6 +404,7 @@ class Server:
             "schedule": r.scheduler.status(),
             "mesh": r.mesh.snapshot(), "mesh_history": r.mesh.history[-1500:],
             "meshsdr": r.meshsdr.snapshot(),
+            "ism": r.ism.snapshot(),
             "pager": r.pager.snapshot(),
             "datalink": r.datalink.snapshot(),
             "lastheard": r.lastheard.snapshot(), "dmrdb": r.dmrdb.status(), "repeaters": r.repeaters.status(),
@@ -395,8 +417,8 @@ class Server:
                                                  "server_port", "require_password_local",
                                                  "deemphasis_us", "theme",
                                                  "update_check", "update_auto_download", "hidden_buttons",
-                                                 "alert_pager", "alert_emergency", "alert_priority", "alert_capture",
-                                                 "dmr_db_auto")},
+                                                 "alert_pager", "alert_emergency", "alert_priority", "alert_capture", "alert_watch",
+                                                 "watch_list", "dmr_db_auto")},
             "server": {"addresses": lan_addresses(), "port": self.s["server_port"],
                        "password": self.s["password"] if self._is_local(c.peer) else "",
                        "host": socket.gethostname()},
@@ -626,6 +648,7 @@ class Server:
                            "require_password_local": bool, "deemphasis_us": int, "theme": str,
                            "password": str, "mute_digital_audio": bool, "update_check": bool, "update_auto_download": bool,
                            "alert_pager": bool, "alert_emergency": bool, "alert_priority": bool, "alert_capture": bool,
+                           "alert_watch": bool, "watch_list": clean_watch_list,
                            "dmr_db_auto": bool}
                 for k, v in m.get("values", {}).items():
                     if k in allowed:
@@ -706,6 +729,16 @@ class Server:
                                "summary": {"ok": 0, "warn": 0, "bad": 0, "info": 1}, "when": time.time(), "version": VERSION}
                     self.loop.call_soon_threadsafe(self._reply, c, "check_result", rep)
                 threading.Thread(target=run_check, name="check-system", daemon=True).start()
+            elif cmd == "rep_marks":
+                obs = r.scheduler.sats.observer()
+                try:
+                    km = float(m.get("max_km") or 0)
+                except (TypeError, ValueError):
+                    km = 0
+                if r.repeaters.due():
+                    r.repeaters.refresh()
+                self._reply(c, "rep_marks", {"marks": r.repeaters.marks(km, obs[0] if obs else None, obs[1] if obs else None),
+                                             "status": r.repeaters.status(), "pos": bool(obs), "km": km})
             elif cmd in ("rep_query", "rep_store_all", "rep_scan"):
                 obs = r.scheduler.sats.observer()
                 lat, lon = (obs[0], obs[1]) if obs else (None, None)
@@ -758,6 +791,15 @@ class Server:
                 r.pager.set_alias(m["capcode"], m.get("name", ""))
             elif cmd == "pager_highlight":
                 r.pager.set_highlight(m["capcode"], bool(m.get("on", True)))
+            elif cmd == "ism_start":
+                try:
+                    r.start_ism(int(float(m.get("freq") or 0)))
+                except (TypeError, ValueError):
+                    r.start_ism()
+            elif cmd == "ism_stop":
+                r.stop_ism()
+            elif cmd == "ism_clear":
+                r.ism.clear()
             elif cmd == "meshsdr_start":
                 if any(k in m for k in ("freq", "bw", "sf")):
                     r.meshsdr.set_cfg(freq=m.get("freq"), bw=m.get("bw"), sf=m.get("sf"))

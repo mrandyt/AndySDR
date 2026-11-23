@@ -11,6 +11,8 @@ talkgroup (with its name), when, on which frequency and for how long - newest fi
 as "heard" events.  Lines that are only trunking signalling (call alerts, channel grants) are ignored.
 """
 import collections
+import csv
+import io
 import logging
 import re
 import threading
@@ -211,6 +213,28 @@ class LastHeard:
     def snapshot(self):
         with self._lock:
             return [self._public(r) for r in self.rows]          # newest first
+
+    CSV_FIELDS = ("date", "time", "protocol", "slot", "system", "source_id", "callsign", "name", "place", "call_type",
+                  "target", "talkgroup_name", "frequency_mhz", "seconds", "emergency", "encrypted")
+
+    def export_csv(self):
+        """Everything in the list as CSV, oldest first (opens in Excel).  Text that came off the air is made safe against
+        spreadsheet formulas, because a station can send any callsign it likes."""
+        def safe(v):
+            v = "" if v is None else str(v)
+            return "'" + v if v[:1] in ("=", "+", "-", "@", "\t", "\r") else v
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(self.CSV_FIELDS)
+        for r in reversed(self.snapshot()):
+            lt = time.localtime(r["first"])
+            w.writerow([time.strftime("%Y-%m-%d", lt), time.strftime("%H:%M:%S", lt), r["proto"], r["slot"] or "",
+                        safe(r["cc"]), safe("" if isinstance(r["src"], str) else r["src"]),
+                        safe(r["call"]), safe(r["name"]), safe(r["place"]),
+                        r["kind"], safe(r["tgt"]), safe(r["tgname"]),
+                        f"{r['freq'] / 1e6:.4f}" if r["freq"] else "", r["secs"],
+                        "yes" if r["emerg"] else "", "yes" if r["enc"] else ""])
+        return buf.getvalue()
 
     def clear(self):
         with self._lock:

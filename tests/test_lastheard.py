@@ -104,5 +104,20 @@ check("a failing screen or missing database never raises into the decoder", len(
 check("describe() handles a private call", describe(dict(call="", name="", src=1, kind="private", tgt=2, tgname="", emerg=False, enc=True, proto="DMR", slot=1))
       == "Heard: ID (1) -> private call to 2 (encrypted)  [DMR slot 1]")
 
+# ---------------------------------------------------------------- CSV export
+import csv as _csv, io as _io
+now3 = [1_700_000_000.0]
+lh3 = LastHeard({}, lambda k, p: None, FakeDb(), freq_fn=lambda: 438412500, clock=lambda: now3[0], timers=False)
+lh3.feed("Sync: +DMR  [slot1]  slot2  | Color Code=01 | VLC")
+lh3.feed("SLOT 1 TGT=235 SRC=2356184 FLCO=0x00 FID=0x00 SVC=0x00 Group Call")
+now3[0] += 30
+lh3.feed(" CAN: 0 DST: ALL SRC: =cmd|calc")
+rows = list(_csv.reader(_io.StringIO(lh3.export_csv())))
+check("CSV has a header and one line per transmission", rows[0][0] == "date" and len(rows) == 3)
+check("... oldest first", rows[1][6] == "M7FEP" and rows[2][2] == "M17")
+check("... with the ID, name, talkgroup name and frequency", rows[1][5] == "2356184" and rows[1][7] == "Andy T" and rows[1][11] == "United Kingdom" and rows[1][12] == "438.4125")
+check("a callsign that looks like a formula is made safe", rows[2][6].startswith("'="))
+check("an empty list still exports a header", len(list(_csv.reader(_io.StringIO(LastHeard({}, lambda k, p: None, timers=False).export_csv())))) == 1)
+
 print("FAILED: " + ", ".join(fails) if fails else "ALL PASS")
 sys.exit(1 if fails else 0)

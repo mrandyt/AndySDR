@@ -1,4 +1,4 @@
-"""Download the free decoder programs AndySDR uses (DSD-FME, multimon-ng, SatDump).
+"""Download the free decoder programs AndySDR uses (DSD-FME, multimon-ng, SatDump, rtl_433).
 
 Used in two places:
   * the Windows build (GitHub Actions / build_windows.bat) – bundles them next to AndySDR.exe:
@@ -41,6 +41,14 @@ PROGRAMS = {
         "asset": r"(win64|x64|w64|amd64).*\.(zip|7z)$",
         "avoid": r"(source|src|linux|arm|aarch64|mac|osx|\.deb)",
         "licence": "GPL-2.0 – https://github.com/EliasOenal/multimon-ng",
+    },
+    "rtl_433": {
+        "exe": "rtl_433",
+        "repos": ["merbanan/rtl_433"],
+        # the release also holds a 32-bit build, macOS / Linux builds and the source: only the 64-bit Windows zip is wanted
+        "asset": r"win.*x64.*\.zip$",
+        "avoid": r"(source|src|linux|arm|aarch64|mac|osx|soapy|x32|\.deb)",
+        "licence": "GPL-2.0 – https://github.com/merbanan/rtl_433",
     },
     "satdump": {
         "exe": "satdump",
