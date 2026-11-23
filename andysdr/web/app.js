@@ -374,6 +374,23 @@ function toggleBank(b) {
   send({ cmd: "mem_bank", bank: b, fields: { enabled: !on } });
   toast(`Bank ${b} ${on ? "removed from" : "added to"} scan`);
 }
+/* tap-to-type frequency (replaces the on-screen number keypad) */
+(function () {
+  const go = $("lcdGo"), inp = $("lcdGoIn");
+  if (!go || !inp) return;
+  const open = () => { go.hidden = false; inp.value = ""; inp.focus(); };
+  const close = () => { go.hidden = true; inp.blur(); };
+  $("lcdFreq").addEventListener("click", () => { if (!explainOn) (go.hidden ? open() : close()); });
+  $("lcdFreqTxt").addEventListener("click", () => { if (!explainOn) (go.hidden ? open() : close()); });
+  inp.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } });
+  go.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const v = parseFloat(inp.value.replace(",", "."));
+    if (!(v > 0)) { toast("Type a frequency in MHz, e.g. 153.025", "warn"); return; }
+    send({ cmd: "tune", freq: Math.round(v * 1e6) });
+    close();
+  });
+})();
 document.querySelectorAll(".radio [data-k]").forEach((b) => b.addEventListener("click", () => { if (!explainOn) key(b.dataset.k); }));
 
 document.addEventListener("keydown", (e) => {
@@ -1174,6 +1191,9 @@ function renderActivity(list) {
 function renderDecoders() {
   $("decBtns").innerHTML = decoders.map((d) => `<button class="btn" data-id="${d.id}" title="${esc(d.help)}">${esc(d.name)}</button>`).join("");
   $("decBtns").querySelectorAll("button").forEach((b) => b.onclick = () => send({ cmd: "decoder", id: b.dataset.id, sub: $("dsdSub").value }));
+  const nOk = decoders.filter((d) => d.ready).length, nMiss = decoders.length - nOk;
+  $("decSummary").textContent = nMiss ? `⚠ ${nMiss} decoder program${nMiss > 1 ? "s" : ""} missing – open for details` : `Decoder programs: all ${nOk} ready`;
+  $("decDetails").classList.toggle("warn", nMiss > 0);
   $("decStatus").innerHTML = decoders.map((d) => `<div class="decitem"><b>${esc(d.name)}</b>${esc(d.help)}<br>
     ${d.ready ? `<span class="ok">✔ ready</span> <span class="muted">${esc(d.path)}</span>` : `<span class="no">✖ program not found – press ⬇ Download missing decoders</span>`}</div>`).join("");
   renderState && S.freq && renderState();
@@ -2750,10 +2770,8 @@ const HELP = {
   k_dly: ["DLY", "Delay on/off for the current memory channel. With delay on, the scanner waits (default 2 s) after a transmission ends so you catch the reply."],
   k_rec: ["REC", "Records what you hear to a WAV file in %APPDATA%\\AndySDR\\recordings. Press again to stop."],
   k_dec: ["DEC", "Opens the Decoders tab to pick a decoder for digital voice, pagers, weather fax or satellite images."],
-  k_dot: ["· (decimal point)", "Separates MHz from the rest when typing a frequency, e.g. 1 4 5 · 5 E = 145.500 MHz. For HF use MHz too: 8 · 0 4 E = 8.040 MHz."],
-  k_e: ["E (Enter)", "Tunes the frequency you typed (in MHz). Keyboard Enter does the same."],
+  k_typefreq: ["Type a frequency", "Click the big frequency on the display, type the frequency in MHz (for example 153.025 or 8.04) and press Enter or GO. On a keyboard you can also just start typing digits and press Enter."],
   k_arrows: ["▲ ▼", "Step up/down by the STEP size. While scanning or searching they set the direction / skip to the next channel."],
-  k_clr: ["CLR", "Clears what you were typing (keyboard: Backspace or Esc)."],
   layout: ["Layout", "Control room puts the radio on the left, a big spectrum in the middle and seven panels around it (memory, decoder log, pictures, scheduler, recordings with instant replay, live activity, pager messages) so you can see everything at once. Each panel has a drop-down to choose what it shows – every tab is available – and a ⤢ button to make it full size. Classic is the original tabbed page; Auto uses Control room on big screens only."],
   zoom: ["Zoom", "Magnify the spectrum. On a touch screen stretch two fingers apart to zoom in and pinch to zoom out; on a laptop touchpad do the same pinch gesture; with a mouse hold Ctrl and scroll. When zoomed in, scroll the wheel (or two-finger swipe on the touchpad) up/down to slide the view left/right, or drag it. Click a signal to tune it. Follow keeps the view centred on the frequency you are tuned to; Fit shows everything. Shift+scroll still steps the tuning frequency."],
   scope: ["Spectrum & waterfall", "Live picture of the radio band around you. The top graph shows signal strength across the received bandwidth; the waterfall below shows history – transmissions appear as bright streaks. Click anywhere to tune there; pinch or Ctrl+scroll to zoom (see Zoom). The red line and shading show the channel you are listening to. 'Range' and 'Top' set the display contrast."],
@@ -2810,15 +2828,15 @@ function openHelp() {
   <ol>
     <li>Plug in your SDR, open the <b>RECEIVER</b> tab, pick it and press <b>Use this receiver</b>.</li>
     <li>Press <b>AUDIO ON/OFF</b> once so this computer can play sound.</li>
-    <li>Type a frequency on the keypad, e.g. <code>1 4 5 · 5 E</code>, or click a signal on the waterfall.</li>
+    <li>Click the big frequency on the display and type one (for example <code>145.5</code>), or click a signal on the waterfall.</li>
     <li>Turn <b>SQUELCH</b> up until the hiss stops, set <b>RF GAIN</b> so the noise floor is low and signals stand out.</li>
     <li>Store channels with <b>PGM</b> or import from RadioReference in the <b>MEMORY</b> tab, then press <b>SCAN</b>.</li>
     <li>Press <b>SRCH</b> to hunt for live transmissions across a band.</li>
   </ol>
   <h3>KNOBS &amp; DISPLAY</h3>${ctl(["volume", "squelch", "gain", "power", "leds", "lcd", "topstatus"])}
   <h3>QUICK BUTTONS (under the display)</h3>${ctl(["qmode", "qbw", "qband", "qhot", "qdigi", "qdec", "qnotch", "qlock", "qtog", "qfiles", "replay"])}
-  <h3>KEYPAD &amp; FUNCTION KEYS</h3>${ctl(["k_skip", "k_scan", "k_man", "k_srch", "k_pgm", "k_lo", "k_pri", "k_mode", "k_step", "k_bank", "k_dly", "k_rec", "k_dec", "k_dot", "k_e", "k_arrows", "k_clr"])}
-  <p class="small">Keyboard: digits and <code>.</code> type, <code>Enter</code> tunes, <code>↑ ↓</code> step, <code>S</code> scan, <code>M</code> manual, <code>P</code> program, <code>L</code> lockout, <code>I</code> skip 10 min, <code>H</code> help, <code>Esc</code> clear.</p>
+  <h3>FUNCTION KEYS</h3>${ctl(["k_skip", "k_scan", "k_man", "k_srch", "k_pgm", "k_lo", "k_pri", "k_mode", "k_step", "k_bank", "k_dly", "k_rec", "k_dec", "k_arrows", "k_typefreq"])}
+  <p class="small">Keyboard: digits and <code>.</code> type, <code>Enter</code> tunes, <code>↑ ↓</code> step, <code>S</code> scan, <code>M</code> manual, <code>P</code> program, <code>L</code> lockout, <code>I</code> skip 10 min, <code>H</code> help, <code>Esc</code> clear. Click the big frequency to type one with the mouse or on a touch screen.</p>
   <h3>SCREENS</h3>${ctl(["scope", "zoom", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "satauto", "gps", "acars", "sonde", "ft8tab", "morsebox", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "updates", "receiver", "remote", "theme", "conn"])}
   <h3>DECODER PROGRAMS</h3>
   <p>AndySDR has WEFAX and SSTV built in (SSTV: Martin, Scottie, Robot and PD modes – ISS 145.800 NFM, 2 m 144.500 NFM, 20 m 14.230 USB). DSD-FME, multimon-ng and SatDump now come bundled in the <code>decoders</code> folder next to <code>AndySDR.exe</code>. If one shows ✖ in the DECODERS tab, press <b>⬇ Download missing decoders</b> and AndySDR fetches it from GitHub into <code>%APPDATA%\\AndySDR\\decoders</code>. You can also unzip your own copy into either folder (any sub-folder is fine – AndySDR finds the .exe):</p>

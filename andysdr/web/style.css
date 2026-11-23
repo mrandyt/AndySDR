@@ -133,10 +133,8 @@ button, select, input { font-family: inherit; font-size: 13px; }
 .radio-right { display: flex; flex-direction: column; gap: 10px; }
 .fkeys { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
 .key-skip { grid-column: 1 / -1; font-weight: 800; letter-spacing: 1.5px; }   /* SKIP: its own full-width row above the function keys */
-.numkeys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
-.numkeys .num { font-size: 18px; padding: 9px 0; font-family: var(--mono); }
 .key-enter { background: var(--key-hot); color: var(--key-hot-ink); }
-.arrows { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 7px; }
+.arrows { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 
 /* ---------- LCD ---------- */
 .radio-center { display: flex; flex-direction: column; gap: 12px; }
@@ -450,8 +448,7 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
   .key-power { flex: 1 1 100%; }
   .fkeys { gap: 5px; }
   .fkeys .key { font-size: 11px; padding: 8px 0; }
-  .numkeys .num { padding: 7px 0; font-size: 16px; }
-  #spec { height: calc(120px + var(--bp-strip, 30px)); } #wf { height: 160px; }
+    #spec { height: calc(120px + var(--bp-strip, 30px)); } #wf { height: 160px; }
   .scope-bar { flex-wrap: wrap; gap: 8px; }
   .scope-bar .mini:not(:first-of-type):not(.keep) { display: none; }
   .vfo-hint { display: none; }
@@ -696,8 +693,8 @@ body.cr .scope-title { white-space: nowrap; }
 body.cr #scopeInfo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
 body.cr .scope-bar { flex-wrap: wrap; row-gap: 4px; }
 body.cr #spec { height: calc(170px + var(--bp-strip, 30px)); }
-body.cr .numkeys .key, body.cr .fkeys .key, body.cr .arrows .key { height: 34px; padding: 0; }
-body.cr .numkeys, body.cr .fkeys, body.cr .arrows { gap: 6px; }
+body.cr body.cr .fkeys .key, body.cr .arrows .key { height: 34px; padding: 0; }
+body.cr .fkeys, body.cr .arrows { gap: 6px; }
 body.cr .knob { transform: scale(.85); }
 
 /* ---------- Colour themes: Blue (dark / light) and Soft, easy-on-the-eyes (dark / light) ---------- */
@@ -953,9 +950,7 @@ html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spec
 :is([data-theme="modern"], [data-theme="modernlight"]) .key-power { min-height: 52px; font-size: 15px; border-radius: 14px; }
 :is([data-theme="modern"], [data-theme="modernlight"]) .fkeys { grid-template-columns: repeat(4, 1fr); gap: 10px; }
 :is([data-theme="modern"], [data-theme="modernlight"]) .key-skip { background: var(--accent); color: var(--accent-ink, #fff); }
-:is([data-theme="modern"], [data-theme="modernlight"]) .numkeys { gap: 10px; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .numkeys .num { font-size: 20px; padding: 12px 0; }
-:is([data-theme="modern"], [data-theme="modernlight"]) .arrows { gap: 10px; }
+:is([data-theme="modern"], [data-theme="modernlight"]) :is([data-theme="modern"], [data-theme="modernlight"]) :is([data-theme="modern"], [data-theme="modernlight"]) .arrows { gap: 10px; }
 :is([data-theme="modern"], [data-theme="modernlight"]) .radio-right { gap: 14px; padding: 0; }
 
 /* quick groups: one calm card per group with a clear label */
@@ -1077,3 +1072,17 @@ body.sz-wf #wf { height: var(--user-wf) !important; min-height: 0 !important; fl
   input[type="range"] { min-height: 32px; }
   .key.q { min-height: 44px; }
 }
+
+/* tap-to-type frequency box on the display */
+.lcd-freq, .lcd-freq-txt { cursor: pointer; }
+.lcd-go { display: flex; gap: 8px; margin: 6px 0 2px; }
+.lcd-go[hidden] { display: none; }
+.lcd-go input { flex: 1; min-width: 0; font: 600 16px var(--mono, monospace); padding: 8px 10px; border-radius: 10px; border: 1px solid #5b4bd6; background: #000; color: #fff; }
+.lcd-go button { min-width: 56px; }
+
+/* DECODERS tab: the live decoder window gets the room; the per-program status list is tucked away */
+.console.decwin { height: clamp(320px, 56vh, 720px); font-size: 13px; }
+.decdetails { margin-top: 10px; }
+.decdetails > summary { cursor: pointer; color: var(--muted, #8a93a6); font-size: 12px; padding: 4px 0; }
+.decdetails.warn > summary { color: #ff9a6a; }
+.decdetails .declist { margin-top: 8px; }

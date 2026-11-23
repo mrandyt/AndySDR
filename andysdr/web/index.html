@@ -102,9 +102,10 @@
           <span id="fLo">L/O</span><span id="fAgc">AGC</span><span id="fRec">REC</span><span id="fDec">DEC</span>
         </div>
         <div class="lcd-row lcd-banks" id="lcdBanks"></div>
+        <form class="lcd-go" id="lcdGo" hidden><input id="lcdGoIn" inputmode="decimal" autocomplete="off" placeholder="Frequency in MHz, e.g. 153.025" aria-label="Frequency in MHz"><button class="key q" type="submit">GO</button></form>
         <div class="lcd-main">
           <div class="lcd-ch"><small>CH</small><div id="lcdCh" class="seg-small"></div></div>
-          <div class="lcd-freq" id="lcdFreq"></div><div class="lcd-freq-txt" id="lcdFreqTxt"></div>
+          <div class="lcd-freq" id="lcdFreq" title="Click to type a frequency in MHz"></div><div class="lcd-freq-txt" id="lcdFreqTxt"></div>
           <div class="lcd-unit">MHz</div>
         </div>
         <div class="lcd-row lcd-info">
@@ -174,7 +175,7 @@
       </div>
     </div>
 
-    <!-- right: keypad -->
+    <!-- right: function keys -->
     <div class="radio-right">
       <div class="fkeys">
         <button class="key key-skip" data-k="skip" data-help="k_skip">SKIP ▸ next channel</button>
@@ -191,15 +192,8 @@
         <button class="key" data-k="rec" data-help="k_rec">REC</button>
         <button class="key" data-k="dec" data-help="k_dec">DEC</button>
       </div>
-      <div class="numkeys">
-        <button class="key num" data-k="1">1</button><button class="key num" data-k="2">2</button><button class="key num" data-k="3">3</button>
-        <button class="key num" data-k="4">4</button><button class="key num" data-k="5">5</button><button class="key num" data-k="6">6</button>
-        <button class="key num" data-k="7">7</button><button class="key num" data-k="8">8</button><button class="key num" data-k="9">9</button>
-        <button class="key num" data-k="." data-help="k_dot">·</button><button class="key num" data-k="0">0</button><button class="key num key-enter" data-k="e" data-help="k_e">E</button>
-      </div>
       <div class="arrows">
         <button class="key" data-k="down" data-help="k_arrows">▼</button>
-        <button class="key" data-k="clr" data-help="k_clr">CLR</button>
         <button class="key" data-k="up" data-help="k_arrows">▲</button>
       </div>
     </div>
@@ -335,8 +329,11 @@
       <label class="small" title="Silences the raw data noise while DMR / P25 / TETRA / pager decoding is running. The decoder still plays the decoded voice."><input type="checkbox" id="muteDig" checked> Mute coded noise while decoding</label>
       <span class="grow"></span><span id="sigNow" class="sig-chip" hidden></span>
     </div>
-    <div class="declist" id="decStatus"></div>
-    <pre class="console" id="decLog"></pre>
+    <pre class="console decwin" id="decLog"></pre>
+    <details class="decdetails" id="decDetails">
+      <summary id="decSummary">Decoder programs</summary>
+      <div class="declist" id="decStatus"></div>
+    </details>
   </div>
 
 
