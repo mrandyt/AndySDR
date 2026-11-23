@@ -162,5 +162,45 @@ check("the password is not in the report either", b"ANDY-SECRET" not in z.read("
 z2 = zipfile.ZipFile(io.BytesIO(D.build_zip(rep, {}, tempfile.mkdtemp())))
 check("with no log folder it still makes a zip", "report.txt" in z2.namelist())
 
+# ---------------------------------------------------------------- why no weather pictures
+import tempfile, time as _t
+class PSats:
+    def __init__(s, on=(), obs=(51.5, -0.1), passes=()): s.on, s.obs, s.p = on, obs, passes
+    def cfg(s): return {k: {"enabled": True} for k in s.on} | {"other": {"enabled": False}}
+    def observer(s): return s.obs
+    def upcoming(s, now=None): return list(s.p)
+class PSch:
+    def __init__(s, sats, jobs=()): s.sats, s._j = sats, jobs
+    def jobs(s): return list(s._j)
+class PRadio:
+    def __init__(s, sats, jobs=(), folder=""):
+        s.scheduler = PSch(sats, jobs)
+        class De: images_dir = folder
+        s.decoders = De()
+        s.s = {}
+now = _t.time()
+empty = tempfile.mkdtemp()
+r = D.check_pictures(PRadio(PSats(), folder=empty), now, empty)
+check("nothing switched on says so, with where to switch it on", any(i["id"] == "pic_none" and "SCHEDULER" in i["fix"] for i in r))
+check("no picture yet is only information", [i for i in r if i["id"] == "pic_last"][0]["level"] == "info")
+pics = tempfile.mkdtemp(); os.makedirs(os.path.join(pics, "lrpt_1")); f = os.path.join(pics, "lrpt_1", "a.png"); open(f, "wb").write(b"x")
+os.utime(f, (now - 3 * 86400, now - 3 * 86400))
+P = [{"name": "Meteor-M N2-4", "aos": now + 3600, "max_el": 41}]
+r = D.check_pictures(PRadio(PSats(("meteor_m24",), passes=P), folder=pics), now, pics, satdump_found=True)
+d = {i["id"]: i for i in r}
+check("a 3-day-old newest picture while recording is on is a warning with the age", d["pic_last"]["level"] == "warn" and "3.0 days" in d["pic_last"]["title"])
+check("next pass is named with its time and elevation", "Meteor-M N2-4" in d["pic_pass"]["title"] and "41" in d["pic_pass"]["title"])
+r = D.check_pictures(PRadio(PSats(("meteor_m24",), passes=[]), folder=pics), now, pics, satdump_found=True)
+check("no passes at all points at min elevation / day boxes", [i for i in r if i["id"] == "pic_pass"][0]["level"] == "warn" and "Min elev" in [i for i in r if i["id"] == "pic_pass"][0]["fix"])
+r = D.check_pictures(PRadio(PSats(("meteor_m24",), passes=P), folder=pics), now, pics, satdump_found=False)
+check("missing SatDump is a problem that says recordings can't become pictures", [i for i in r if i["id"] == "pic_satdump"][0]["level"] == "bad")
+r = D.check_pictures(PRadio(PSats(("meteor_m24",), obs=None), folder=pics), now, pics, satdump_found=True)
+check("no position: the pass line is left to the position check", not any(i["id"] == "pic_pass" for i in r))
+os.utime(f, (now - 3600, now - 3600))
+r = D.check_pictures(PRadio(PSats(("meteor_m24",), passes=P), folder=pics), now, pics, satdump_found=True)
+check("a picture from the last hour is fine", [i for i in r if i["id"] == "pic_last"][0]["level"] == "ok")
+r = D.check_pictures(PRadio(PSats(), jobs=[{"action": "wefax", "enabled": True}], folder=pics), now, pics)
+check("a weather-fax capture alone counts as switched on", not any(i["id"] == "pic_none" for i in r))
+
 print("FAILED: " + ", ".join(fails) if fails else "ALL PASS")
 sys.exit(1 if fails else 0)

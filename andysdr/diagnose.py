@@ -235,6 +235,84 @@ def check_network(settings, server_addresses, run=_run, windows=None):
     return out
 
 
+def _newest_picture(folder):
+    """(mtime, path) of the newest .png under the pictures folder, or None."""
+    best = None
+    for root, _dirs, files in os.walk(folder):
+        for f in files:
+            if f.lower().endswith(".png"):
+                p = os.path.join(root, f)
+                try:
+                    m = os.path.getmtime(p)
+                except OSError:
+                    continue
+                if best is None or m > best[0]:
+                    best = (m, p)
+    return best
+
+
+def check_pictures(radio, now=None, images_dir=None, satdump_found=None):
+    """Why are there no weather pictures?  Looks at what is switched on, the next passes, the decoder program and the
+    newest picture on disk."""
+    now = now or time.time()
+    out = []
+    sats = radio.scheduler.sats
+    cfg = sats.cfg()
+    on = [sid for sid, c in cfg.items() if c.get("enabled")]
+    try:
+        jobs = [j for j in radio.scheduler.jobs() if j.get("enabled", True)]
+    except Exception:                                       # noqa: BLE001
+        jobs = []
+    pic_jobs = [j for j in jobs if j.get("action") in ("wefax", "lrpt", "goes", "metop", "sstv", "satdump")]
+    folder = images_dir or getattr(radio.decoders, "images_dir", "")
+    newest = _newest_picture(folder) if folder and os.path.isdir(folder) else None
+    if newest:
+        age_h = (now - newest[0]) / 3600.0
+        when = time.strftime("%a %d %b %H:%M", time.localtime(newest[0]))
+        out.append(item("pic_last", "ok" if age_h < 36 or not (on or pic_jobs) else "warn",
+                        f"Newest picture on this PC: {when}" + (f" ({age_h / 24:.1f} days ago)" if age_h >= 36 else ""),
+                        "", "" if age_h < 36 or not (on or pic_jobs) else "Pictures are expected - see the other lines in this section."))
+    else:
+        out.append(item("pic_last", "info", "No picture has been saved on this PC yet", "", ""))
+    if not on and not pic_jobs:
+        out.append(item("pic_none", "warn", "No satellite or weather-fax capture is switched on",
+                        "Pictures only arrive when something is told to record them.",
+                        "SCHEDULER page: tick Record next to a satellite, or add a capture."))
+        return out
+    if on:
+        names = ", ".join(sorted(sid for sid in on))
+        out.append(item("pic_sats", "ok", f"{len(on)} satellite{'s' if len(on) != 1 else ''} switched on for recording", names))
+        if sats.observer() is not None:
+            try:
+                nxt = [p for p in sats.upcoming(now) if p["aos"] > now - 600]
+            except Exception:                               # noqa: BLE001
+                nxt = []
+            day = [p for p in nxt if p["aos"] < now + 86400]
+            if not nxt:
+                out.append(item("pic_pass", "warn", "No passes in the next few days with the current settings",
+                                "Min elevation, the day boxes or the date limits may rule every pass out.",
+                                "SCHEDULER page: lower Min elev. (10-15° is usual), untick the day boxes, clear the dates."))
+            else:
+                p = nxt[0]
+                out.append(item("pic_pass", "ok", f"Next pass: {p['name']} at {time.strftime('%a %H:%M', time.localtime(p['aos']))} "
+                                f"(up to {p['max_el']}°)", f"{len(day)} pass{'es' if len(day) != 1 else ''} in the next 24 hours."))
+                if not day:
+                    out.append(item("pic_day", "info", "No pass in the next 24 hours", "Low or few passes happen some days.", ""))
+        from .satpass import SATELLITES
+        lrpt = [sid for sid in on if SATELLITES.get(sid, {}).get("action") in ("lrpt", "goes", "metop")]
+        if lrpt and satdump_found is None:
+            try:
+                from .decoders import find_exe
+                satdump_found = bool(find_exe("satdump", (radio.s.get("decoder_paths") if hasattr(radio, "s") else None) or {}))
+            except Exception:                               # noqa: BLE001
+                satdump_found = None
+        if lrpt and satdump_found is False:
+            out.append(item("pic_satdump", "bad", "SatDump (the satellite picture program) is not installed",
+                            "Satellite recordings are saved but cannot be turned into pictures.",
+                            "DECODERS page: ⬇ Download missing decoders (SatDump), or see Help > Decoders."))
+    return out
+
+
 def check_system(settings, radio, upd=None, dmr=None):
     out = []
     try:
@@ -294,7 +372,7 @@ def check_system(settings, radio, upd=None, dmr=None):
 def run_checks(radio, settings, server_addresses=None, upd=None, dmr=None, run=_run, windows=None):
     items = []
     for fn, args in ((check_receiver, (radio,)), (check_sdrplay, (radio, run, windows)), (check_signal, (radio,)),
-                     (check_decoders, (radio,)), (check_network, (settings, server_addresses, run, windows)),
+                     (check_decoders, (radio,)), (check_pictures, (radio,)), (check_network, (settings, server_addresses, run, windows)),
                      (check_system, (settings, radio, upd, dmr))):
         try:
             items.extend(fn(*args))
