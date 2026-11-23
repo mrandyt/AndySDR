@@ -1206,5 +1206,7 @@ body.customise #qJump .key::after { content: none; }
 #tab-sch .tablewrap th, #tab-rep .tablewrap th { top: 0; }
 /* side-by-side styles: the spectrum panel used to stay pinned while you scrolled and sat on top of the tables below it (memory list, scheduler ...) - now it scrolls away with the page */
 @media (min-width: 1101px) {
-  :is([data-theme="modern"], [data-theme="modernlight"], [data-theme="sdrpp"]) .wrap > .scope { position: static; height: auto; min-height: 420px; max-height: none; }
+  :is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .scope { position: static; height: auto; min-height: 420px; max-height: none; }
 }
+/* SDR++ style: never pinned (on a phone or tablet it took half the screen and the tab content slid under it) */
+[data-theme="sdrpp"] .wrap > .scope { position: static; }
