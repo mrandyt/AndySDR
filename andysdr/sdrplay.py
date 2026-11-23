@@ -25,6 +25,10 @@ c_enum = C.c_int
 uchar = C.c_ubyte
 
 
+class ErrorInfoT(C.Structure):
+    _fields_ = [("file", C.c_char * 256), ("function", C.c_char * 256), ("line", C.c_int), ("message", C.c_char * 1024)]
+
+
 class GainValuesT(C.Structure):
     _fields_ = [("curr", C.c_float), ("max", C.c_float), ("min", C.c_float)]
 
@@ -241,8 +245,24 @@ def _load():
     for name, (args, res) in sig.items():
         f = getattr(lib, name)
         f.argtypes, f.restype = args, res
+    try:                                         # the driver's own reason for a failure (API 3.x)
+        lib.sdrplay_api_GetLastError.argtypes = [C.c_void_p]
+        lib.sdrplay_api_GetLastError.restype = C.POINTER(ErrorInfoT)
+    except AttributeError:
+        pass
     _lib = lib
     return lib
+
+
+def _last_error(lib, dev=None):
+    try:
+        e = lib.sdrplay_api_GetLastError(dev)
+        if e:
+            i = e.contents
+            return f"{i.message.decode(errors='ignore')} [{i.function.decode(errors='ignore')}:{i.line}]"
+    except Exception:
+        pass
+    return ""
 
 
 def _err(code):
@@ -431,7 +451,9 @@ class SdrplayDevice(BaseDevice):
                 break
             except RuntimeError as e:
                 err = e
-                log.warning("SDRplay Init failed (try %d/3): %s", attempt + 1, e)
+                log.warning("SDRplay Init failed (try %d/3): %s | driver says: %s | fs=%s bw=%s centre=%s agc=%s gain=%s ant=%s hw=%s",
+                            attempt + 1, e, _last_error(lib, self.devT.dev) or _last_error(lib) or "(nothing)",
+                            self.sample_rate, t.bwType, self.center, self.agc, self.gain, self.antenna, self.hw)
                 try:
                     lib.sdrplay_api_Uninit(self.devT.dev)
                 except Exception:
