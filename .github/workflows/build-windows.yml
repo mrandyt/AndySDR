@@ -61,6 +61,7 @@ jobs:
           python tests/test_alerts.py
           python tests/test_lastheard.py
           python tests/test_dmrdb.py
+          python tests/test_diagnose.py
 
       - name: New-feature self-tests (informational)
         continue-on-error: true

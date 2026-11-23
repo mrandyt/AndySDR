@@ -24,6 +24,7 @@ import urllib.parse
 
 from . import capturemeta
 from .alerts import Alerts, KINDS as ALERT_KINDS
+from . import diagnose
 from .dsp import BANDWIDTHS
 from .config import VERSION, data_dir, resource_dir
 from .updater import Updater
@@ -100,6 +101,7 @@ class Server:
         radio.add_listener(self._from_radio)
         self.updater = Updater(settings, self._from_radio, shutdown=radio.stop)
         self.alerts = Alerts(settings)
+        self._last_check = None
 
     # ---------------------------------------------------------------- radio -> clients
     def _from_radio(self, kind, payload):
@@ -207,6 +209,16 @@ class Server:
             fname = time.strftime(f"andysdr_{which}_%Y%m%d_%H%M.csv")
             await self._send(writer, 200, data, "text/csv",
                              extra={"Content-Disposition": f'attachment; filename="{fname}"'})
+            return
+        if path == "/api/diagnostics.zip":
+            rep = self._last_check if (self._last_check and time.time() - self._last_check["when"] < 120) else None
+            if rep is None:
+                rep = await asyncio.get_running_loop().run_in_executor(None, self._run_checks)
+            data = await asyncio.get_running_loop().run_in_executor(
+                None, lambda: diagnose.build_zip(rep, self.s.data))
+            fname = time.strftime("AndySDR-diagnostics-%Y%m%d-%H%M.zip")
+            await self._send(writer, 200, data, "application/zip",
+                             extra={"Content-Disposition": f'attachment; filename="{fname}"', "Cache-Control": "no-store"})
             return
         if path == "/api/adsb.csv":
             data = self.radio.adsb.tracker.export_csv(time.time()).encode("utf-8-sig")
@@ -493,6 +505,11 @@ class Server:
         except Exception as e:
             self._reply(c, "event", {"level": "warn", "text": f"Could not open {folder}: {e}"})
 
+    def _run_checks(self):
+        rep = diagnose.run_checks(self.radio, self.s, lan_addresses(), upd=self.updater, dmr=self.radio.dmrdb)
+        self._last_check = rep
+        return rep
+
     def _reply(self, c, kind, data):
         c.push(_ws_frame(json.dumps({"type": kind, "data": data}).encode(), 1), droppable=False)
 
@@ -662,6 +679,32 @@ class Server:
                     done=lambda: self._from_radio("decoders", r.decoders.available()))
             elif cmd == "pager_clear":
                 r.pager.clear()
+            elif cmd == "diag_save":
+                if not self._is_local(c.peer):
+                    return
+                def save_diag():
+                    try:
+                        rep = self._last_check if (self._last_check and time.time() - self._last_check["when"] < 120) else self._run_checks()
+                        data = diagnose.build_zip(rep, self.s.data)
+                        dest_dir = downloads_dir()
+                        os.makedirs(dest_dir, exist_ok=True)
+                        dest = os.path.join(dest_dir, time.strftime("AndySDR-diagnostics-%Y%m%d-%H%M.zip"))
+                        with open(dest, "wb") as f:
+                            f.write(data)
+                        text, lvl = f"Saved to your Downloads folder: {os.path.basename(dest)}", "info"
+                    except Exception as e:      # noqa: BLE001
+                        text, lvl = f"Could not save the diagnostics: {e}", "warn"
+                    self.loop.call_soon_threadsafe(self._reply, c, "event", {"level": lvl, "text": text})
+                threading.Thread(target=save_diag, name="diag-save", daemon=True).start()
+            elif cmd == "check_system":
+                def run_check():
+                    try:
+                        rep = self._run_checks()
+                    except Exception as e:      # noqa: BLE001
+                        rep = {"items": [diagnose.item("err", "info", "The check could not run", str(e)[:200])],
+                               "summary": {"ok": 0, "warn": 0, "bad": 0, "info": 1}, "when": time.time(), "version": VERSION}
+                    self.loop.call_soon_threadsafe(self._reply, c, "check_result", rep)
+                threading.Thread(target=run_check, name="check-system", daemon=True).start()
             elif cmd == "heard_clear":
                 r.lastheard.clear()
             elif cmd == "dmrdb_refresh":

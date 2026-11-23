@@ -724,6 +724,17 @@
   <!-- REMOTE & SETTINGS -->
   <div class="tabpage" id="tab-net">
     <div class="cols">
+      <div class="card wide" data-help="checksys">
+        <h3>🩺 Check my system</h3>
+        <div class="row wrapline">
+          <button class="btn primary" id="chkRun">Check my system</button>
+          <span class="muted small" id="chkSummary">Looks at the receiver, SDRplay driver, decoders, firewall, password and more, and tells you what to fix.</span>
+          <span class="grow"></span>
+          <a class="btn" id="chkZipLink" href="#" download hidden title="A zip with the check, recent logs and settings (password removed) to send to someone who is helping you">Save diagnostics (zip)</a>
+          <button class="btn" id="chkZipLocal" hidden title="Saves a zip with the check, recent logs and settings (password removed) to your Downloads folder">Save diagnostics (zip)</button>
+        </div>
+        <div id="chkList" class="chklist"></div>
+      </div>
       <div class="card" data-help="remote">
         <h3>Remote control from another PC</h3>
         <p>On any computer, tablet or phone on your network, open a web browser at:</p>

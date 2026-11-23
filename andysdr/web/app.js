@@ -106,6 +106,7 @@ function onJSON(m) {
     case "adsb": onAdsb(d); break;
     case "meshsdr": onMeshSdr(d); break;
     case "adsb_cfg": ADS.cfg = d; adsbCfg(); adsbStat(); break;
+    case "check_result": chkShow(d); break;
     case "heard": lhUpsert(d); break;
     case "heard_all": LH.rows = d || []; renderHeard(); break;
     case "dmrdb": lhDb(d); break;
@@ -139,6 +140,8 @@ function onHello(h) {
   if (h.mesh) { MESH = h.mesh; MESHMSG = h.mesh_history || []; renderMesh(); }
   if (h.meshsdr) onMeshSdr(h.meshsdr);
   if (h.datalink) dlHello(h.datalink);
+  $("chkZipLink").href = `/api/diagnostics.zip?token=${encodeURIComponent(token)}`;
+  $("chkZipLink").hidden = !!isLocal; $("chkZipLocal").hidden = !isLocal;
   LH.rows = (h.lastheard || []).map((r) => Object.assign(r, { _rx: Date.now() - (r.live ? 0 : 60000) })); renderHeard(); lhDb(h.dmrdb);
   $("lhAuto").checked = (h.settings || {}).dmr_db_auto !== false;
   $("acarsExport").href = `/api/acars.csv?token=${encodeURIComponent(token)}`;
@@ -2447,6 +2450,33 @@ $("updDl").onchange = () => send({ cmd: "settings", values: { update_auto_downlo
   ($(id).onchange = () => send({ cmd: "settings", values: { [key]: $(id).checked }, quiet: true })));
 $("alTest").onclick = () => send({ cmd: "alert_test" });
 
+/* ======================================================= check my system */
+const CHK_ICON = { ok: "✅", warn: "⚠️", bad: "❌", info: "ℹ️" };
+function chkShow(rep) {
+  const s = rep.summary || {};
+  $("chkRun").disabled = false; $("chkRun").textContent = "Check again";
+  $("chkSummary").textContent = (s.bad ? `${s.bad} problem${s.bad === 1 ? "" : "s"}` : "No problems") +
+    (s.warn ? ` · ${s.warn} thing${s.warn === 1 ? "" : "s"} to look at` : "") + ` · ${s.ok || 0} fine` +
+    ` – checked ${new Date(rep.when * 1000).toLocaleTimeString()}`;
+  const order = { bad: 0, warn: 1, info: 2, ok: 3 };
+  $("chkList").innerHTML = (rep.items || []).slice().sort((a, b) => order[a.level] - order[b.level]).map((i) =>
+    `<div class="chk ${esc(i.level)}"><span class="chk-i">${CHK_ICON[i.level] || ""}</span><div class="chk-b"><b>${esc(i.title)}</b>` +
+    (i.detail ? `<div class="small muted">${esc(i.detail)}</div>` : "") +
+    (i.fix ? `<div class="small">${esc(i.fix)}</div>` : "") +
+    (i.cmd ? `<div class="chk-cmd"><code>${esc(i.cmd)}</code><button class="btn sm" data-copy="${esc(i.cmd)}">Copy</button></div>` : "") +
+    `</div></div>`).join("");
+  $("chkList").querySelectorAll("[data-copy]").forEach((b) => b.onclick = () => {
+    const t = b.dataset.copy;
+    (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast("Copied", "info"), () => {
+      const ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); toast("Copied", "info"); } catch (e) { toast("Select the text and copy it", "warn"); }
+      ta.remove();
+    });
+  });
+}
+$("chkRun").onclick = () => { $("chkRun").disabled = true; $("chkRun").textContent = "Checking …"; send({ cmd: "check_system" }); setTimeout(() => { $("chkRun").disabled = false; }, 30000); };
+$("chkZipLocal").onclick = () => send({ cmd: "diag_save" });
+
 /* ======================================================= last heard (DMR / P25 / NXDN / M17) */
 const LH = { rows: [], db: null, t: null };
 function lhUpsert(r) {
@@ -2966,6 +2996,7 @@ const HELP = {
   qband: ["Band buttons", "Jump straight to a popular UK band with the right mode and tuning step already set: AIR (121.500 MHz), MARINE (channel 16), PMR446, 2M, 70CM, CB, FM BC, PAGER and weather SATS. Then step with ▲ ▼, press SCAN, or use SRCH to find what is active. The button for the band you are in stays lit."],
   qdec: ["Decoder buttons", "Start a decoder with one click: DMR, P25, NXDN, dPMR, M17 (digital voice), TETRA and TETRAPOL (network, call and message signalling), PAGER (POCSAG/FLEX), APRS (also DTMF/ZVEI/EAS), WEFAX, SSTV, LRPT (Meteor-M) and ADS-B (aircraft). AUTO (Auto ID) lets AndySDR identify signals and pick the decoder itself. OFF stops the decoder. A dimmed button means its program is not installed yet – see the DECODERS tab."],
   alerts: ["Alerts for the AndySDR Remote app", "Choose what the Android app may notify you about: a page for a capcode you starred, an aircraft squawking 7500 / 7600 / 7700, activity on the priority channel, or a scheduled capture starting. In the app, switch on Alerts on the connect screen. Send a test alert shows a notice on the tablet within a few seconds. The alerts are collected on this PC and fetched by the app over your own network."],
+  checksys: ["Check my system", "Press Check my system and AndySDR looks over the things that most often go wrong, then lists them with the worst first: is a real receiver open (or only the simulator), is the SDRplay driver installed and its service running (RSP receivers), is the receiver being overloaded by strong signals, are the decoder programs installed, can other devices get through the Windows Firewall, is the remote password strong, is there disk space, is AndySDR up to date, are the satellite settings complete. Each problem says what it means and what to do; where a command is needed it is shown in a box with a Copy button (paste it into a Command Prompt run as Administrator). Nothing is changed by the check. Save diagnostics (zip) puts the result, the recent log files and your settings (the password is removed) in one zip – send it to whoever is helping you."],
   lastheard: ["Last heard", "Every DMR, P25, NXDN or M17 transmission AndySDR decodes becomes one row: the time, who was talking (callsign and name from the RadioID list, or just the ID if they are not registered), the talkgroup it was sent to (or the person for a private call), the system (DMR slot, colour code, P25 NAC, M17 channel access number), the frequency and how long they talked. Newest is at the top; a dot marks a call in progress. Click a frequency to tune to it, a callsign to look it up on QRZ.com. 🔒 means encrypted – the IDs show but the speech cannot be decoded; 🚨 is an emergency call. The callsign list is downloaded by the PC itself from RadioID.net the first time, then refreshed every four weeks (or press Update callsign list now); if the internet is down the old list is kept. Talkgroup names come from the BrandMeister list and from any talkgroups you imported from RadioReference. The tablet and phone show the same list through the PC, so they need no download of their own. M17 stations send their callsign in the signal, so they are shown even without the list."],
   qjump: ["Tune / Digital / Tools pages", "The three buttons under the display switch the group of quick buttons below them, so nothing has to be scrolled. TUNE: mode, filter width and band. DIGITAL: your hotspot, the digital voice bands (DMR, P25, M17, TETRA) and the decoder buttons. TOOLS: notch filters, skip / lock-out, audio switches and the pictures, replay and recordings buttons. AndySDR remembers the page you used last. ⚙ CUSTOMISE hides the buttons you will never use: press it, tap any button to hide it, then press DONE; SHOW HIDDEN brings them all back. The list is kept on the radio PC, so the PC, the tablet and the phone all show the same buttons."],
   qhot: ["My hotspot", "Your saved DMR hotspot. Press the big button to tune to it, switch to digital mode and start the DMR decoder in one go – the callsigns and talkgroups your hotspot passes appear in the decoder list. EDIT lets you change the name, frequency (MHz), colour code, timeslot and talkgroup; SAVE keeps them for next time. Keep RF GAIN low when the hotspot is close to the receiver."],
