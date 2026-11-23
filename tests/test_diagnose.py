@@ -202,5 +202,19 @@ check("a picture from the last hour is fine", [i for i in r if i["id"] == "pic_l
 r = D.check_pictures(PRadio(PSats(), jobs=[{"action": "wefax", "enabled": True}], folder=pics), now, pics)
 check("a weather-fax capture alone counts as switched on", not any(i["id"] == "pic_none" for i in r))
 
+# ---------------------------------------------------------------- overload gets one-click notch buttons
+class NDev(Dev):
+    def __init__(self, sw): super().__init__("sdrplay"); self.sw = sw
+    def extra_settings(self): return self.sw
+rd = Radio(NDev([{"key": "fm_notch", "value": "false"}, {"key": "dab_notch", "value": "true"}, {"key": "bias_t", "value": "false"}]), overload=1253.4)
+r = D.check_signal(rd)
+a = [i for i in r if i["id"] == "overload"][0]["actions"]
+check("overload offers a button for the notch that is off, and only that one", len(a) == 1 and a[0]["msg"] == {"cmd": "device_setting", "key": "fm_notch", "value": "true"} and "FM" in a[0]["label"])
+rd = Radio(NDev([{"key": "fm_notch", "value": "false"}, {"key": "dab_notch", "value": "false"}]), overload=50)
+check("both notches off gives two buttons", len([i for i in D.check_signal(rd) if i["id"] == "overload"][0]["actions"]) == 2)
+rd = Radio(Dev("sdrplay"), overload=50)
+check("a receiver without notch switches gives no buttons (and no error)", [i for i in D.check_signal(rd) if i["id"] == "overload"][0]["actions"] == [])
+check("every item has an actions list", all("actions" in i for i in D.check_signal(Radio(Dev("sdrplay"), overload=0))))
+
 print("FAILED: " + ", ".join(fails) if fails else "ALL PASS")
 sys.exit(1 if fails else 0)

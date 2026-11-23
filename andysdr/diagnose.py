@@ -33,8 +33,9 @@ def _run(args, timeout=6):
         return None, ""
 
 
-def item(iid, level, title, detail="", fix="", cmd=""):
-    return {"id": iid, "level": level, "title": title, "detail": detail, "fix": fix, "cmd": cmd}
+def item(iid, level, title, detail="", fix="", cmd="", actions=None):
+    """actions: buttons the page shows under the item - [{"label": ..., "msg": {a command the page sends}}]."""
+    return {"id": iid, "level": level, "title": title, "detail": detail, "fix": fix, "cmd": cmd, "actions": actions or []}
 
 
 # ---------------------------------------------------------------------- the checks
@@ -125,11 +126,20 @@ def check_signal(radio):
     if getattr(radio.dev, "kind", "") == "sim":
         return out
     if rate >= 3:
+        acts = []
+        try:
+            for sw in radio.dev.extra_settings():
+                if sw.get("key") in ("fm_notch", "dab_notch") and str(sw.get("value")).lower() in ("false", "0", ""):
+                    acts.append({"label": "Turn the " + ("FM broadcast" if sw["key"] == "fm_notch" else "DAB") + " notch on",
+                                 "msg": {"cmd": "device_setting", "key": sw["key"], "value": "true"}})
+        except Exception:                                   # noqa: BLE001
+            pass
         out.append(item("overload", "warn", f"The receiver is overloading ({rate:g} times a minute)",
                         "Strong signals (FM / DAB broadcast, a nearby transmitter) are swamping the input, which makes decoders drop out "
                         "and creates false signals across the spectrum.",
                         "Turn RF GAIN down, or on an RSP2 / RSPdx switch on the FM / DAB notch (Device settings); an LNA or the "
-                        "high-gain IF setting often makes it worse."))
+                        "high-gain IF setting often makes it worse." + (" The buttons below switch the notches on for you." if acts else ""),
+                        actions=acts))
     else:
         out.append(item("overload", "ok", "No receiver overloads in the last minute"))
     st = b.get("state")

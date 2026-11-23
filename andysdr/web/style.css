@@ -1210,3 +1210,5 @@ body.customise #qJump .key::after { content: none; }
 }
 /* SDR++ style: never pinned (on a phone or tablet it took half the screen and the tab content slid under it) */
 [data-theme="sdrpp"] .wrap > .scope { position: static; }
+
+.chk-act { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; }

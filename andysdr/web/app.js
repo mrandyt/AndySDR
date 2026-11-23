@@ -2471,8 +2471,15 @@ function chkShow(rep) {
     `<div class="chk ${esc(i.level)}"><span class="chk-i">${CHK_ICON[i.level] || ""}</span><div class="chk-b"><b>${esc(i.title)}</b>` +
     (i.detail ? `<div class="small muted">${esc(i.detail)}</div>` : "") +
     (i.fix ? `<div class="small">${esc(i.fix)}</div>` : "") +
+    ((i.actions || []).length ? `<div class="chk-act">${i.actions.map((a, n) => `<button class="btn sm primary" data-act="${esc(i.id)}:${n}">${esc(a.label)}</button>`).join(" ")}</div>` : "") +
     (i.cmd ? `<div class="chk-cmd"><code>${esc(i.cmd)}</code><button class="btn sm" data-copy="${esc(i.cmd)}">Copy</button></div>` : "") +
     `</div></div>`).join("");
+  $("chkList").querySelectorAll("[data-act]").forEach((b) => b.onclick = () => {
+    const [id, n] = b.dataset.act.split(":"), it = (rep.items || []).find((x) => x.id === id), a = it && it.actions[+n];
+    if (!a) return;
+    send(a.msg); b.disabled = true; toast(a.label + " – checking again in a moment", "info");
+    setTimeout(() => { $("chkRun").click(); }, 2500);
+  });
   $("chkList").querySelectorAll("[data-copy]").forEach((b) => b.onclick = () => {
     const t = b.dataset.copy;
     (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast("Copied", "info"), () => {
