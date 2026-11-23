@@ -153,6 +153,14 @@ class Server:
         if path == "/ws" and headers.get("upgrade", "").lower() == "websocket":
             await self._websocket(reader, writer, headers, ip)
             return
+        if path == "/andysdr.json":
+            # who-am-I card for the Android app's "Find my radio" scan: name, version and port only
+            # (nothing secret, so it needs no password; the radio itself stays behind the password)
+            info = {"app": "AndySDR", "version": VERSION, "host": socket.gethostname(),
+                    "port": int(self.s["server_port"])}
+            await self._send(writer, 200, json.dumps(info).encode(), "application/json",
+                             extra={"Cache-Control": "no-store"})
+            return
         if path.startswith(("/images/", "/recordings/", "/api/")):
             if not self._token_ok(ip, (query.get("token") or [""])[0]):
                 await self._send(writer, 403, b"Password required", "text/plain")
