@@ -818,6 +818,8 @@ class DecoderManager:
         self.dsd_t0 = time.time()
         self.dsd_sync_t = 0.0
         self.dsd_saved = False
+        self.dsd_flags = list(flags)
+        self.dsd_good = deque(maxlen=60)
         self.proc = _popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
         _Reader(self.proc.stdout, self.log, self._dsd_filter).start()
         self.log("DSD-FME started: " + " ".join(os.path.basename(a) for a in argv))
@@ -828,6 +830,13 @@ class DecoderManager:
         f = self.freq_fn() if self.freq_fn else 0
         return str(int(round(f / 1000.0))) if f else ""
 
+    DSD_LOCK_FRAMES = 4         # this many clean frames ...
+    DSD_LOCK_WINDOW_S = 8.0     # ... within this time make a lock worth remembering
+
+    def _dsd_sustained(self, now=None):
+        now = now or time.time()
+        return sum(1 for x in getattr(self, "dsd_good", ()) if now - x <= self.DSD_LOCK_WINDOW_S) >= self.DSD_LOCK_FRAMES
+
     def _dsd_remember(self):
         """Auto found the frame type that locks on this frequency: keep it, so the next call starts straight on it."""
         key = self._dsd_key()
@@ -835,7 +844,9 @@ class DecoderManager:
             return
         try:
             mem = dict(self.settings.get("dsd_memory") or {})
-            flags = list(self.DSD_CYCLE[self.dsd_try])
+            flags = list(getattr(self, "dsd_flags", None) or [])
+            if flags not in self.DSD_CYCLE:        # only the frame types Auto itself tries can be recalled
+                return
             if mem.get(key) == flags:
                 return
             mem.pop(key, None)
@@ -866,9 +877,6 @@ class DecoderManager:
         while self.active == "dsd" and self.dsd_gen == gen and self.sub == "auto":
             time.sleep(0.5)
             if self.dsd_sync_t:
-                if not getattr(self, "dsd_saved", False):
-                    self.dsd_saved = True
-                    self._dsd_remember()
                 continue
             if time.time() - self.dsd_t0 < self.DSD_TRY_S:
                 continue
@@ -889,8 +897,17 @@ class DecoderManager:
 
     def _dsd_filter(self, line):
         low = line.lower()
-        if ("sync:" in low and "no sync" not in low) or "voice" in low or " slot " in low or "tg:" in low or "nac:" in low:
-            self.dsd_sync_t = time.time()
+        if "err" not in low and (("sync:" in low and "no sync" not in low) or "voice" in low or " slot " in low
+                                 or "tg:" in low or "nac:" in low):
+            # only clean frames count as a lock: a line marked CRC ERR / FEC ERR is usually a false sync on noise
+            now = time.time()
+            self.dsd_sync_t = now
+            good = getattr(self, "dsd_good", None)
+            if good is not None:
+                good.append(now)
+                if not getattr(self, "dsd_saved", True) and self._dsd_sustained(now):
+                    self.dsd_saved = True
+                    self._dsd_remember()
         if self.on_dsd_line:
             try:
                 self.on_dsd_line(line)
