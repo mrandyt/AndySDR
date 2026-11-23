@@ -865,14 +865,17 @@ class Radio:
             self._emit("event", {"level": "info", "text": f"Stored {name} ({freq_hz / 1e6:.4f} MHz) in bank {bank} ch {slot}"})
         self.call(do)
 
-    def store_repeaters(self, bank, channels):
+    def store_repeaters(self, bank, channels, replace=False, bank_name=None, scan=False):
         def do():
-            added, overflow = self.memory.import_channels(int(bank), channels, max_banks=1)
+            added, overflow = self.memory.import_channels(int(bank), channels, replace=replace, bank_name=bank_name,
+                                                          max_banks=1)
             self._emit("memory", self.memory.all())
             txt = f"Stored {added} repeaters in bank {bank}"
             if overflow:
                 txt += f" - {overflow} did not fit (a bank holds 100; empty another bank or narrow the list)"
             self._emit("event", {"level": "info" if not overflow else "warn", "text": txt})
+            if scan and added:
+                self._begin_scan(only_bank=int(bank))
         self.call(do)
 
     def lockout(self):
@@ -1053,17 +1056,19 @@ class Radio:
 
     # ------------------------------------------------------------------ scanner
     def start_scan(self):
-        def do():
-            lst = self.memory.scan_list()
-            if not lst:
-                self._emit("event", {"level": "warn", "text": "No memory channels to scan – store or import some first"})
-                return
-            if self.s["squelch"] <= -119:
-                self._emit("event", {"level": "warn", "text": "Turn SQUELCH up – scanning needs the squelch closed on noise"})
-            self.scan = {"state": "scan", "list": lst, "idx": -1, "dir": 1, "phase": "next",
-                         "t": 0, "resume_at": 0}
-            self._push_state(True)
-        self.call(do)
+        self.call(self._begin_scan)
+
+    def _begin_scan(self, only_bank=None):
+        """On the radio thread.  only_bank scans just that one bank."""
+        lst = self.memory.scan_list(only_bank)
+        if not lst:
+            self._emit("event", {"level": "warn", "text": "No memory channels to scan – store or import some first"})
+            return
+        if self.s["squelch"] <= -119:
+            self._emit("event", {"level": "warn", "text": "Turn SQUELCH up – scanning needs the squelch closed on noise"})
+        self.scan = {"state": "scan", "list": lst, "idx": -1, "dir": 1, "phase": "next",
+                     "t": 0, "resume_at": 0}
+        self._push_state(True)
 
     def start_search(self, start=None, stop=None, step=None, mode=None, search_mode=None):
         def do():

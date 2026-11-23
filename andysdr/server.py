@@ -706,7 +706,7 @@ class Server:
                                "summary": {"ok": 0, "warn": 0, "bad": 0, "info": 1}, "when": time.time(), "version": VERSION}
                     self.loop.call_soon_threadsafe(self._reply, c, "check_result", rep)
                 threading.Thread(target=run_check, name="check-system", daemon=True).start()
-            elif cmd in ("rep_query", "rep_store_all"):
+            elif cmd in ("rep_query", "rep_store_all", "rep_scan"):
                 obs = r.scheduler.sats.observer()
                 lat, lon = (obs[0], obs[1]) if obs else (None, None)
                 try:
@@ -731,8 +731,12 @@ class Server:
                         chans.append({"freq": int(round(x["out"] * 1e6)), "mode": "NFM" if use == "FM" else "DIG",
                                       "name": repeaters.memory_name(x), "decoder": "dsd" if use != "FM" else "",
                                       "tone": f"{x['tone']:g}" if x.get("tone") else ""})
-                    if not chans:
+                    if cmd == "rep_scan" and not obs:
+                        self._reply(c, "event", {"level": "warn", "text": "Set your position first so AndySDR knows which repeaters are nearest"})
+                    elif not chans:
                         self._reply(c, "event", {"level": "warn", "text": "Nothing in the list to store"})
+                    elif cmd == "rep_scan":
+                        r.store_repeaters(int(m.get("bank") or 0), chans, replace=True, bank_name="NEAR REPEATERS", scan=True)
                     else:
                         r.store_repeaters(int(m.get("bank") or 0), chans)
             elif cmd == "rep_refresh":

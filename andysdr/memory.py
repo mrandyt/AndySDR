@@ -301,12 +301,15 @@ class MemoryBank:
                 self.data.setdefault("talkgroups", []).append(t)
         self.save()
 
-    def scan_list(self):
-        """Channels to scan, in bank/channel order, skipping lockouts and disabled banks."""
+    def scan_list(self, only_bank=None):
+        """Channels to scan, in bank/channel order, skipping lockouts and disabled banks.  With only_bank, just that
+        one bank (even if it is switched off for the normal scan)."""
         out = []
         for b in range(BANKS):
+            if only_bank is not None and b != int(only_bank):
+                continue
             bank = self.data["banks"][str(b)]
-            if not bank.get("enabled", True):
+            if only_bank is None and not bank.get("enabled", True):
                 continue
             for k in sorted(bank["channels"], key=lambda s: int(s)):
                 c = bank["channels"][k]
