@@ -106,6 +106,9 @@ function onJSON(m) {
     case "adsb": onAdsb(d); break;
     case "meshsdr": onMeshSdr(d); break;
     case "adsb_cfg": ADS.cfg = d; adsbCfg(); adsbStat(); break;
+    case "heard": lhUpsert(d); break;
+    case "heard_all": LH.rows = d || []; renderHeard(); break;
+    case "dmrdb": lhDb(d); break;
     case "pager": addPager(d); break;
     case "pager_cfg": PAG.cfg = d; renderPager(); break;
     case "pager_all": PAG.msgs = d.messages || []; PAG.cfg = d; renderPager(); break;
@@ -136,6 +139,8 @@ function onHello(h) {
   if (h.mesh) { MESH = h.mesh; MESHMSG = h.mesh_history || []; renderMesh(); }
   if (h.meshsdr) onMeshSdr(h.meshsdr);
   if (h.datalink) dlHello(h.datalink);
+  LH.rows = (h.lastheard || []).map((r) => Object.assign(r, { _rx: Date.now() - (r.live ? 0 : 60000) })); renderHeard(); lhDb(h.dmrdb);
+  $("lhAuto").checked = (h.settings || {}).dmr_db_auto !== false;
   $("acarsExport").href = `/api/acars.csv?token=${encodeURIComponent(token)}`;
   $("sondeExport").href = `/api/sondes.csv?token=${encodeURIComponent(token)}`;
   if (h.pager) { PAG.msgs = h.pager.messages || []; PAG.cfg = h.pager; PAG.unseen = 0; renderPager(); }
@@ -2406,6 +2411,58 @@ $("updDl").onchange = () => send({ cmd: "settings", values: { update_auto_downlo
   ($(id).onchange = () => send({ cmd: "settings", values: { [key]: $(id).checked }, quiet: true })));
 $("alTest").onclick = () => send({ cmd: "alert_test" });
 
+/* ======================================================= last heard (DMR / P25 / NXDN / M17) */
+const LH = { rows: [], db: null, t: null };
+function lhUpsert(r) {
+  r._rx = Date.now();
+  const i = LH.rows.findIndex((x) => x.id === r.id);
+  if (i >= 0) LH.rows[i] = r; else { LH.rows.unshift(r); if (LH.rows.length > 200) LH.rows.length = 200; }
+  if (!LH.t) LH.t = setTimeout(() => { LH.t = null; renderHeard(); }, 250);
+}
+function lhMatch(r) {
+  const q = $("lhSearch").value.trim().toLowerCase();
+  return !q || [r.call, r.name, r.place, r.tgname, String(r.src), String(r.tgt)].join(" ").toLowerCase().includes(q);
+}
+function lhRow(r) {
+  const live = Date.now() - (r._rx || 0) < 6000;
+  const who = r.call ? `<a href="https://www.qrz.com/db/${encodeURIComponent(r.call)}" target="_blank" rel="noopener" title="Look up on QRZ.com (internet)"><b>${esc(r.call)}</b></a>`
+    : `<span class="muted">ID ${esc(r.src)}</span>`;
+  const idTxt = typeof r.src === "number" && r.call ? ` <span class="muted small">${r.src}</span>` : "";
+  const to = r.proto === "M17" ? esc(r.tgt === "BROADCAST" ? "ALL" : r.tgt)
+    : r.kind === "private" ? `<span class="muted">private →</span> ${esc(r.tgt)}`
+    : `TG ${esc(r.tgt)}${r.tgname ? ` <span class="muted">${esc(r.tgname)}</span>` : ""}`;
+  const flags = (r.emerg ? " 🚨" : "") + (r.enc ? " 🔒" : "");
+  const sys = `${esc(r.proto)}${r.slot ? " · slot " + r.slot : ""}${r.cc ? " · " + esc(r.cc) : ""}`;
+  return `<tr class="${live ? "live" : ""}"><td class="t">${esc(r.t)}</td><td>${who}${idTxt}${flags}</td>` +
+    `<td>${esc(r.name)}${r.place ? ` <span class="muted small">${esc(r.place)}</span>` : ""}</td><td>${to}</td><td class="small">${sys}</td>` +
+    `<td class="f" ${r.freq ? `data-f="${r.freq}"` : ""} title="Click to tune here">${r.freq ? fmtMHz(r.freq, 4) : "—"}</td><td>${live ? "● " : ""}${r.secs ?? 0} s</td></tr>`;
+}
+function renderHeard() {
+  const rows = LH.rows.filter(lhMatch);
+  $("lhTable").querySelector("tbody").innerHTML = rows.map(lhRow).join("") ||
+    `<tr><td colspan="7" class="muted">${LH.rows.length ? "Nothing matches the search." :
+      "Nobody heard yet. Tune a DMR, P25, NXDN or M17 signal (or press DMR / M17 under Digital voice band) and the people you hear appear here as they talk. Encrypted calls show the IDs but you will hear nothing."}</td></tr>`;
+  $("lhCount").textContent = LH.rows.length ? `${LH.rows.length} heard` : "";
+}
+function lhDb(d) {
+  LH.db = d;
+  if (!d) return;
+  const n = (d.count || 0).toLocaleString();
+  const age = d.age_days == null ? "" : d.age_days < 1 ? "today" : Math.round(d.age_days) + " day" + (Math.round(d.age_days) === 1 ? "" : "s") + " ago";
+  $("lhDb").textContent = d.state === "downloading" ? "⏳ Downloading the DMR callsign list …"
+    : d.state === "ready" ? `Callsign list: ${n} people · updated ${age}` + (d.tg_count ? ` · ${d.tg_count.toLocaleString()} talkgroup names` : "")
+    : d.state === "error" ? `Callsign list not downloaded yet (${d.msg || "no internet?"}) – AndySDR will try again later.`
+    : d.auto ? "Callsign list not downloaded yet – AndySDR fetches it by itself shortly after start (needs the internet once)." : "Callsign list not downloaded – press Update.";
+  $("lhUpdate").disabled = d.state === "downloading";
+  $("lhAuto").checked = d.auto !== false;
+}
+$("lhSearch").oninput = renderHeard;
+$("lhClear").onclick = () => { if (confirm("Clear the Last heard list?")) send({ cmd: "heard_clear" }); };
+$("lhUpdate").onclick = () => send({ cmd: "dmrdb_refresh" });
+$("lhAuto").onchange = () => send({ cmd: "settings", values: { dmr_db_auto: $("lhAuto").checked }, quiet: true });
+$("lhTable").addEventListener("click", (e) => { const f = e.target.closest("td.f[data-f]"); if (f) send({ cmd: "tune", freq: +f.dataset.f }); });
+setInterval(() => { if (LH.rows.length && $("tab-dec").classList.contains("active") && LH.rows.some((r) => Date.now() - (r._rx || 0) < 9000)) renderHeard(); }, 2000);
+
 /* ======================================================= auto-identify */
 const SIG_DIGITAL = /DMR|P25|NXDN|dPMR|Digital|Pager|APRS|DTMF|TETRA/;
 function renderSignal() {
@@ -2873,6 +2930,7 @@ const HELP = {
   qband: ["Band buttons", "Jump straight to a popular UK band with the right mode and tuning step already set: AIR (121.500 MHz), MARINE (channel 16), PMR446, 2M, 70CM, CB, FM BC, PAGER and weather SATS. Then step with ▲ ▼, press SCAN, or use SRCH to find what is active. The button for the band you are in stays lit."],
   qdec: ["Decoder buttons", "Start a decoder with one click: DMR, P25, NXDN, dPMR, M17 (digital voice), TETRA and TETRAPOL (network, call and message signalling), PAGER (POCSAG/FLEX), APRS (also DTMF/ZVEI/EAS), WEFAX, SSTV, LRPT (Meteor-M) and ADS-B (aircraft). AUTO (Auto ID) lets AndySDR identify signals and pick the decoder itself. OFF stops the decoder. A dimmed button means its program is not installed yet – see the DECODERS tab."],
   alerts: ["Alerts for the AndySDR Remote app", "Choose what the Android app may notify you about: a page for a capcode you starred, an aircraft squawking 7500 / 7600 / 7700, activity on the priority channel, or a scheduled capture starting. In the app, switch on Alerts on the connect screen. Send a test alert shows a notice on the tablet within a few seconds. The alerts are collected on this PC and fetched by the app over your own network."],
+  lastheard: ["Last heard", "Every DMR, P25, NXDN or M17 transmission AndySDR decodes becomes one row: the time, who was talking (callsign and name from the RadioID list, or just the ID if they are not registered), the talkgroup it was sent to (or the person for a private call), the system (DMR slot, colour code, P25 NAC, M17 channel access number), the frequency and how long they talked. Newest is at the top; a dot marks a call in progress. Click a frequency to tune to it, a callsign to look it up on QRZ.com. 🔒 means encrypted – the IDs show but the speech cannot be decoded; 🚨 is an emergency call. The callsign list is downloaded by the PC itself from RadioID.net the first time, then refreshed every four weeks (or press Update callsign list now); if the internet is down the old list is kept. Talkgroup names come from the BrandMeister list and from any talkgroups you imported from RadioReference. The tablet and phone show the same list through the PC, so they need no download of their own. M17 stations send their callsign in the signal, so they are shown even without the list."],
   qjump: ["Tune / Digital / Tools pages", "The three buttons under the display switch the group of quick buttons below them, so nothing has to be scrolled. TUNE: mode, filter width and band. DIGITAL: your hotspot, the digital voice bands (DMR, P25, M17, TETRA) and the decoder buttons. TOOLS: notch filters, skip / lock-out, audio switches and the pictures, replay and recordings buttons. AndySDR remembers the page you used last. ⚙ CUSTOMISE hides the buttons you will never use: press it, tap any button to hide it, then press DONE; SHOW HIDDEN brings them all back. The list is kept on the radio PC, so the PC, the tablet and the phone all show the same buttons."],
   qhot: ["My hotspot", "Your saved DMR hotspot. Press the big button to tune to it, switch to digital mode and start the DMR decoder in one go – the callsigns and talkgroups your hotspot passes appear in the decoder list. EDIT lets you change the name, frequency (MHz), colour code, timeslot and talkgroup; SAVE keeps them for next time. Keep RF GAIN low when the hotspot is close to the receiver."],
   qdigi: ["Digital voice band", "Pick DMR, dPMR, P25, M17, NXDN or TETRA (Airwave) from the list: AndySDR tunes to the bottom of that band, sets the mode and step for it and starts the matching decoder. SEARCH BAND then sweeps the whole band and stops on any activity so the decoder can lock on (SKIP moves on to the next one). TETRA and TETRAPOL show signalling only; encrypted voice cannot be decoded."],

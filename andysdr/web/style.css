@@ -1081,7 +1081,7 @@ body.sz-wf #wf { height: var(--user-wf) !important; min-height: 0 !important; fl
 .lcd-go button { min-width: 56px; }
 
 /* DECODERS tab: the live decoder window gets the room; the per-program status list is tucked away */
-.console.decwin { height: clamp(320px, 56vh, 720px); font-size: 13px; }
+.console.decwin { height: clamp(200px, 30vh, 420px); font-size: 13px; }
 .decdetails { margin-top: 10px; }
 .decdetails > summary { cursor: pointer; color: var(--muted, #8a93a6); font-size: 12px; padding: 4px 0; }
 .decdetails.warn > summary { color: #ff9a6a; }
@@ -1135,3 +1135,10 @@ body.customise #qJump .key::after { content: none; }
 @media (min-width: 1101px) {
   :is(body.sz-spec, body.sz-wf):is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .scope { height: auto; position: static; }
 }
+
+/* last heard */
+.lhcard { margin-top: 10px; }
+.lhwrap { max-height: 340px; }
+#lhTable tr.live td { background: rgba(80, 200, 120, .12); }
+#lhTable td.f { cursor: pointer; }
+#lhTable a { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--muted); }

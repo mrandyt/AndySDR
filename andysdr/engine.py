@@ -14,6 +14,8 @@ from . import capturemeta, devices, ft8
 from .adsb import ADSB_FREQ, Adsb
 from .meshsdr import MeshSdr
 from .datalink import DatalinkStore
+from .dmrdb import DmrDb
+from .lastheard import LastHeard
 from .autodetect import SignalClassifier
 from .config import data_dir
 from .decoders import DecoderManager
@@ -56,6 +58,12 @@ class Radio:
         self.decoders.rate_fn = lambda: self.dev.sample_rate if self.dev else 2400000
         self.decoders.on_pager = lambda line: self.pager.add_line(
             line, self.freq, self.channel[2].get("name", "") if self.channel else "")
+        self.dmrdb = DmrDb(settings, self._emit_dmrdb,
+                           memory_tg=lambda: {t["tgid"]: t.get("name", "") for t in self.memory.data.get("talkgroups", [])
+                                              if t.get("name")})
+        self.lastheard = LastHeard(settings, self._emit, self.dmrdb, freq_fn=lambda: self.freq,
+                                   on_new=lambda row, text: self.decoders.log(text))
+        self.decoders.on_dsd_line = self.lastheard.feed
         self.running = False
         self.thread = None
         self.freq = int(self.s["frequency"])
@@ -106,6 +114,14 @@ class Radio:
             except Exception:
                 log.exception("listener")
 
+    def _emit_dmrdb(self, kind, payload):
+        self._emit(kind, payload)
+        if kind == "dmrdb" and payload.get("state") == "ready":
+            try:
+                self.lastheard.relookup()            # names for people heard before the list arrived
+            except Exception:
+                log.exception("relookup")
+
     def call(self, fn, *args, **kw):
         """Run a function inside the radio thread (thread-safe control)."""
         self.cmd_q.put((fn, args, kw))
@@ -129,6 +145,10 @@ class Radio:
             log.exception("gps position")
 
     def stop(self):
+        try:
+            self.dmrdb.stop()
+        except Exception:
+            pass
         try:
             self.gps.stop()
         except Exception:

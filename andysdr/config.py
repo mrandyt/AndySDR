@@ -98,6 +98,8 @@ DEFAULTS = {
     "adsb_sbs_port": 30003,
     "adsb_raw_port": 30002,
     "alert_pager": True, "alert_emergency": True, "alert_priority": True, "alert_capture": True,   # what the tablet app is notified about
+    "dmr_db_auto": True,          # download / refresh the RadioID callsign list by itself (names in DMR Last heard)
+    "dmr_db_url": "",             # optional own address for that list (blank = RadioID.net)
     "hidden_buttons": None,       # front-panel buttons hidden with CUSTOMISE, shared by every screen (None = nobody has customised yet)
     "update_check": True,         # look for a newer AndySDR on GitHub (start-up + every 12 h) and ask before doing anything
     "update_auto_download": False,  # download in the background, then ask before installing

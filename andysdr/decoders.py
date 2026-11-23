@@ -267,6 +267,7 @@ class DecoderManager:
         self.images_dir = os.path.join(data_dir(), "images")
         self.status = "off"
         self.on_pager = None       # set by the radio: on_pager(line) -> Pager Messages tab
+        self.on_dsd_line = None    # set by the radio: on_dsd_line(line) -> the Last heard list
         self.ft8 = None
         self.freq_fn = None        # set by the radio: () -> tuned frequency (Hz)
         self.job_fn = None         # set by the radio: () -> running scheduled job (dict) or None
@@ -792,6 +793,11 @@ class DecoderManager:
         low = line.lower()
         if ("sync:" in low and "no sync" not in low) or "voice" in low or " slot " in low or "tg:" in low or "nac:" in low:
             self.dsd_sync_t = time.time()
+        if self.on_dsd_line:
+            try:
+                self.on_dsd_line(line)
+            except Exception:      # noqa: BLE001 - the list must never upset the decoder
+                pass
         return not line.startswith(("Digital Speech Decoder", "Build", "mbelib", "Audio In",
                                     "Audio Out", "TCP"))
 

@@ -372,6 +372,7 @@ class Server:
             "meshsdr": r.meshsdr.snapshot(),
             "pager": r.pager.snapshot(),
             "datalink": r.datalink.snapshot(),
+            "lastheard": r.lastheard.snapshot(), "dmrdb": r.dmrdb.status(),
             "adsb": r.adsb.snapshot(),
             "ft8": r.decoders.ft8_history[-300:],
             "morse": {"text": r.decoders.morse_text[-2000:], "status": r.decoders.morse_status},
@@ -381,7 +382,8 @@ class Server:
                                                  "server_port", "require_password_local",
                                                  "deemphasis_us", "theme",
                                                  "update_check", "update_auto_download", "hidden_buttons",
-                                                 "alert_pager", "alert_emergency", "alert_priority", "alert_capture")},
+                                                 "alert_pager", "alert_emergency", "alert_priority", "alert_capture",
+                                                 "dmr_db_auto")},
             "server": {"addresses": lan_addresses(), "port": self.s["server_port"],
                        "password": self.s["password"] if self._is_local(c.peer) else "",
                        "host": socket.gethostname()},
@@ -605,7 +607,8 @@ class Server:
                 allowed = {"scan_delay": float, "scan_dwell": float, "search_threshold_db": float,
                            "require_password_local": bool, "deemphasis_us": int, "theme": str,
                            "password": str, "mute_digital_audio": bool, "update_check": bool, "update_auto_download": bool,
-                           "alert_pager": bool, "alert_emergency": bool, "alert_priority": bool, "alert_capture": bool}
+                           "alert_pager": bool, "alert_emergency": bool, "alert_priority": bool, "alert_capture": bool,
+                           "dmr_db_auto": bool}
                 for k, v in m.get("values", {}).items():
                     if k in allowed:
                         if k == "password" and (not self._is_local(c.peer) or len(str(v)) < 4):
@@ -659,6 +662,12 @@ class Server:
                     done=lambda: self._from_radio("decoders", r.decoders.available()))
             elif cmd == "pager_clear":
                 r.pager.clear()
+            elif cmd == "heard_clear":
+                r.lastheard.clear()
+            elif cmd == "dmrdb_refresh":
+                started = r.dmrdb.refresh(force=True)
+                self._reply(c, "event", {"level": "info", "text": "Downloading the callsign list ..." if started
+                                         else "A download is already running"})
             elif cmd == "datalink_clear":
                 r.datalink.clear(m.get("which", "all"))
             elif cmd == "pager_alias":
@@ -755,6 +764,7 @@ class Server:
         srv = await asyncio.start_server(self.handle, host, port, limit=8 * 1024 * 1024)
         log.info("AndySDR server on http://%s:%d  (LAN: %s)", host, port, lan_addresses())
         self.updater.start()
+        self.radio.dmrdb.start()
         async with srv:
             await srv.serve_forever()
 

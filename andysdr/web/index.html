@@ -331,6 +331,27 @@
       <span class="grow"></span><span id="sigNow" class="sig-chip" hidden></span>
     </div>
     <pre class="console decwin" id="decLog"></pre>
+    <div class="card lhcard" data-help="lastheard">
+      <div class="row wrapline">
+        <b>📋 Last heard</b> <span class="muted small">DMR · P25 · NXDN · M17 – who was talking, to which talkgroup</span>
+        <span class="grow"></span>
+        <input class="inp" id="lhSearch" type="search" placeholder="Search callsign, name, talkgroup" style="width:15em">
+        <span class="muted small" id="lhCount"></span>
+        <button class="btn danger" id="lhClear">Clear list</button>
+      </div>
+      <div class="tablewrap lhwrap">
+        <table class="grid" id="lhTable">
+          <thead><tr><th>Time</th><th>Who</th><th>Name</th><th>To</th><th>System</th><th>Frequency</th><th>Length</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="row wrapline small">
+        <span id="lhDb" class="muted"></span>
+        <span class="grow"></span>
+        <label title="AndySDR downloads the free RadioID.net list of DMR users (callsign, name, town) by itself and refreshes it every 4 weeks. It needs the internet only for that download."><input type="checkbox" id="lhAuto" checked> Keep the callsign list up to date by itself</label>
+        <button class="btn sm" id="lhUpdate">Update callsign list now</button>
+      </div>
+    </div>
     <details class="decdetails" id="decDetails">
       <summary id="decSummary">Decoder programs</summary>
       <div class="declist" id="decStatus"></div>

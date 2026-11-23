@@ -59,6 +59,8 @@ jobs:
           python tests/test_sdrplay_open.py
           python tests/test_server_identity.py
           python tests/test_alerts.py
+          python tests/test_lastheard.py
+          python tests/test_dmrdb.py
 
       - name: New-feature self-tests (informational)
         continue-on-error: true
