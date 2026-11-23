@@ -514,18 +514,24 @@ sizeCanvases();
   sel.onchange = () => { wfH = +sel.value; apply(); };
   $("sizeReset").onclick = () => { specH = 0; wfH = 0; apply(); };
   bar.ondblclick = $("sizeReset").onclick;
-  bar.addEventListener("pointerdown", (e) => {
-    e.preventDefault(); bar.setPointerCapture(e.pointerId); bar.classList.add("drag");
-    const y0 = e.clientY, s0 = specC.clientHeight - (parseFloat(getComputedStyle(document.body).getPropertyValue("--bp-strip")) || 30), w0 = wfC.clientHeight;
+  // each box has its own handle: the bar between them sizes the spectrum, the bar under the waterfall sizes the waterfall
+  const specNow = () => Math.round(specC.clientHeight - (parseFloat(getComputedStyle(document.body).getPropertyValue("--bp-strip")) || 30));
+  const drag = (handle, which) => handle.addEventListener("pointerdown", (e) => {
+    e.preventDefault(); handle.setPointerCapture(e.pointerId); handle.classList.add("drag");
+    const y0 = e.clientY, s0 = specNow(), w0 = wfC.clientHeight;
+    if (!specH) specH = s0; if (!wfH) wfH = w0;                      // freeze the other box so only the one you drag changes
     const move = (ev) => {
       const dy = ev.clientY - y0;
-      specH = Math.max(80, Math.round(s0 + dy));
-      if (wfH > 0 || document.body.classList.contains("sz-wf")) wfH = Math.max(80, Math.round(w0 - dy));
+      if (which === "spec") specH = Math.min(1400, Math.max(80, Math.round(s0 + dy)));
+      else wfH = Math.min(1600, Math.max(80, Math.round(w0 + dy)));
       apply(false);
     };
-    const up = () => { bar.classList.remove("drag"); bar.removeEventListener("pointermove", move); bar.removeEventListener("pointerup", up); bar.removeEventListener("pointercancel", up); apply(true); };
-    bar.addEventListener("pointermove", move); bar.addEventListener("pointerup", up); bar.addEventListener("pointercancel", up);
+    const up = () => { handle.classList.remove("drag"); handle.removeEventListener("pointermove", move); handle.removeEventListener("pointerup", up); handle.removeEventListener("pointercancel", up); apply(true); };
+    handle.addEventListener("pointermove", move); handle.addEventListener("pointerup", up); handle.addEventListener("pointercancel", up);
   });
+  drag(bar, "spec");
+  const bar2 = $("splitter2");
+  if (bar2) { drag(bar2, "wf"); bar2.ondblclick = $("sizeReset").onclick; }
   apply(false);
 })();
 
@@ -2831,7 +2837,7 @@ const HELP = {
   autoid: ["Auto ID (automatic signal identification)", "When ticked, AndySDR analyses whatever you are listening to and shows what it is next to the VFO: DMR (it spots the 30 ms TDMA bursts), P25, NXDN, dPMR, pagers (POCSAG/FLEX), APRS, DTMF, SSTV, WEFAX, TETRA, TETRAPOL or analogue voice (with any CTCSS tone). It then switches to the right mode and starts the matching decoder by itself, and stops it again when the channel goes back to voice. SSTV pictures are caught from their very first line. A decoder you pick yourself, or one stored on a memory channel, is never overridden. Untick to turn it off."],
   morsebox: ["Morse code decoder", "Press the MORSE key (DECODE row) to open this box. AndySDR switches to CW mode and reads Morse from the audio: it finds the pitch of the tone by itself, follows the sending speed (about 5-50 WPM) and prints the letters on the ticker tape, newest on the right; the box underneath keeps everything decoded. SPEED, TONE and SIGNAL show what it hears and the green light flashes with the keying. Click a popular frequency to tune it – most activity is near the QRP spots (7.030, 14.060 MHz), the IARU beacons (14.100, 28.200 MHz) and aviation NDB beacons (190-530 kHz). Weak or very fast signals decode with mistakes (shown as ¿); a clean tone with the signal 15 dB or more above the noise works best. ✕ hides the box but decoding carries on; ■ Stop ends it."],
   ft8tab: ["FT8 / FT4", "Weak-signal amateur digital modes. Pick a band and press ▶ FT8 (or ▶ FT4): AndySDR tunes USB to the dial frequency and decodes every 15 s UTC slot (FT4: 7.5 s). It also starts by itself when you tune or scan onto an FT8/FT4 channel from the band plan and something is on the air. The PC clock must be accurate. CQ only hides everything except stations calling CQ. From/Grid are read from the message."],
-  wfsize: ["Spectrum / waterfall size", "Drag the small bar between the spectrum and the waterfall up or down to change how tall each one is (double-click it to reset). The Waterfall menu picks a fixed waterfall height – Small, Medium, Large or Huge – and Auto fills the space that is left. On a tall waterfall the panel scrolls. Reset size puts both back to normal. Your choice is remembered."],
+  wfsize: ["Spectrum / waterfall size", "Each box has its own handle. Drag the small bar between the spectrum and the waterfall to make the spectrum taller or shorter, and the small bar under the waterfall to size the waterfall (double-click either bar to reset both). The Waterfall menu picks a fixed waterfall height – Small, Medium, Large or Huge – and Auto fills the space that is left. Once you size a box the panel grows with it and the page scrolls. Reset size puts both back to normal. Your choice is remembered."],
   acars: ["Aircraft text (ACARS)", "ACARS is the airlines' text messaging with aircraft: position and weather reports, flight times (out, off, on, in), maintenance data and short messages. In the UK it is on AM channels around 131 MHz – 131.525, 131.725 and 131.825 are the busiest. Press ▶ Start ACARS (or the ACARS key) and tune one; AndySDR switches to AM and lists what it reads: aircraft registration, flight number, the two-letter label and the message. Click a frequency button to tune it. A block with a damaged character is repaired when it can be, otherwise it is dropped, so a weak signal gives fewer messages rather than wrong ones. Link tests and acknowledgements have no text – tick Hide link tests to hide them. Messages are saved to a CSV file each day, and Export CSV saves the list. ▶ Start VDL2 does the same job for the newer digital link on 136 MHz (UK: 136.975 MHz is the busiest, then 136.725 to 136.925): it reads the 25 kHz wide data signal and lists the ACARS messages inside it, marked VDL2 next to the aircraft. Pick a VDL2 frequency button, wait for a burst – the line at the top counts bursts and frames. VDL2 needs a reasonably strong signal (a short airband or wideband VHF antenna and a clear view); the receiver is set to the 25 kHz digital mode automatically."],
   sonde: ["Weather balloons (radiosondes)", "A radiosonde is the small box a weather balloon carries up to 30 km. It sends its GPS position every second on 400.15–406 MHz. The Met Office launches from about 11:00 and 23:00 UTC at several UK sites. Tune one (use SRCH, or watch the waterfall for a signal about 10 kHz wide) and press ▶ Start sonde decoder: AndySDR switches to narrow FM, 16 kHz wide, and lists every balloon it hears with serial, position, height, speed, climb, heading and satellites, plus the distance and bearing from you when My position is set (ADS-B tab, or a USB GPS unit). Click the position to see it on a map (internet needed). Only Vaisala RS41 sondes are read; other makes (DFM, M10, iMet) are ignored."],
   gps: ["USB GPS unit", "Plug in a USB GPS unit (a GPS 'puck' or dongle that appears as a COM port), tick the box and AndySDR fills in My position by itself – for satellite passes and the ADS-B distance and bearing. Leave Port on Auto-find, or pick the unit from the list (★ marks likely GPS units). The chip shows Fix and the number of satellites once it has a position; the first fix can take a few minutes, and it works best near a window or outdoors. By default it checks once a day (then lets go of the unit); the Check menu can make it every hour, or all the time so it follows you if you move. While this is ticked it replaces any position you typed in."],

@@ -1129,3 +1129,9 @@ body.customise #qJump .key::after { content: none; }
 :is([data-theme="modern"], [data-theme="modernlight"]) .top-status .tchip.clock, :is([data-theme="modern"], [data-theme="modernlight"]) .top-status .tchip:nth-child(6), :is([data-theme="modern"], [data-theme="modernlight"]) .top-status .tchip:nth-child(8) { display: none; }
 :is([data-theme="modern"], [data-theme="modernlight"]) .quick :is(#qMode, #qBand, #qDec, #qLock, #qTog, #qFiles) { grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)); gap: 6px; }
 :is([data-theme="modern"], [data-theme="modernlight"]) .quick .key.q { padding: 8px 2px; font-size: 12px; }
+
+/* each of the spectrum and waterfall boxes can be sized on its own; once sized, the panel grows with them and the page scrolls */
+.splitter-end { margin: 2px 0 0; }
+@media (min-width: 1101px) {
+  :is(body.sz-spec, body.sz-wf):is([data-theme="modern"], [data-theme="modernlight"]) .wrap > .scope { height: auto; position: static; }
+}
