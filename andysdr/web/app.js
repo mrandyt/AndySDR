@@ -186,6 +186,14 @@ function segText(txt, len, h) {
   return out.slice(-len).map((o) => segDigit(o.c, o.dp, h)).join("");
 }
 
+const ROPE_Y0 = 42;                                   // % of the meter height above the slim (left) end of the wedge
+const ROPE_STOPS = [[0, [23, 224, 107]], [28, [143, 232, 47]], [48, [247, 228, 31]], [72, [255, 154, 26]], [100, [255, 59, 48]]];
+function ropeColour(p) {                              // colour of the track at this point, for the glow
+  let a = ROPE_STOPS[0], b = ROPE_STOPS[ROPE_STOPS.length - 1];
+  for (let i = 1; i < ROPE_STOPS.length; i++) if (p <= ROPE_STOPS[i][0]) { a = ROPE_STOPS[i - 1]; b = ROPE_STOPS[i]; break; }
+  const t = b[0] === a[0] ? 0 : (p - a[0]) / (b[0] - a[0]);
+  return `rgba(${a[1].map((v, k) => Math.round(v + (b[1][k] - v) * t)).join(",")},.85)`;
+}
 function renderLCD() {
   let ftxt;
   if (entry) ftxt = entry.length > 10 ? entry.slice(-10) : entry;
@@ -234,14 +242,16 @@ function renderLCD() {
   $("smeter").innerHTML = Array.from({ length: bars }, (_, i) =>
     `<i class="${i < lit ? "on" : ""} ${i === sqi ? "sq" : ""}"></i>`).join("");
   $("lcdDb").textContent = (S.level ?? -120).toFixed(0).padStart(4, " ");
-  // OLED "rope light" meters (Modern styles): one smooth green to red tube, squelch in violet
+  // OLED meters (Modern styles): wedge signal meter green to red, neon green squelch bar
   const pct = (v) => Math.max(0, Math.min(1, (v - lo) / (hi - lo))) * 100;
   const lvl = S.level ?? -120, sqv = S.squelch ?? -120;
   const sg = pct(lvl), sq = sqv <= -119 ? 0 : pct(sqv);
-  // the colours stay put along the tube and are revealed as the signal rises
-  for (const id of ["ropeSig", "ropeGlow"]) {
-    const e = $(id); e.style.width = sg.toFixed(1) + "%"; e.style.backgroundSize = (10000 / Math.max(sg, 1)).toFixed(0) + "% 100%";
-  }
+  // wedge meter: slim and green on the left, widening through orange into red; the colours stay put along the track
+  const sig = $("ropeSig"), fill = sig.firstElementChild, f = sg / 100, topY = ROPE_Y0 * (1 - f);
+  sig.style.width = sg.toFixed(1) + "%";
+  fill.style.backgroundSize = (10000 / Math.max(sg, 1)).toFixed(0) + "% 100%";
+  fill.style.clipPath = `polygon(0 ${ROPE_Y0}%, 100% ${topY.toFixed(2)}%, 100% ${(100 - topY).toFixed(2)}%, 0 ${100 - ROPE_Y0}%)`;
+  sig.style.setProperty("--glow", ropeColour(sg));
   $("ropeSql").style.width = sq.toFixed(1) + "%";
   $("ropeTick").style.left = sq.toFixed(1) + "%"; $("ropeTick").style.display = sq > 0 ? "block" : "none";
   $("ropeDb").textContent = lvl.toFixed(0);
