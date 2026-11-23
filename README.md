@@ -11,6 +11,26 @@ network server so any other PC, laptop, tablet or phone in the house can use the
 
 ## Screenshots
 
+**Modern style (default)** – a big OLED-style display with a slim signal wedge that widens from green into red and a neon-green squelch bar, the TUNE / DIGITAL / TOOLS pages of one-click buttons, three knobs, and a spectrum and waterfall that you can each make taller or shorter by dragging the bars under them. (Pictures taken with the built-in Simulator, so the signals are test signals.)
+
+![Modern dark style – TUNE page](docs/screenshots/modern-dark-tune.png)
+
+**DIGITAL page** – your DMR hotspot, the digital voice band picker, and the decoder keys (DMR, P25, NXDN, dPMR, M17, TETRA, pagers, APRS, WEFAX, SSTV, ACARS, VDL2, radiosondes, ADS-B, FT8, FT4, Morse).
+
+![Modern dark style – DIGITAL page](docs/screenshots/modern-dark-digital.png)
+
+**Light style** – the same radio for bright rooms.
+
+![Modern light style](docs/screenshots/modern-light.png)
+
+**PRO-2045 style** – the classic amber hardware-scanner look, with the same pages and keys.
+
+![PRO-2045 style](docs/screenshots/pro2045-style.png)
+
+**UK band plan** – every UK allocation from 9 kHz to 6.5 GHz, with Tune and Search buttons on each line; the bands are also drawn in colour across the top of the spectrum.
+
+![UK band plan tab](docs/screenshots/uk-band-plan.png)
+
 **ADS-B aircraft map** – live aircraft on a map with distance rings, flight levels, and a detail card showing the aircraft photo, type, owner, route, distance to go and more.
 
 ![ADS-B map with aircraft detail card](docs/screenshots/adsb-map.png)
@@ -19,11 +39,11 @@ network server so any other PC, laptop, tablet or phone in the house can use the
 
 | Area | Details |
 |---|---|
-| Front panel | **Status strip** across the top of the radio (local + UTC clocks, receiver, span, filter, scan state, decoder, connected screens), **RX / SCAN / DEC / REC / LINK lights**, and **quick buttons under the display**: one-click MODE, UK BAND jumps (air, marine, PMR, 2 m, 70 cm, CB, FM, pager, weather sats), DECODE (DMR, P25, NXDN, dPMR, M17, TETRA, pager, APRS, WEFAX, SSTV, LRPT, ADS-B, Auto ID), **SKIP / LOCK OUT / UNSKIP**, AGC, MUTE, MONITOR and STEP −/+; a **DIGITAL VOICE BAND** picker (DMR, dPMR, P25, M17, NXDN, TETRA Airwave, TETRAPOL: tunes the band, sets mode and step, starts the decoder; SEARCH BAND sweeps it); and **NOTCH** filters for the sound you hear – a manual notch (pitch slider, narrow / normal / wide) and an AUTO notch that finds and removes steady whistles, heterodynes and carriers by itself (the decoders always get the untouched audio; the radio's own FM / DAB broadcast notches stay in Device settings). Four switchable styles (**SDR++ style** = flat dark panels, controls in a sidebar, big spectrum + waterfall): **PRO-2045 style** (amber 7-segment LCD), **UBCD260DN style** (black base/mobile, white-blue dot-matrix), **TRX-2 style** (rugged gunmetal, grey-green dot-matrix). VOLUME, SQUELCH and RF GAIN knobs (drag, mouse wheel, arrow keys, double-click to reset), full keypad, SCAN / MAN / SRCH / PGM / L/O / PRI / MODE / STEP / BANK / DLY / REC / DEC keys, S-meter with squelch marker, status flags. |
+| Front panel | **Status strip** across the top of the radio (local + UTC clocks, receiver, span, filter, scan state, decoder, connected screens), **RX / SCAN / DEC / REC / LINK lights**, and **quick buttons under the display**: one-click MODE, UK BAND jumps (air, marine, PMR, 2 m, 70 cm, CB, FM, pager, weather sats), DECODE (DMR, P25, NXDN, dPMR, M17, TETRA, pager, APRS, WEFAX, SSTV, LRPT, ADS-B, Auto ID), **SKIP / LOCK OUT / UNSKIP**, AGC, MUTE, MONITOR and STEP −/+; a **DIGITAL VOICE BAND** picker (DMR, dPMR, P25, M17, NXDN, TETRA Airwave, TETRAPOL: tunes the band, sets mode and step, starts the decoder; SEARCH BAND sweeps it); and **NOTCH** filters for the sound you hear – a manual notch (pitch slider, narrow / normal / wide) and an AUTO notch that finds and removes steady whistles, heterodynes and carriers by itself (the decoders always get the untouched audio; the radio's own FM / DAB broadcast notches stay in Device settings). Four switchable styles (**SDR++ style** = flat dark panels, controls in a sidebar, big spectrum + waterfall): **PRO-2045 style** (amber 7-segment LCD), **UBCD260DN style** (black base/mobile, white-blue dot-matrix), **TRX-2 style** (rugged gunmetal, grey-green dot-matrix). VOLUME, SQUELCH and RF GAIN knobs (drag, mouse wheel, arrow keys, double-click to reset), click the big frequency to type one in, SCAN / MAN / SRCH / PGM / L/O / PRI / MODE / STEP / BANK / DLY / REC / DEC keys, S-meter with squelch marker, status flags. |
 | Receivers | **SDRplay RSP1, RSP1A, RSP1B, RSP2, RSP2pro, RSPduo, RSPdx, RSPdx-R2 through SDRplay's own API** (antenna A/B/Hi-Z, bias-T, FM/DAB notch, LNA+IF gain, AGC). RTL-SDR (Nooelec etc.), Airspy, HackRF, LimeSDR, PlutoSDR and others via SoapySDR. rtl_tcp network dongles. Built-in **Simulator** for practice. |
 | Modes | NFM, FM, AM, WFM (50 µs UK de-emphasis), USB, LSB, CW, DIG (12.5 kHz digital), DIG25 (25 kHz digital). |
 | Bandwidth | **WIDTH** drop-down under the mode buttons: the usual receive-filter widths for the current mode (e.g. NFM 6–20 kHz, AM 4–20 kHz, SSB 1.8–4.5 kHz, CW 100 Hz–1.2 kHz). **Auto** follows the **★ suggestion**, worked out from the running decoder (DMR/P25 12.5 kHz, TETRA 25 kHz, M17 9 kHz…), what Auto ID recognised or measured, and the channel spacing of the band you are tuned to (the reason is shown under the box). A width you pick is remembered per mode; the red band on the spectrum and the FILTER read-out follow it. |
-| Scanning | Memory scan across selected banks with lockouts, resume delay, priority channel. A **SKIP ▸ next channel** button (on the display while scanning, above the function keys, and the N key) leaves what the scanner is stopped on and carries straight on – nothing is locked out. **SKIP 10 MIN / 1 HOUR / TODAY** temporarily ignores the channel the scanner is stopped on (or a frequency found by search) – it is scanned again when the time is up or you press **UNSKIP**; keyboard **I** = skip 10 min. **LOCK OUT** (the L/O key) is the permanent version. Uses the spectrum to skip silent channels instantly. |
+| Scanning | Memory scan across selected banks with lockouts, resume delay, priority channel. A **SKIP ▸ next channel** button (on the display while scanning, above the function keys, and the N key) leaves what the scanner is stopped on and carries straight on – nothing is locked out. **SKIP 10 MIN** temporarily ignores the channel the scanner is stopped on (or a frequency found by search) – it is scanned again when the time is up or you press **UNSKIP**; keyboard **I** = skip 10 min. **LOCK OUT** (the L/O key) is the permanent version. Uses the spectrum to skip silent channels instantly. |
 | Search | Sweeps any range (UK quick ranges included) and logs every live signal with hit count and strength; *stop on signal* or *sweep & log only*. Search lockouts. |
 | UK band plan | Every UK allocation, amateur sub-band and key frequency from 9 kHz to 6.5 GHz (Ofcom UK FAT + RSGB band plans), drawn in colour across the top of the spectrum. Size selectable: Off / Small / Medium / Large / Extra large (Large and Extra large use big, easy-to-read text). A full-range **band map** shows the whole spectrum with a red **VFO needle** and the part the waterfall is showing; the **VFO bar** names the band you are in and offers the usual mode/step. **UK BAND PLAN** tab: drill down **Plan › Band › Section** (e.g. Marine › Marine VHF › Ch 16), Tune or Search any section, add a band's key frequencies to a memory bank in one go, and show/hide each plan on the spectrum. |
 | Auto ID | **Automatic signal identification**: AndySDR analyses whatever you're tuned to and works out what it is – DMR (spots the 30 ms TDMA bursts), P25, NXDN, dPMR, POCSAG/FLEX pagers, APRS, DTMF, SSTV, WEFAX, TETRA or analogue voice (with CTCSS tone) – then switches mode and starts the right decoder by itself. SSTV pictures are caught from their header. A decoder you choose yourself always wins. |
