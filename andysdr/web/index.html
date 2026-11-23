@@ -629,15 +629,39 @@
   <div class="tabpage" id="tab-sch">
     <div class="row wrapline" data-help="sched">
       <b>Scheduled captures</b>
-      <span class="muted small">Times are this PC's clock (<span id="schNow">--:--</span>). AndySDR tunes, runs the decoder, then puts the radio back how it was.</span>
+      <span class="muted small">Times are this PC's clock (<span id="schNow">--:--</span>). AndySDR tunes, runs the decoder, then puts the radio back how it was. Tick a capture to switch it on or off.</span>
       <span class="grow"></span>
       <span id="schRunning" class="sig-chip" hidden></span>
       <button class="btn danger" id="schStop" hidden>■ Stop capture</button>
     </div>
+    <div class="card sch-clash" id="schClash" hidden></div>
+    <div class="tablewrap">
+      <table class="grid" id="schTable">
+        <thead><tr><th>On</th><th>When</th><th>Name</th><th>Frequency</th><th>Mode</th><th>Do</th><th>Length</th><th>Priority</th><th>Next</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <details class="card sch-addbox" id="schAddBox" open data-help="sched"><summary><b>➕ Add or edit a capture</b></summary>
+    <div class="sch-form">
+      <label>Quick pick <select id="schPreset"><option value="">– choose a station –</option></select></label>
+      <label>Name <input class="inp" id="schName" style="width:15em" placeholder="e.g. Northwood surface chart"></label>
+      <label>Frequency <input class="inp" id="schFreq" style="width:7em" placeholder="MHz"> MHz</label>
+      <label>Mode <select id="schMode"></select></label>
+      <label>Do <select id="schAction"></select></label>
+      <label>Start <input class="inp" id="schStart" type="time" value="12:00"></label>
+      <label>for <input class="inp" id="schDur" type="number" min="1" max="1440" value="20" style="width:5em"> min</label>
+      <label title="If two captures overlap only one can run: the higher priority takes over the radio">Priority <select id="schPrio"><option value="2">High</option><option value="1" selected>Normal</option><option value="0">Low</option></select></label>
+      <div class="sch-days" id="schDays"></div>
+      <label>or once on <input class="inp" id="schDate" type="date"></label>
+      <button class="btn primary" id="schAdd">Add capture</button>
+      <button class="btn" id="schClear">New</button>
+    </div>
+    </details>
     <div class="card sat-card" data-help="satauto">
       <div class="row wrapline"><b>🛰 Satellite auto-capture</b>
         <span class="muted small">Switch a satellite on and AndySDR works out every pass over your location, tunes in and starts the decoder by itself.</span></div>
       <div class="muted small" data-help="satauto">ℹ Only satellites that rise above your horizon are listed. NOAA 15, 18 and 19 (137 MHz APT) were retired in 2025. From the UK you can receive <b>Meteor-M N2-3 / N2-4</b> (137 MHz LRPT, simple antenna + LNA), <b>Metop-B / Metop-C</b> (1701.3 MHz AHRPT, dish + L-band LNA) and <b>ISS SSTV</b> during events.</div>
+      <details class="satpos" id="satPosBox"><summary>📍 My position &amp; GPS</summary>
       <div class="row wrapline">
         <label>My position <input class="inp" id="satLat" placeholder="lat e.g. 51.5074" style="width:9em" inputmode="decimal">
           <input class="inp" id="satLon" placeholder="lon e.g. -0.1278" style="width:9em" inputmode="decimal"></label>
@@ -655,32 +679,12 @@
         <span class="sig-chip ana" id="gpsChip">GPS off</span>
         <span class="muted small" id="gpsMsg"></span>
       </div>
+      </details>
       <div class="tablewrap"><table class="grid" id="satTable">
         <thead><tr><th>Record</th><th>Satellite</th><th>Frequency</th><th title="Follow the Doppler shift during each pass">Track</th><th>Min elev.</th><th>Days</th><th>Only between dates</th><th>Orbit data</th><th>Notes</th></tr></thead><tbody></tbody></table></div>
-      <div class="row"><b>Pass schedule – recording starts and stops by itself on each pass</b></div>
+      <div class="row wrapline"><b>Pass schedule – recording starts and stops by itself on each pass</b><span class="grow"></span><button class="btn sm" id="satMore" hidden>Show all passes</button></div>
       <div class="tablewrap"><table class="grid" id="satPasses">
         <thead><tr><th>Satellite</th><th>Starts</th><th>Ends</th><th>Peak</th><th>Rises at</th><th>Freq</th><th>Status</th></tr></thead><tbody></tbody></table></div>
-    </div>
-    <div class="sch-form" data-help="sched">
-      <label>Quick pick <select id="schPreset"><option value="">– choose a station –</option></select></label>
-      <label>Name <input class="inp" id="schName" style="width:15em" placeholder="e.g. Northwood surface chart"></label>
-      <label>Frequency <input class="inp" id="schFreq" style="width:7em" placeholder="MHz"> MHz</label>
-      <label>Mode <select id="schMode"></select></label>
-      <label>Do <select id="schAction"></select></label>
-      <label>Start <input class="inp" id="schStart" type="time" value="12:00"></label>
-      <label>for <input class="inp" id="schDur" type="number" min="1" max="1440" value="20" style="width:5em"> min</label>
-      <label title="If two captures overlap only one can run: the higher priority takes over the radio">Priority <select id="schPrio"><option value="2">High</option><option value="1" selected>Normal</option><option value="0">Low</option></select></label>
-      <div class="sch-days" id="schDays"></div>
-      <label>or once on <input class="inp" id="schDate" type="date"></label>
-      <button class="btn primary" id="schAdd">Add capture</button>
-      <button class="btn" id="schClear">New</button>
-    </div>
-    <div class="card sch-clash" id="schClash" hidden></div>
-    <div class="tablewrap">
-      <table class="grid" id="schTable">
-        <thead><tr><th>On</th><th>When</th><th>Name</th><th>Frequency</th><th>Mode</th><th>Do</th><th>Length</th><th>Priority</th><th>Next</th><th></th></tr></thead>
-        <tbody></tbody>
-      </table>
     </div>
     <p class="muted small">Tips: Met Office Northwood fax charts are sent throughout the day – look up the current broadcast schedule and add a capture for the charts you want. ISS SSTV events are announced by ARISS a week or two ahead. Meteor-M passes over the UK happen several times a day; a satellite-pass app gives the times. Pictures appear in WEATHER IMAGES.</p>
   </div>

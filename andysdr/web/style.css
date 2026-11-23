@@ -1092,8 +1092,9 @@ body.sz-wf #wf { height: var(--user-wf) !important; min-height: 0 !important; fl
 .quick[data-page="tune"] > .q-group:not([data-pg="tune"]),
 .quick[data-page="digital"] > .q-group:not([data-pg="digital"]),
 .quick[data-page="tools"] > .q-group:not([data-pg="tools"]) { display: none; }
-.tablewrap { max-height: none; overflow: visible; }
+.tablewrap, :is([data-theme="modern"], [data-theme="modernlight"]) .tablewrap { max-height: none; overflow: visible; }   /* the page scrolls, not the box (the modern max-height used to survive and let rows spill over the next block) */
 .pagwrap { max-height: none; }
+.grid th { top: var(--topbar-h, 0px); z-index: 2; }                                                             /* column headings stay just under the top bar while the page scrolls */
 :is([data-theme="modern"], [data-theme="modernlight"]) .q-jump { order: 1; margin: 0; }
 :is([data-theme="modern"], [data-theme="modernlight"]) .quick { order: 1; }
 @media (min-width: 1101px) {
@@ -1166,3 +1167,29 @@ body.customise #qJump .key::after { content: none; }
 .chk-b { min-width: 0; flex: 1; }
 .chk-cmd { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
 .chk-cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; padding: 5px 8px; border-radius: 6px; background: #050607; color: #b9f5c4; font-family: var(--mono); font-size: 12px; user-select: all; }
+
+/* scheduler clean-up */
+.sch-addbox { padding: 8px 12px; }
+.sch-addbox > summary, .satpos > summary { cursor: pointer; padding: 2px 0; }
+.sch-addbox[open] > summary { margin-bottom: 8px; }
+.satpos { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+.satpos[open] { display: flex; flex-direction: column; gap: 8px; }
+.satdays { display: flex; flex-wrap: wrap; gap: 2px 8px; min-width: 9em; max-width: 14em; }
+.satdays label { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+#satTable input[type="date"] { width: 9.5em; }
+#schTable td { vertical-align: middle; }
+#schTable td:nth-child(2), #schTable td:nth-child(4), #schTable td:nth-child(5), #schTable td:nth-child(7), #schTable td:nth-child(8), #schTable td:nth-child(9), #schTable td:last-child { white-space: nowrap; }
+#schTable td:nth-child(3) { min-width: 14em; }
+#satPasses td, #satPasses th { white-space: nowrap; }
+#satPasses tr.dayrow td { padding-top: 10px; color: var(--accent); }
+#tab-sch .tablewrap { overflow-x: auto; overflow-y: visible; max-height: none; max-width: 100%; }
+#tab-sch .tablewrap table { min-width: 100%; }
+@media (max-width: 1100px) {
+  #schTable td:nth-child(6), #schTable th:nth-child(6), #schTable td:nth-child(8), #schTable th:nth-child(8) { display: none; }
+  #schTable td:nth-child(3) { min-width: 10em; }
+}
+@media (max-width: 600px) {
+  #schTable td:nth-child(5), #schTable th:nth-child(5), #schTable td:nth-child(9), #schTable th:nth-child(9) { display: none; }
+  #satTable td:nth-child(n+7), #satTable th:nth-child(n+7) { display: none; }
+  .sch-form { gap: 8px; }
+}

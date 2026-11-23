@@ -2312,6 +2312,11 @@ function renderTop() {
   $("ledDec").classList.toggle("on", !!S.decoder);
   $("ledRec").classList.toggle("on", !!S.recording);
 }
+function topbarH() {
+  const t = document.querySelector(".topbar");
+  document.documentElement.style.setProperty("--topbar-h", (t && getComputedStyle(t).position === "sticky" ? Math.round(t.getBoundingClientRect().height) : 0) + "px");
+}
+window.addEventListener("resize", topbarH); setTimeout(topbarH, 300); setTimeout(topbarH, 2000);
 function renderClock() {
   const d = new Date(), p = (n) => String(n).padStart(2, "0");
   $("tLocal").textContent = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
@@ -2582,7 +2587,7 @@ function renderSchedule() {
     tr.querySelector("[data-act=run]").onclick = () => send({ cmd: "schedule_run", id: j.id });
     tr.querySelector("[data-act=del]").onclick = () => { if (confirm(`Delete "${j.name}"?`)) send({ cmd: "schedule_delete", id: j.id }); };
     tr.querySelector("[data-act=tune]").onclick = () => send({ cmd: "tune", freq: j.freq, mode: j.mode });
-    tr.querySelector("[data-act=edit]").onclick = () => fillSchForm(j);
+    tr.querySelector("[data-act=edit]").onclick = () => { fillSchForm(j); $("schAddBox").open = true; $("schAddBox").scrollIntoView({ behavior: "smooth", block: "center" }); };
   });
 }
 /* ======================================================= FT8 / FT4 */
@@ -2616,6 +2621,8 @@ $("ft8Start4").onclick = () => ft8Go("ft4");
 /* ---- satellite auto-capture */
 const fmtLocal = (t) => new Date(t * 1000).toLocaleString([], { weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 const azName = (a) => ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(a / 45) % 8];
+let SAT_ALL = false, SAT_POS_SHOWN = false;
+$("satMore").onclick = () => { SAT_ALL = !SAT_ALL; renderSats(); };
 function renderSats() {
   const st = SCH && SCH.sats; if (!st) return;
   const busy = (id) => document.activeElement === $(id);
@@ -2630,7 +2637,7 @@ function renderSats() {
     return `<tr data-id="${x.id}"><td><input type="checkbox" data-k="enabled" ${x.enabled ? "checked" : ""}></td><td>${esc(x.name)}</td><td>${fr}</td>
       <td>${x.kind === "geo" ? '<span class="muted">–</span>' : `<input type="checkbox" data-k="track" ${x.track ? "checked" : ""} title="Retune every 2 s to follow the Doppler shift">`}</td>
       <td><input class="inp" data-k="min_el" type="number" min="0" max="80" value="${x.min_el}" style="width:4.5em">°</td>
-      <td>${geoNoDates ? '<span class="muted">–</span>' : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((n, i) => `<label class="small"><input type="checkbox" data-day="${i}" ${(x.days || []).includes(i) ? "checked" : ""}>${n}</label>`).join(" ")}</td>
+      <td>${geoNoDates ? '<span class="muted">–</span>' : `<div class="satdays">${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((n, i) => `<label class="small"><input type="checkbox" data-day="${i}" ${(x.days || []).includes(i) ? "checked" : ""}>${n}</label>`).join("")}</div>`}</td>
       <td>${geoNoDates ? '<span class="muted">–</span>' : `<input class="inp" data-k="from" type="date" value="${esc(x.from)}"> – <input class="inp" data-k="to" type="date" value="${esc(x.to)}">`}</td>
       <td class="muted">${x.tle_age_h == null ? "not downloaded" : x.tle_age_h + " h old"}</td><td class="small">${note}</td></tr>`;
   }).join("");
@@ -2649,7 +2656,11 @@ function renderSats() {
   const dayName = (t) => new Date(t * 1000).toLocaleDateString([], { weekday: "long", day: "2-digit", month: "short" });
   const hm = (t) => new Date(t * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   let lastDay = "", rows = "";
-  for (const p of st.passes) {
+  const SHOW = 8, more = !SAT_ALL && st.passes.length > SHOW;
+  $("satMore").hidden = st.passes.length <= SHOW;
+  $("satMore").textContent = SAT_ALL ? "Show fewer" : `Show all ${st.passes.length} passes`;
+  if (!st.observer && !SAT_POS_SHOWN) { $("satPosBox").open = true; SAT_POS_SHOWN = true; }     // first time: ask for the position
+  for (const p of (more ? st.passes.slice(0, SHOW) : st.passes)) {
     const d = p.geo ? "Now" : dayName(p.aos);
     if (d !== lastDay) { lastDay = d; rows += `<tr class="dayrow"><td colspan="7"><b>${esc(d)}</b></td></tr>`; }
     rows += `<tr><td>${esc(p.name)}</td><td>${p.geo ? "now (continuous)" : hm(p.aos)}</td><td>${hm(p.los)}</td>
