@@ -12,6 +12,7 @@ import os
 import queue
 import sys
 import threading
+import time
 
 import numpy as np
 
@@ -266,6 +267,7 @@ def _api_open():
             _check(lib.sdrplay_api_Open(), "Open (is the SDRplay API service running?)")
             ver = C.c_float(0)
             lib.sdrplay_api_ApiVersion(C.byref(ver))
+            log.info("SDRplay API version %.2f", ver.value)
             if ver.value < 3.07:
                 log.warning("SDRplay API %.2f is old – please install 3.14 or newer", ver.value)
         _open_count += 1
@@ -362,6 +364,25 @@ class SdrplayDevice(BaseDevice):
     def open(self):
         lib = _load()
         _api_open()
+        try:
+            self._open_inner(lib)
+        except Exception:
+            self._abort_open(lib)           # never leave the RSP half-selected - that locks it until a replug
+            raise
+
+    def _abort_open(self, lib):
+        if self.devT is not None:
+            for fn in ("sdrplay_api_Uninit", "sdrplay_api_ReleaseDevice"):
+                try:
+                    f = getattr(lib, fn)
+                    f(self.devT.dev) if fn == "sdrplay_api_Uninit" else f(C.byref(self.devT))
+                except Exception:
+                    pass
+        self.devT = None
+        self.params = None
+        _api_close()
+
+    def _open_inner(self, lib):
         devs = (DeviceT * 16)()
         n = C.c_uint(0)
         lib.sdrplay_api_LockDeviceApi()
@@ -372,7 +393,9 @@ class SdrplayDevice(BaseDevice):
                 if devs[i].SerNo.decode(errors="ignore") == self.serial:
                     sel = devs[i]
             if sel is None:
-                raise RuntimeError(f"RSP {self.serial} not found – is it plugged in / in use by another program?")
+                raise RuntimeError(f"RSP {self.serial} not found - is it plugged in, or held by another program? "
+                                   "Close SDRuno/other SDR apps, restart the 'SDRplay API Service' (or unplug and "
+                                   "replug the RSP) and try again.")
             if sel.hwVer == 3:            # RSPduo: use tuner A in single-tuner mode
                 sel.tuner = TUNER_A
                 sel.rspDuoMode = DUO_SINGLE
@@ -400,7 +423,23 @@ class SdrplayDevice(BaseDevice):
         saved = dict(self.flags)
         self._cbs = CallbackFnsT(StreamCb(self._stream), StreamCb(lambda *a: None), EventCb(self._event))
         self.pending = np.zeros(0, np.complex64)
-        _check(lib.sdrplay_api_Init(self.devT.dev, C.byref(self._cbs), None), "Init")
+        err = None
+        for attempt in range(3):             # a radio that was killed mid-stream can need a moment to reset
+            try:
+                _check(lib.sdrplay_api_Init(self.devT.dev, C.byref(self._cbs), None), "Init")
+                err = None
+                break
+            except RuntimeError as e:
+                err = e
+                log.warning("SDRplay Init failed (try %d/3): %s", attempt + 1, e)
+                try:
+                    lib.sdrplay_api_Uninit(self.devT.dev)
+                except Exception:
+                    pass
+                time.sleep(0.6)
+        if err is not None:
+            raise RuntimeError(f"{err}. The RSP did not start - close other SDRplay programs, restart the "
+                               "'SDRplay API Service' (Windows Services) or unplug and replug the RSP, then select it again.")
         for k, v in saved.items():          # re-apply bias-T / notch switches after a restart
             if v:
                 self.write_setting(k, "true")

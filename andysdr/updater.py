@@ -294,6 +294,10 @@ class Updater:
             raise RuntimeError("This copy runs from source - update it with git pull or download the release")
         self._set("installing")
         log.info("installing update: %s", cmd)
+        try:
+            self.shutdown()                 # release the radio cleanly BEFORE the installer can close us mid-stream
+        except Exception:
+            log.exception("shutdown before update")
         subprocess.Popen(cmd, close_fds=True, cwd=self.dir, **popen)
         threading.Thread(target=self._quit_soon, name="update-quit", daemon=True).start()
 

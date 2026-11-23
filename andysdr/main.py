@@ -21,6 +21,9 @@ from .engine import Radio
 from .server import Server, lan_addresses
 
 
+_fault_file = None
+
+
 def setup_logging():
     logfile = os.path.join(data_dir(), "logs", "andysdr.log")
     try:
@@ -33,6 +36,13 @@ def setup_logging():
         handlers.append(logging.StreamHandler())
     logging.basicConfig(level=logging.INFO, handlers=handlers,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    try:                                     # a hard crash in a driver DLL leaves a trace in the log folder
+        import faulthandler
+        global _fault_file
+        _fault_file = open(os.path.join(os.path.dirname(logfile), "crash.txt"), "a", encoding="utf-8")
+        faulthandler.enable(_fault_file, all_threads=True)
+    except Exception:
+        pass
     return logfile
 
 
