@@ -1193,3 +1193,11 @@ body.customise #qJump .key::after { content: none; }
   #satTable td:nth-child(n+7), #satTable th:nth-child(n+7) { display: none; }
   .sch-form { gap: 8px; }
 }
+
+/* repeaters tab */
+#repTable td.f { font-family: var(--mono, ui-monospace, Consolas, monospace); color: var(--accent); cursor: pointer; white-space: nowrap; }
+#repTable td { vertical-align: middle; }
+#repTable td.nowrap { white-space: nowrap; }
+#repTable .btn.mini { padding: 1px 7px; font-size: 12px; }
+#tab-rep .tablewrap { overflow-x: auto; overflow-y: visible; max-height: none; }
+#repPosRow { align-items: center; gap: 6px; }

@@ -25,6 +25,7 @@ import urllib.parse
 from . import capturemeta
 from .alerts import Alerts, KINDS as ALERT_KINDS
 from . import diagnose
+from . import repeaters
 from .dsp import BANDWIDTHS
 from .config import VERSION, data_dir, resource_dir
 from .updater import Updater
@@ -384,7 +385,7 @@ class Server:
             "meshsdr": r.meshsdr.snapshot(),
             "pager": r.pager.snapshot(),
             "datalink": r.datalink.snapshot(),
-            "lastheard": r.lastheard.snapshot(), "dmrdb": r.dmrdb.status(),
+            "lastheard": r.lastheard.snapshot(), "dmrdb": r.dmrdb.status(), "repeaters": r.repeaters.status(),
             "adsb": r.adsb.snapshot(),
             "ft8": r.decoders.ft8_history[-300:],
             "morse": {"text": r.decoders.morse_text[-2000:], "status": r.decoders.morse_status},
@@ -705,6 +706,42 @@ class Server:
                                "summary": {"ok": 0, "warn": 0, "bad": 0, "info": 1}, "when": time.time(), "version": VERSION}
                     self.loop.call_soon_threadsafe(self._reply, c, "check_result", rep)
                 threading.Thread(target=run_check, name="check-system", daemon=True).start()
+            elif cmd in ("rep_query", "rep_store_all"):
+                obs = r.scheduler.sats.observer()
+                lat, lon = (obs[0], obs[1]) if obs else (None, None)
+                try:
+                    km = float(m.get("max_km") or 0)
+                except (TypeError, ValueError):
+                    km = 0
+                if cmd == "rep_query":
+                    rows, total = r.repeaters.query(m.get("text", ""), m.get("band", ""), m.get("mode", ""), km, lat, lon,
+                                                    limit=int(m.get("limit") or 400))
+                    if not r.repeaters.rows and r.repeaters.due():
+                        r.repeaters.refresh()
+                    elif r.repeaters.rows and r.repeaters.due():
+                        r.repeaters.refresh()                    # stale: refresh quietly, keep showing the old list
+                    self._reply(c, "repeaters", {"rows": rows, "total": total, "status": r.repeaters.status(),
+                                                 "bands": r.repeaters.bands(), "pos": [lat, lon] if obs else None})
+                else:
+                    rows, total = r.repeaters.query(m.get("text", ""), m.get("band", ""), m.get("mode", ""), km, lat, lon, limit=100)
+                    chans = []
+                    for x in rows:
+                        digital = [k for k in x["modes"] if k != "FM"]
+                        use = "FM" if "FM" in x["modes"] else digital[0]
+                        chans.append({"freq": int(round(x["out"] * 1e6)), "mode": "NFM" if use == "FM" else "DIG",
+                                      "name": repeaters.memory_name(x), "decoder": "dsd" if use != "FM" else "",
+                                      "tone": f"{x['tone']:g}" if x.get("tone") else ""})
+                    if not chans:
+                        self._reply(c, "event", {"level": "warn", "text": "Nothing in the list to store"})
+                    else:
+                        r.store_repeaters(int(m.get("bank") or 0), chans)
+            elif cmd == "rep_refresh":
+                started = r.repeaters.refresh()
+                self._reply(c, "event", {"level": "info", "text": "Downloading the UK repeater list ..." if started
+                                         else "A download is already running"})
+            elif cmd == "rep_store":
+                r.store_repeater(int(m.get("bank") or 0), int(round(float(m["freq"]) * 1e6)), m.get("mode") or "NFM",
+                                 str(m.get("name", ""))[:16], str(m.get("tone") or ""), str(m.get("decoder") or ""))
             elif cmd == "heard_clear":
                 r.lastheard.clear()
             elif cmd == "dmrdb_refresh":

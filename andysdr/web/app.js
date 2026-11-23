@@ -110,6 +110,8 @@ function onJSON(m) {
     case "heard": lhUpsert(d); break;
     case "heard_all": LH.rows = d || []; renderHeard(); break;
     case "dmrdb": lhDb(d); break;
+    case "repeaters": repShow(d); break;
+    case "repeaters_status": REP.st = d; repStatus(); break;
     case "pager": addPager(d); break;
     case "pager_cfg": PAG.cfg = d; renderPager(); break;
     case "pager_all": PAG.msgs = d.messages || []; PAG.cfg = d; renderPager(); break;
@@ -1035,6 +1037,7 @@ function tabEffects(name) {
   if (name === "rec") send({ cmd: "recordings" });
   if (name === "dec") send({ cmd: "decoders" });
   if (name === "bp") renderBandPlan();
+  if (name === "rep") { repFillBanks(); repAsk(); }
   if (name === "sch") send({ cmd: "schedule" });
   if (name === "ft8") { FT8.unseen = 0; $("ft8Badge").hidden = true; renderFt8(); }
   if (name === "mesh") { meshRead(meshConv); renderMesh(); setTimeout(() => $("meshMsgs").scrollTop = 1e9, 0); }
@@ -2534,6 +2537,78 @@ $("lhAuto").onchange = () => send({ cmd: "settings", values: { dmr_db_auto: $("l
 $("lhTable").addEventListener("click", (e) => { const f = e.target.closest("td.f[data-f]"); if (f) send({ cmd: "tune", freq: +f.dataset.f }); });
 setInterval(() => { if (LH.rows.length && $("tab-dec").classList.contains("active") && LH.rows.some((r) => Date.now() - (r._rx || 0) < 9000)) renderHeard(); }, 2000);
 
+/* ======================================================= UK repeaters */
+const REP = { st: null, rows: [], pos: null, timer: 0, bandsFilled: false };
+function repAsk() {
+  send({ cmd: "rep_query", text: $("repFind").value.trim(), band: $("repBand").value, mode: $("repMode").value, max_km: +$("repKm").value || 0, limit: 400 });
+}
+function repAskSoon() { clearTimeout(REP.timer); REP.timer = setTimeout(repAsk, 250); }
+function repFillBanks() {
+  if (typeof MEM === "undefined" || !MEM.banks) return;
+  const pb = $("repBank").value;
+  $("repBank").innerHTML = Array.from({ length: 10 }, (_, b) => `<option value="${b}">Bank ${b} – ${esc(MEM.banks[b].name)} (${Object.keys(MEM.banks[b].channels).length})</option>`).join("");
+  $("repBank").value = pb || "8";
+}
+function repStatus() {
+  const st = REP.st; if (!st) return;
+  $("repStatus").textContent = st.state === "downloading" ? "Downloading the repeater list …"
+    : st.state === "ready" ? `${st.count.toLocaleString()} repeaters · list ${st.age_days < 1 ? "downloaded today" : Math.round(st.age_days) + " days old"} · refreshed automatically every 2 weeks`
+    : st.state === "error" ? `Could not download the list (${st.msg || "no internet?"}) – press Update list to try again.`
+    : "List not downloaded yet – it downloads by itself when this tab opens (needs the internet once).";
+  $("repUpdate").disabled = st.state === "downloading";
+}
+function repShow(d) {
+  REP.st = d.status; REP.rows = d.rows || []; REP.pos = d.pos; repStatus();
+  if (d.bands && (!REP.bandsFilled || $("repBand").options.length !== d.bands.length + 1)) {
+    const cur = $("repBand").value;
+    $("repBand").innerHTML = `<option value="">All</option>` + d.bands.map((b) => `<option>${esc(b)}</option>`).join("");
+    $("repBand").value = cur; REP.bandsFilled = true;
+  }
+  $("repPos").textContent = d.pos ? `Your position: ${(+d.pos[0]).toFixed(3)}, ${(+d.pos[1]).toFixed(3)} – nearest first.` : "Set your position to sort by distance:";
+  $("repCount").textContent = d.total > REP.rows.length ? `${REP.rows.length} of ${d.total} shown – narrow the search` : `${d.total} repeater${d.total === 1 ? "" : "s"}`;
+  const tb = $("repTable").querySelector("tbody");
+  if (!REP.rows.length) {
+    tb.innerHTML = `<tr><td colspan="9" class="muted">${d.status.state === "downloading" ? "Downloading the repeater list …" : d.status.count ? "No repeater matches." : "No list yet."}</td></tr>`;
+    return;
+  }
+  tb.innerHTML = REP.rows.map((r, i) => {
+    const btns = r.modes.map((m) => `<button class="btn mini" data-i="${i}" data-m="${esc(m)}" title="Tune ${esc(r.call)} in ${esc(m)}">▶ ${esc(m)}</button>`).join(" ");
+    const dist = r.km != null ? `${r.km < 10 ? r.km.toFixed(1) : Math.round(r.km)} km ${r.dir}` : "";
+    return `<tr><td><b>${esc(r.call)}</b></td><td class="f">${r.out.toFixed(4)}</td><td>${esc(r.chan)}</td><td>${r.tone ? r.tone : ""}</td><td>${esc(r.modes.join(" · "))}</td>` +
+      `<td>${esc(r.where)}${r.approx ? ' <span class="muted" title="Approximate – from the locator">~</span>' : ""}</td><td>${esc(r.loc)}</td><td>${dist}</td>` +
+      `<td class="nowrap">${btns} <button class="btn mini" data-i="${i}" data-act="mem" title="Store in the memory bank chosen above">★</button></td></tr>`;
+  }).join("");
+}
+function repTune(r, mode) {
+  const hz = Math.round(r.out * 1e6);
+  if (mode === "FM") { send({ cmd: "tune", freq: hz, mode: "NFM" }); return; }
+  send({ cmd: "tune", freq: hz, mode: "DIG" }); send({ cmd: "stepsize", hz: 12500 });
+  send({ cmd: "decoder", id: "dsd", sub: { DMR: "dmr", "D-STAR": "dstar", C4FM: "ysf" }[mode] || "auto" });
+}
+$("repTable").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-i]"); if (!b) return;
+  const r = REP.rows[+b.dataset.i]; if (!r) return;
+  if (b.dataset.act === "mem") {
+    const dig = r.modes.filter((m) => m !== "FM"), use = r.modes.includes("FM") ? "FM" : dig[0];
+    send({ cmd: "rep_store", bank: +$("repBank").value, freq: r.out, mode: use === "FM" ? "NFM" : "DIG", name: (r.call + " " + (r.where || "")).slice(0, 16).trim(), tone: r.tone ? String(r.tone) : "", decoder: use === "FM" ? "" : "dsd" });
+  } else repTune(r, b.dataset.m);
+});
+$("repTable").addEventListener("click", (e) => { const f = e.target.closest("td.f"); if (f) send({ cmd: "tune", freq: Math.round(parseFloat(f.textContent) * 1e6), mode: "NFM" }); });
+["repFind"].forEach((id) => $(id).addEventListener("input", repAskSoon));
+["repBand", "repMode", "repKm"].forEach((id) => $(id).addEventListener("change", repAsk));
+$("repUpdate").onclick = () => send({ cmd: "rep_refresh" });
+$("repStoreAll").onclick = () => {
+  if (!REP.rows.length) return;
+  send({ cmd: "rep_store_all", bank: +$("repBank").value, text: $("repFind").value.trim(), band: $("repBand").value, mode: $("repMode").value, max_km: +$("repKm").value || 0 });
+};
+function repSetPos(lat, lon, alt) { send({ cmd: "sat_observer", lat, lon, alt }); setTimeout(repAsk, 400); }
+$("repPosSet").onclick = () => repSetPos($("repLat").value.trim().replace(",", "."), $("repLon").value.trim().replace(",", "."));
+$("repPosGeo").onclick = () => {
+  if (!navigator.geolocation) { toast("This browser cannot find your location – type it in", "error"); return; }
+  navigator.geolocation.getCurrentPosition((p) => repSetPos(p.coords.latitude.toFixed(5), p.coords.longitude.toFixed(5), Math.round(p.coords.altitude || 30)),
+    () => toast("Could not get your location – type it in", "error"), { timeout: 10000 });
+};
+
 /* ======================================================= auto-identify */
 const SIG_DIGITAL = /DMR|P25|NXDN|dPMR|Digital|Pager|APRS|DTMF|TETRA/;
 function renderSignal() {
@@ -3008,6 +3083,7 @@ const HELP = {
   qdec: ["Decoder buttons", "Start a decoder with one click: DMR, P25, NXDN, dPMR, M17 (digital voice), TETRA and TETRAPOL (network, call and message signalling), PAGER (POCSAG/FLEX), APRS (also DTMF/ZVEI/EAS), WEFAX, SSTV, LRPT (Meteor-M) and ADS-B (aircraft). AUTO (Auto ID) lets AndySDR identify signals and pick the decoder itself. OFF stops the decoder. A dimmed button means its program is not installed yet – see the DECODERS tab."],
   alerts: ["Alerts for the AndySDR Remote app", "Choose what the Android app may notify you about: a page for a capcode you starred, an aircraft squawking 7500 / 7600 / 7700, activity on the priority channel, or a scheduled capture starting. In the app, switch on Alerts on the connect screen. Send a test alert shows a notice on the tablet within a few seconds. The alerts are collected on this PC and fetched by the app over your own network."],
   checksys: ["Check my system", "Press Check my system and AndySDR looks over the things that most often go wrong, then lists them with the worst first: is a real receiver open (or only the simulator), is the SDRplay driver installed and its service running (RSP receivers), is the receiver being overloaded by strong signals, are the decoder programs installed, can other devices get through the Windows Firewall, is the remote password strong, is there disk space, is AndySDR up to date, are the satellite settings complete. Each problem says what it means and what to do; where a command is needed it is shown in a box with a Copy button (paste it into a Command Prompt run as Administrator). Nothing is changed by the check. Save diagnostics (zip) puts the result, the recent log files and your settings (the password is removed) in one zip – send it to whoever is helping you."],
+  repeaters: ["UK repeaters", "The RSGB's list of UK amateur repeaters (about a thousand: 2 m, 70 cm, 4 m, 6 m and more; FM, DMR, D-STAR and Fusion). The PC downloads it by itself from ukrepeater.net the first time you open this tab and then every two weeks (or press Update list); if the internet is down the old list is kept. LISTEN MHZ is what the repeater transmits – the frequency AndySDR tunes. TONE is the CTCSS tone a radio needs to open the repeater if you transmit with your own radio (AndySDR only listens). Set MY POSITION (or press Use my location) and the list sorts nearest first with the distance and compass direction; WITHIN limits it to a distance. The ▶ buttons tune the repeater in that mode – FM sets narrow FM, DMR / D-STAR / C4FM tune digital and start that decoder. ★ stores it in the memory bank chosen at the top right, with its tone; STORE SHOWN IN BANK stores everything currently listed (up to 100, nearest first – try Within 50 km and Mode FM). Click a frequency to tune it. A ~ after the town means the keeper asked for privacy, so the position is only approximate. Tablet and phone show the same list through the PC."],
   lastheard: ["Last heard", "Every DMR, P25, NXDN or M17 transmission AndySDR decodes becomes one row: the time, who was talking (callsign and name from the RadioID list, or just the ID if they are not registered), the talkgroup it was sent to (or the person for a private call), the system (DMR slot, colour code, P25 NAC, M17 channel access number), the frequency and how long they talked. Newest is at the top; a dot marks a call in progress. Click a frequency to tune to it, a callsign to look it up on QRZ.com. 🔒 means encrypted – the IDs show but the speech cannot be decoded; 🚨 is an emergency call. The callsign list is downloaded by the PC itself from RadioID.net the first time, then refreshed every four weeks (or press Update callsign list now); if the internet is down the old list is kept. Talkgroup names come from the BrandMeister list and from any talkgroups you imported from RadioReference. The tablet and phone show the same list through the PC, so they need no download of their own. M17 stations send their callsign in the signal, so they are shown even without the list."],
   qjump: ["Tune / Digital / Tools pages", "The three buttons under the display switch the group of quick buttons below them, so nothing has to be scrolled. TUNE: mode, filter width and band. DIGITAL: your hotspot, the digital voice bands (DMR, P25, M17, TETRA) and the decoder buttons. TOOLS: notch filters, skip / lock-out, audio switches and the pictures, replay and recordings buttons. AndySDR remembers the page you used last. ⚙ CUSTOMISE hides the buttons you will never use: press it, tap any button to hide it, then press DONE; SHOW HIDDEN brings them all back. The list is kept on the radio PC, so the PC, the tablet and the phone all show the same buttons."],
   qhot: ["My hotspot", "Your saved DMR hotspot. Press the big button to tune to it, switch to digital mode and start the DMR decoder in one go – the callsigns and talkgroups your hotspot passes appear in the decoder list. EDIT lets you change the name, frequency (MHz), colour code, timeslot and talkgroup; SAVE keeps them for next time. Keep RF GAIN low when the hotspot is close to the receiver."],

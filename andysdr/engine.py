@@ -15,6 +15,7 @@ from .adsb import ADSB_FREQ, Adsb
 from .meshsdr import MeshSdr
 from .datalink import DatalinkStore
 from .dmrdb import DmrDb
+from .repeaters import Repeaters
 from .lastheard import LastHeard
 from .autodetect import SignalClassifier
 from .config import data_dir
@@ -61,6 +62,7 @@ class Radio:
         self.dmrdb = DmrDb(settings, self._emit_dmrdb,
                            memory_tg=lambda: {t["tgid"]: t.get("name", "") for t in self.memory.data.get("talkgroups", [])
                                               if t.get("name")})
+        self.repeaters = Repeaters(settings, self._emit)
         self.lastheard = LastHeard(settings, self._emit, self.dmrdb, freq_fn=lambda: self.freq,
                                    on_new=lambda row, text: self.decoders.log(text))
         self.decoders.on_dsd_line = self.lastheard.feed
@@ -848,6 +850,29 @@ class Radio:
                                  "text": f"Stored {self.freq / 1e6:.4f} MHz in bank {bank} ch {slot}"})
             self.channel = (int(bank), slot, e)
             self._push_state(True)
+        self.call(do)
+
+    def store_repeater(self, bank, freq_hz, mode, name, tone="", decoder=""):
+        """Put one repeater (its output frequency) into the first free slot of a bank."""
+        def do():
+            slot = self.memory.free_slot(int(bank))
+            if slot is None:
+                self._emit("event", {"level": "warn", "text": f"Bank {bank} is full"})
+                return
+            self.memory.store(int(bank), slot, {"freq": int(freq_hz), "mode": mode, "name": name,
+                                                "decoder": decoder, "tone": tone})
+            self._emit("memory", self.memory.all())
+            self._emit("event", {"level": "info", "text": f"Stored {name} ({freq_hz / 1e6:.4f} MHz) in bank {bank} ch {slot}"})
+        self.call(do)
+
+    def store_repeaters(self, bank, channels):
+        def do():
+            added, overflow = self.memory.import_channels(int(bank), channels, max_banks=1)
+            self._emit("memory", self.memory.all())
+            txt = f"Stored {added} repeaters in bank {bank}"
+            if overflow:
+                txt += f" - {overflow} did not fit (a bank holds 100; empty another bank or narrow the list)"
+            self._emit("event", {"level": "info" if not overflow else "warn", "text": txt})
         self.call(do)
 
     def lockout(self):

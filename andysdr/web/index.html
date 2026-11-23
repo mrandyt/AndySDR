@@ -248,6 +248,7 @@
     <button class="tab" data-tab="img">WEATHER IMAGES</button>
     <button class="tab" data-tab="rec">RECORDINGS</button>
     <button class="tab" data-tab="bp">UK BAND PLAN</button>
+    <button class="tab" data-tab="rep">REPEATERS</button>
     <button class="tab" data-tab="sch">SCHEDULER</button>
     <button class="tab" data-tab="mesh">MESHCORE <span class="tab-badge" id="meshBadge" hidden></span></button>
     <button class="tab" data-tab="rx">RECEIVER</button>
@@ -623,6 +624,40 @@
       </table>
     </div>
     <p class="muted small">Based on the Ofcom UK Frequency Allocation Table and RSGB band plans, simplified as a listening guide. Being in a band does not mean you may listen to it – see Help › Legal.</p>
+  </div>
+
+  <!-- REPEATERS -->
+  <div class="tabpage" id="tab-rep">
+    <div class="row wrapline" data-help="repeaters">
+      <b>UK repeaters</b>
+      <input class="inp" id="repFind" placeholder="Find (callsign, town, channel e.g. RV48, 145.6)" style="width:20em">
+      <label>Band <select id="repBand"><option value="">All</option></select></label>
+      <label>Mode <select id="repMode"><option value="">All</option><option value="FM">FM (analogue)</option><option value="DMR">DMR</option><option value="D-STAR">D-STAR</option><option value="C4FM">C4FM / Fusion</option></select></label>
+      <label>Within <select id="repKm"><option value="0">any distance</option><option value="25">25 km</option><option value="50">50 km</option><option value="100">100 km</option><option value="200">200 km</option></select></label>
+      <span class="grow"></span>
+      <span class="muted small" id="repCount"></span>
+    </div>
+    <div class="row wrapline small" id="repPosRow">
+      <span id="repPos" class="muted"></span>
+      <input class="inp" id="repLat" placeholder="lat e.g. 51.5074" style="width:9em">
+      <input class="inp" id="repLon" placeholder="lon e.g. -0.1278" style="width:9em">
+      <button class="btn" id="repPosSet">Set my position</button>
+      <button class="btn" id="repPosGeo">📍 Use my location</button>
+    </div>
+    <div class="row wrapline small">
+      <button class="btn" id="repUpdate">⟳ Update list</button>
+      <span class="muted" id="repStatus"></span>
+      <span class="grow"></span>
+      <button class="btn" id="repStoreAll" title="Store the repeaters shown (up to 100) into a memory bank">Store shown in bank</button>
+      <select id="repBank" title="Memory bank"></select>
+    </div>
+    <div class="tablewrap">
+      <table class="grid" id="repTable">
+        <thead><tr><th>Callsign</th><th>Listen MHz</th><th>Chan</th><th>Tone Hz</th><th>Modes</th><th>Where</th><th>Locator</th><th>Distance</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="muted small">Listen MHz is what the repeater <b>transmits</b> – the frequency AndySDR tunes to hear it. List from the RSGB's ukrepeater.net, downloaded by the PC itself. Repeaters whose keeper asked for site privacy show an approximate position. AndySDR only listens; the tone is shown so you know what to set if you transmit with your own radio.</p>
   </div>
 
   <!-- SCHEDULER -->
