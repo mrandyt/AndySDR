@@ -510,10 +510,13 @@ class SdrplayDevice(BaseDevice):
         if self.params:
             rx = self.params.rxChannelA.contents
             rx.tunerParams.rfFreq.rfHz = float(f)
-            if self.agc:
+            g = rx.tunerParams.gain
+            before = (g.gRdB, g.LNAstate)
+            self._apply_gain_values(rx)               # LNA states differ per band - keep the state in range
+            if self.agc and g.LNAstate == before[1]:
+                g.gRdB = before[0]                    # AGC is steering the IF gain - leave it alone
                 self._update(UPD_FRF)
-            else:                                     # LNA states differ per band - keep the state in range
-                self._apply_gain_values(rx)
+            else:
                 self._update(UPD_FRF | UPD_GR)
 
     def set_sample_rate(self, sr):
@@ -555,7 +558,9 @@ class SdrplayDevice(BaseDevice):
 
     def set_gain(self, g):
         self.gain = float(g)
-        if self.params and not self.agc:
+        if self.params:
+            # with hardware AGC on the radio still needs its LNA step set by the RF GAIN knob (AGC only trims the
+            # IF gain), so the knob must act in both modes - a high LNA state leaves the receiver nearly deaf
             self._apply_gain_values(self.params.rxChannelA.contents)
             self._update(UPD_GR)
 
