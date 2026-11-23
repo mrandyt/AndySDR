@@ -23,6 +23,7 @@ import time
 import urllib.parse
 
 from . import capturemeta
+from .alerts import Alerts, KINDS as ALERT_KINDS
 from .dsp import BANDWIDTHS
 from .config import VERSION, data_dir, resource_dir
 from .updater import Updater
@@ -98,9 +99,14 @@ class Server:
         self.fail_times = {}
         radio.add_listener(self._from_radio)
         self.updater = Updater(settings, self._from_radio, shutdown=radio.stop)
+        self.alerts = Alerts(settings)
 
     # ---------------------------------------------------------------- radio -> clients
     def _from_radio(self, kind, payload):
+        try:
+            self.alerts.feed(kind, payload)       # the few events worth a notification on the tablet app
+        except Exception:
+            log.exception("alert feed")
         if self.loop is None:
             return
         try:
@@ -165,6 +171,14 @@ class Server:
             if not self._token_ok(ip, (query.get("token") or [""])[0]):
                 await self._send(writer, 403, b"Password required", "text/plain")
                 return
+        if path == "/api/alerts":                     # polled by the Android app's background service
+            try:
+                since = int((query.get("since") or ["-1"])[0])
+            except ValueError:
+                since = -1
+            await self._send(writer, 200, json.dumps(self.alerts.since(since)).encode(), "application/json",
+                             extra={"Cache-Control": "no-store"})
+            return
         if path == "/api/replay.wav":
             try:
                 secs = float((query.get("secs") or ["30"])[0])
@@ -366,7 +380,8 @@ class Server:
             "settings": {k: self.s[k] for k in ("scan_delay", "scan_dwell", "search_threshold_db",
                                                  "server_port", "require_password_local",
                                                  "deemphasis_us", "theme",
-                                                 "update_check", "update_auto_download")},
+                                                 "update_check", "update_auto_download", "hidden_buttons",
+                                                 "alert_pager", "alert_emergency", "alert_priority", "alert_capture")},
             "server": {"addresses": lan_addresses(), "port": self.s["server_port"],
                        "password": self.s["password"] if self._is_local(c.peer) else "",
                        "host": socket.gethostname()},
@@ -577,10 +592,20 @@ class Server:
                 r.clear_activity()
             elif cmd == "audio":
                 c.audio = bool(m.get("on", True))
+            elif cmd == "alert_test":
+                self.alerts.add("test", "Test alert from AndySDR", time.strftime("Sent at %H:%M:%S – if you can read this on the tablet, alerts work."))
+                self._reply(c, "event", {"level": "info", "text": "Test alert sent – the tablet app shows it within a few seconds"})
+            elif cmd == "hidden_buttons":
+                # CUSTOMISE: the buttons hidden on the front panel are kept here so every screen (PC, tablet, phone) matches
+                ids = [str(x)[:80] for x in (m.get("ids") or []) if isinstance(x, str)][:300]
+                self.s["hidden_buttons"] = ids
+                self.s.save()
+                self._broadcast("hidden_buttons", ids)
             elif cmd == "settings":
                 allowed = {"scan_delay": float, "scan_dwell": float, "search_threshold_db": float,
                            "require_password_local": bool, "deemphasis_us": int, "theme": str,
-                           "password": str, "mute_digital_audio": bool, "update_check": bool, "update_auto_download": bool}
+                           "password": str, "mute_digital_audio": bool, "update_check": bool, "update_auto_download": bool,
+                           "alert_pager": bool, "alert_emergency": bool, "alert_priority": bool, "alert_capture": bool}
                 for k, v in m.get("values", {}).items():
                     if k in allowed:
                         if k == "password" and (not self._is_local(c.peer) or len(str(v)) < 4):

@@ -725,6 +725,15 @@
         <label><input type="checkbox" id="updDl"> Download new versions in the background, then ask before installing</label>
         <p class="small muted">Updates come from this program's GitHub releases. Nothing is installed without your OK.</p>
       </div>
+      <div class="card" data-help="alerts">
+        <h3>Alerts for the AndySDR Remote app</h3>
+        <label><input type="checkbox" id="alPager"> A page for a capcode you have starred (PAGER MESSAGES tab)</label>
+        <label><input type="checkbox" id="alEmerg"> An aircraft squawking 7500 / 7600 / 7700</label>
+        <label><input type="checkbox" id="alPri"> Activity on the priority channel</label>
+        <label><input type="checkbox" id="alCap"> A scheduled capture (satellite pass, WEFAX, SSTV…) starting</label>
+        <div class="row wrapline"><button class="btn" id="alTest">Send a test alert</button></div>
+        <p class="small muted">The Android app shows these as notifications, even with the screen off, once you switch on <b>Alerts</b> on its connect screen. Nothing leaves your network.</p>
+      </div>
       <div class="card" data-help="adsbshare">
         <h3>Share aircraft (ADS-B) with other programs</h3>
         <label><input type="checkbox" id="adsbShare"> Send the ADS-B feed over the network</label>

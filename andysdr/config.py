@@ -97,6 +97,8 @@ DEFAULTS = {
     "adsb_share": False,          # re-broadcast as SBS (30003) and raw AVR (30002) for other programs
     "adsb_sbs_port": 30003,
     "adsb_raw_port": 30002,
+    "alert_pager": True, "alert_emergency": True, "alert_priority": True, "alert_capture": True,   # what the tablet app is notified about
+    "hidden_buttons": None,       # front-panel buttons hidden with CUSTOMISE, shared by every screen (None = nobody has customised yet)
     "update_check": True,         # look for a newer AndySDR on GitHub (start-up + every 12 h) and ask before doing anything
     "update_auto_download": False,  # download in the background, then ask before installing
     "update_skip": "",            # version the user chose to skip

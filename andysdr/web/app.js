@@ -78,6 +78,7 @@ function onJSON(m) {
       $("loginErr").textContent = "Wrong password";
       break;
     case "hello": onHello(d); break;
+    case "hidden_buttons": custRemote(d); break;
     case "state": S = d; renderState(); adsbStat(); break;
     case "memory": MEM = d; renderMemory(); break;
     case "activity": renderActivity(d); break;
@@ -122,6 +123,7 @@ function onJSON(m) {
 function onHello(h) {
   $("loginModal").hidden = true;
   if (h.token) { token = h.token; sessionStorage.setItem("andysdr_token", token); }
+  if (h.token && window.AndyBridge) { try { window.AndyBridge.setToken(h.token); } catch (e) { /* not the Android app */ } }   // lets the Android app's alert service log in
   isLocal = h.local;
   document.querySelectorAll(".local-only").forEach((e) => (e.style.display = isLocal ? "" : "none"));
   if (h.bias) renderBias(h.bias);
@@ -143,6 +145,9 @@ function onHello(h) {
   FT8.msgs = h.ft8 || []; renderFt8();
   if (h.morse) { MORSE_TXT = h.morse.text || ""; renderMorse(); if (h.morse.status) morseStatus(h.morse.status); }
   const st = h.settings || {};
+  custRemote(st.hidden_buttons);
+  $("alPager").checked = st.alert_pager !== false; $("alEmerg").checked = st.alert_emergency !== false;
+  $("alPri").checked = st.alert_priority !== false; $("alCap").checked = st.alert_capture !== false;
   $("updAuto").checked = st.update_check !== false; $("updDl").checked = !!st.update_auto_download;
   if (h.update) onUpdate(h.update, true);
   $("setDelay").value = st.scan_delay; $("setDwell").value = st.scan_dwell;
@@ -2217,7 +2222,8 @@ function renderBw() {
     send({ cmd: "bandwidth", bw: sug.hz, auto: true });
   }
 }
-/* ----- customise: hide the buttons you never use (kept per browser) ----- */
+/* ----- customise: hide the buttons you never use (kept on the radio PC, so every screen matches) ----- */
+let custRemote = () => {};   // set by customInit: takes the PC's list (hello message, or another screen changing it)
 function customInit() {
   const KEY = "andysdr.hidden";
   const btnId = (b) => {
@@ -2225,10 +2231,15 @@ function customInit() {
     const a = b.closest("#qDec") ? b.textContent.trim() : (["m", "b", "d", "l", "t", "f", "k"].map((k) => b.dataset[k]).find(Boolean) || b.id || b.textContent.trim());
     return g + ":" + a;
   };
-  let hidden;
-  try { const v = localStorage.getItem(KEY); hidden = v === null ? ["qdec:TETRAPOL"] : JSON.parse(v); } catch (e) { hidden = []; }   // first run: TETRAPOL is not used in the UK
+  let hidden, haveLocal = false;
+  try { const v = localStorage.getItem(KEY); haveLocal = v !== null; hidden = v === null ? ["qdec:TETRAPOL"] : JSON.parse(v); } catch (e) { hidden = []; }   // first run: TETRAPOL is not used in the UK
   if (!Array.isArray(hidden)) hidden = [];
-  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(hidden)); } catch (e) { /* ignore */ } };
+  const cache = () => { try { localStorage.setItem(KEY, JSON.stringify(hidden)); } catch (e) { /* ignore */ } };   // a copy in this browser, for the moment before the PC answers
+  const save = () => { cache(); send({ cmd: "hidden_buttons", ids: hidden }); };
+  custRemote = (list) => {
+    if (Array.isArray(list)) { hidden = list.filter((x) => typeof x === "string"); cache(); apply(); }
+    else if (haveLocal) send({ cmd: "hidden_buttons", ids: hidden });   // the PC has no list yet: the first screen that already had one lends it
+  };
   const keys = () => document.querySelectorAll(".radio .key:not(.key-power)");
   function apply() {
     keys().forEach((b) => b.classList.toggle("u-hide", hidden.includes(btnId(b))));
@@ -2391,6 +2402,9 @@ $("updCheck").onclick = () => send({ cmd: "update_check" });
 $("updShow").onclick = () => { renderUpdateModal(); };
 $("updAuto").onchange = () => send({ cmd: "settings", values: { update_check: $("updAuto").checked }, quiet: true });
 $("updDl").onchange = () => send({ cmd: "settings", values: { update_auto_download: $("updDl").checked }, quiet: true });
+[["alPager", "alert_pager"], ["alEmerg", "alert_emergency"], ["alPri", "alert_priority"], ["alCap", "alert_capture"]].forEach(([id, key]) =>
+  ($(id).onchange = () => send({ cmd: "settings", values: { [key]: $(id).checked }, quiet: true })));
+$("alTest").onclick = () => send({ cmd: "alert_test" });
 
 /* ======================================================= auto-identify */
 const SIG_DIGITAL = /DMR|P25|NXDN|dPMR|Digital|Pager|APRS|DTMF|TETRA/;
@@ -2858,7 +2872,8 @@ const HELP = {
   qmode: ["Mode buttons", "One click to choose how the signal is demodulated – no need to press MODE repeatedly. NFM/FM for most two-way radio, AM for airband, WFM for FM broadcast, USB/LSB for HF voice and weather fax, CW for Morse, DIG and DIG25 for digital signals (DIG25 is the wider one for TETRA and satellites). The current mode is lit."],
   qband: ["Band buttons", "Jump straight to a popular UK band with the right mode and tuning step already set: AIR (121.500 MHz), MARINE (channel 16), PMR446, 2M, 70CM, CB, FM BC, PAGER and weather SATS. Then step with ▲ ▼, press SCAN, or use SRCH to find what is active. The button for the band you are in stays lit."],
   qdec: ["Decoder buttons", "Start a decoder with one click: DMR, P25, NXDN, dPMR, M17 (digital voice), TETRA and TETRAPOL (network, call and message signalling), PAGER (POCSAG/FLEX), APRS (also DTMF/ZVEI/EAS), WEFAX, SSTV, LRPT (Meteor-M) and ADS-B (aircraft). AUTO (Auto ID) lets AndySDR identify signals and pick the decoder itself. OFF stops the decoder. A dimmed button means its program is not installed yet – see the DECODERS tab."],
-  qjump: ["Tune / Digital / Tools pages", "The three buttons under the display switch the group of quick buttons below them, so nothing has to be scrolled. TUNE: mode, filter width and band. DIGITAL: your hotspot, the digital voice bands (DMR, P25, M17, TETRA) and the decoder buttons. TOOLS: notch filters, skip / lock-out, audio switches and the pictures, replay and recordings buttons. AndySDR remembers the page you used last."],
+  alerts: ["Alerts for the AndySDR Remote app", "Choose what the Android app may notify you about: a page for a capcode you starred, an aircraft squawking 7500 / 7600 / 7700, activity on the priority channel, or a scheduled capture starting. In the app, switch on Alerts on the connect screen. Send a test alert shows a notice on the tablet within a few seconds. The alerts are collected on this PC and fetched by the app over your own network."],
+  qjump: ["Tune / Digital / Tools pages", "The three buttons under the display switch the group of quick buttons below them, so nothing has to be scrolled. TUNE: mode, filter width and band. DIGITAL: your hotspot, the digital voice bands (DMR, P25, M17, TETRA) and the decoder buttons. TOOLS: notch filters, skip / lock-out, audio switches and the pictures, replay and recordings buttons. AndySDR remembers the page you used last. ⚙ CUSTOMISE hides the buttons you will never use: press it, tap any button to hide it, then press DONE; SHOW HIDDEN brings them all back. The list is kept on the radio PC, so the PC, the tablet and the phone all show the same buttons."],
   qhot: ["My hotspot", "Your saved DMR hotspot. Press the big button to tune to it, switch to digital mode and start the DMR decoder in one go – the callsigns and talkgroups your hotspot passes appear in the decoder list. EDIT lets you change the name, frequency (MHz), colour code, timeslot and talkgroup; SAVE keeps them for next time. Keep RF GAIN low when the hotspot is close to the receiver."],
   qdigi: ["Digital voice band", "Pick DMR, dPMR, P25, M17, NXDN or TETRA (Airwave) from the list: AndySDR tunes to the bottom of that band, sets the mode and step for it and starts the matching decoder. SEARCH BAND then sweeps the whole band and stops on any activity so the decoder can lock on (SKIP moves on to the next one). TETRA and TETRAPOL show signalling only; encrypted voice cannot be decoded."],
   qnotch: ["Notch filters", "Cut an annoying steady whistle or carrier out of what you hear (it does not touch what the decoders receive). NOTCH is one filter you aim yourself: switch it on, then drag the slider until the whistle disappears – the pitch shows in Hz; NARROW removes only that pitch, WIDE also takes a little around it. AUTO listens for steady whistles, heterodynes and carriers in the audio and notches them by itself (up to three, released a couple of seconds after the whistle goes); speech passes through. Both work in every mode. The Hz are the pitch of the audio, not the radio frequency – to get rid of a carrier that is a different signal, move the receiver or narrow the WIDTH. The radio's own FM / DAB broadcast notches are separate switches under Device settings (RSP2 / RSPdx etc.)."],
