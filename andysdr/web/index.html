@@ -330,6 +330,7 @@
       <label><input type="checkbox" id="autoId2" checked> <b>Auto-identify signals</b></label>
       <span class="muted small">AndySDR listens to whatever you are tuned to and works out what it is – DMR, P25, NXDN, dPMR, pagers, APRS, DTMF, SSTV, WEFAX, TETRA or plain voice – then switches mode and starts the right decoder by itself. Choosing a decoder yourself always takes priority.</span>
       <label class="small" title="Silences the raw data noise while DMR / P25 / TETRA / pager decoding is running. The decoder still plays the decoded voice."><input type="checkbox" id="muteDig" checked> Mute coded noise while decoding</label>
+      <label class="small" title="While the squelch is closed there is only noise, and a digital decoder can mistake it for a signal and speak a few frames of garbage. With this ticked the decoder is given silence whenever the squelch has been closed for 1.5 s. Set SQUELCH just above the noise so real calls stay open."><input type="checkbox" id="dsdGate"> Stop false decoding on noise (needs squelch set)</label>
       <span class="grow"></span><span id="sigNow" class="sig-chip" hidden></span>
     </div>
     <pre class="console decwin" id="decLog"></pre>

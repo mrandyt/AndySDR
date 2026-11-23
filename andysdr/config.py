@@ -6,7 +6,7 @@ import sys
 import threading
 
 APP_NAME = "AndySDR"
-VERSION = "1.21.2"
+VERSION = "1.21.3"
 GITHUB_REPO = "mrandyt/AndySDR"   # where updates are published (GitHub Releases)
 
 
@@ -82,6 +82,7 @@ DEFAULTS = {
     "dsd_extra_args": "",
     "dsd_dc_remove": True,           # centre the discriminator audio before DSD-FME (cures tuning-error decode failures)
     "dsd_memory": {},                 # frequency (kHz) -> the DSD-FME frame type that locked there, so Auto starts on it
+    "dsd_gate": False,                # feed DSD-FME silence while the squelch is closed (stops "voice" decoded from noise)
     "auto_gain": False,               # ease the RF gain down by itself when a signal is strong enough to distort (the knob is the maximum)
     "mute_digital_audio": True,       # silence the raw data noise while a digital decoder (DSD, TETRA, pager) runs
     "dsd_gain": 6000,                # discriminator -> 16-bit scale for DSD-FME

@@ -1345,6 +1345,7 @@ class Radio:
             "lockouts": self.lockout_info(),
             "auto_identify": bool(self.s.get("auto_identify", True)),
             "mute_digital_audio": bool(self.s.get("mute_digital_audio", True)),
+            "dsd_gate": bool(self.s.get("dsd_gate", False)),
             "bw": self.rx.bandwidth() if self.rx else 0, "bw_auto": bool(self.s.get("bw_auto", True)),
             "auto_owned": self.auto_owned,
             "hotspot": {"name": str(self.s.get("hotspot_name", "My hotspot")), "freq": int(self.s.get("hotspot_freq", 435000000)),

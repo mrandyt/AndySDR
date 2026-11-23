@@ -830,6 +830,17 @@ class DecoderManager:
         f = self.freq_fn() if self.freq_fn else 0
         return str(int(round(f / 1000.0))) if f else ""
 
+    DSD_GATE_HOLD_S = 1.5       # keep feeding the decoder this long after the squelch closes (call endings, brief fades)
+
+    def _dsd_gate_pass(self, squelch_open, now):
+        """Optional (setting dsd_gate): False when the squelch has been closed for a while, i.e. there is only noise."""
+        if not self.settings.get("dsd_gate", False):
+            return True
+        if squelch_open:
+            self.dsd_open_t = now
+            return True
+        return now - getattr(self, "dsd_open_t", 0.0) < self.DSD_GATE_HOLD_S
+
     DSD_LOCK_FRAMES = 4         # this many clean frames ...
     DSD_LOCK_WINDOW_S = 8.0     # ... within this time make a lock worth remembering
 
@@ -1083,6 +1094,8 @@ class DecoderManager:
                 if self.settings.get("dsd_dc_remove", True) and getattr(self, "dsd_cond", None):
                     d = self.dsd_cond.process(d, bool(out.get("squelch_open", True)))
                 gain = float(self.settings.get("dsd_gain", 6000) or 6000)
+                if not self._dsd_gate_pass(bool(out.get("squelch_open", True)), time.time()):
+                    d = np.zeros_like(d)                  # squelch closed: only noise - give the decoder silence so it cannot "lock" on it
                 pcm = np.clip(d * gain, -32767, 32767).astype("<i2").tobytes()
                 self.dsd_ring.append(pcm)
                 self.tcp.send(pcm)

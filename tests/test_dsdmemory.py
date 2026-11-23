@@ -83,5 +83,16 @@ check("a voice reading right after a lock leaves the decoder running", e.decoder
 e = eng(False); E.Radio._auto_apply(e, dict(voice))
 check("with no recent lock, plain voice still stops it (as before)", e.decoders.stopped == 1 and not e.auto_owned)
 
+# optional gate: no noise to the decoder while the squelch has been closed for a while
+g = mgr(); g.settings["dsd_gate"] = False
+check("gate off: the decoder always gets the audio", g._dsd_gate_pass(False, 100.0) and g._dsd_gate_pass(False, 500.0))
+g.settings["dsd_gate"] = True
+check("gate on, squelch open: audio passes", g._dsd_gate_pass(True, 1000.0))
+check("... and for 1.5 s after it closes (call endings)", g._dsd_gate_pass(False, 1001.0) and g._dsd_gate_pass(False, 1001.4))
+check("... then the decoder gets silence", not g._dsd_gate_pass(False, 1001.6) and not g._dsd_gate_pass(False, 1100.0))
+check("... until the squelch opens again", g._dsd_gate_pass(True, 1101.0) and g._dsd_gate_pass(False, 1102.0))
+g2 = mgr(); g2.settings["dsd_gate"] = True
+check("gate on with no signal since start: silence", not g2._dsd_gate_pass(False, 5.0))
+
 print("ALL PASS" if not fails else "FAILED: " + "; ".join(fails))
 sys.exit(1 if fails else 0)

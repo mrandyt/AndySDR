@@ -655,7 +655,7 @@ class Server:
             elif cmd == "settings":
                 allowed = {"scan_delay": float, "scan_dwell": float, "search_threshold_db": float,
                            "require_password_local": bool, "deemphasis_us": int, "theme": str,
-                           "password": str, "mute_digital_audio": bool, "auto_gain": bool, "update_check": bool, "update_auto_download": bool,
+                           "password": str, "mute_digital_audio": bool, "auto_gain": bool, "dsd_gate": bool, "update_check": bool, "update_auto_download": bool,
                            "alert_pager": bool, "alert_emergency": bool, "alert_priority": bool, "alert_capture": bool,
                            "alert_watch": bool, "watch_list": clean_watch_list,
                            "dmr_db_auto": bool}
