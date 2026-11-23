@@ -2313,7 +2313,43 @@ function renderClock() {
   const d = new Date(), p = (n) => String(n).padStart(2, "0");
   $("tLocal").textContent = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
   $("tUtc").textContent = `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
+  renderPassChip();
 }
+/* next satellite pass (from the passes the scheduler already plans for the satellites ticked Record) */
+function passCountdown(secs) {
+  secs = Math.max(0, Math.round(secs));
+  if (secs < 90) return secs + " s";
+  if (secs < 3600) return Math.round(secs / 60) + " min";
+  if (secs < 86400) return `${Math.floor(secs / 3600)} h ${String(Math.floor(secs % 3600 / 60)).padStart(2, "0")} min`;
+  return null;
+}
+function passChipText(passes, now) {          // -> {text, title} or null when no pass is planned; now in seconds
+  const p = (passes || []).filter((x) => !x.geo && x.los > now).sort((a, b) => a.aos - b.aos)[0];
+  if (!p) return null;
+  const hm = (t) => new Date(t * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const dir = typeof azName === "function" ? azName(p.az) : "";
+  let text;
+  if (p.state === "recording" || (p.aos <= now && now < p.los)) text = `● ${p.name} · until ${hm(p.los)}`;
+  else {
+    const cd = passCountdown(p.aos - now);
+    text = `${p.name} · ${cd ? "in " + cd : new Date(p.aos * 1000).toLocaleDateString([], { weekday: "short" }) + " " + hm(p.aos)} · ${p.max_el}°`;
+  }
+  const title = `Next satellite pass: ${p.name}, ${hm(p.aos)}–${hm(p.los)}, rises in the ${dir || "?"}, highest point ${p.max_el}° above the horizon` +
+    `, ${(p.freq / 1e6).toFixed(3)} MHz${p.track ? " (Doppler corrected)" : ""}. Click for the scheduler.`;
+  return { text, title, live: text.startsWith("●") };
+}
+function renderPassChip() {
+  const chip = $("tPassChip");
+  const r = SCH && SCH.sats ? passChipText(SCH.sats.passes, Date.now() / 1000) : null;
+  chip.hidden = !r;
+  if (!r) return;
+  $("tPass").textContent = r.text;
+  chip.title = r.title;
+  chip.classList.toggle("live", r.live);
+}
+$("tPassChip").onclick = () => showTab("sch");
+$("tPassChip").onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); showTab("sch"); } };
+setInterval(() => { try { send({ cmd: "schedule" }); } catch (e) { /* not connected right now */ } }, 600000);
 buildQuick(); bwInit(); renderClock(); setInterval(renderClock, 1000);
 
 /* ======================================================= updates */
@@ -2923,7 +2959,7 @@ const HELP = {
   adsb: ["ADS-B aircraft (1090 MHz)", "Tracks aircraft that broadcast ADS-B (nearly every airliner and many smaller aircraft). Press ▶ Start ADS-B: AndySDR tunes to 1090 MHz, centres the receiver exactly on it and decodes the aircraft messages itself – no other program is needed. The table shows callsign, hex address (ICAO), airline and country (from the callsign/address), altitude, speed, heading, climb rate, squawk, distance from you and how long ago it was heard; click a heading to sort. The map shows each aircraft as a plane pointing the way it is flying, coloured by height (orange = low, green = middle, blue = high) with a trail behind it. Squawks 7500, 7600 and 7700 flash red and pop up a warning. You need a receiver running at 2 MS/s or more (any SDRplay RSP, RTL-SDR, Airspy, HackRF) and an antenna that works at 1090 MHz – a short 6.9 cm whip or a proper 1090 MHz collinear, as high and clear of buildings as you can get it. Use the RSP's Antenna A/B (50 Ω) socket, not Hi-Z. Turn RF GAIN up fairly high; if you see lots of messages but few aircraft, turn it down a little. Press Stop (or tune somewhere else) to go back to normal scanning. With the Simulator receiver you get ten practice aircraft."],
   adsbopts: ["ADS-B options", "My position: type your latitude/longitude (decimal degrees, e.g. 51.5074 and -0.1278) or press 📍 Use my location. With it set the map shows range rings, the table shows each aircraft's distance, and positions come out faster and more reliably. Units: aviation (feet, knots, nautical miles) or metric. Street map downloads OpenStreetMap tiles from the internet (the radar-style map works offline). Trails and Labels switch the track lines and text on the map; 'Only with position' hides aircraft that have not sent a position yet; Find dims the others on the map."],
   adsbmap: ["ADS-B map", "Drag to move, mouse wheel or +/− to zoom, double-click to zoom in on a spot, ⌖ Fit to show everything. Click an aircraft for its details; click it again (or ✕) to let go. Rings are 'distance from you' (set My position first)."],
-  topstatus: ["Status strip", "A live read-out across the top of the radio: LOCAL and UTC clocks (UTC is what weather-fax and satellite schedules use), the receiver in use (RX), the width of spectrum it is receiving (SPAN), the audio filter width for the current mode (FILTER), what the scanner is doing (STATE – turns amber while scanning, searching or holding), the running decoder, and how many screens are connected (LINKS)."],
+  topstatus: ["Status strip", "A live read-out across the top of the radio: LOCAL and UTC clocks (UTC is what weather-fax and satellite schedules use), the receiver in use (RX), the width of spectrum it is receiving (SPAN), the audio filter width for the current mode (FILTER), what the scanner is doing (STATE – turns amber while scanning, searching or holding), the running decoder, and how many screens are connected (LINKS). NEXT PASS appears when a satellite is ticked Record in the SCHEDULER: it counts down to the next pass (name, time to go, highest point) and shows ● while one is being recorded; click it to open the scheduler."],
   leds: ["Indicator lights", "RX (green) – a signal is open on the squelch and you are hearing it. SCAN (amber) – scanning or searching; it flashes while sweeping and stays lit when stopped on a signal. DEC (blue) – a decoder is running. REC (red) – recording to a WAV file. LINK (green) – this screen is connected to the radio."],
   qbw: ["Bandwidth (WIDTH)", "How wide the receive filter is for the current mode. Narrower cuts out neighbouring signals and noise; wider lets the whole signal through. The list shows the usual widths for the mode. AUTO follows the ★ suggestion, which AndySDR works out from the decoder that is running, what Auto ID has measured or recognised, and the channel spacing of the band you are tuned to (the reason is shown underneath). Pick a width yourself and it is remembered for that mode; pick Auto again, or press ★, to go back to the suggestion. Broadcast FM (WFM) is always 200 kHz. The red band on the spectrum and the FILTER read-out at the top show the width in use."],
   qmode: ["Mode buttons", "One click to choose how the signal is demodulated – no need to press MODE repeatedly. NFM/FM for most two-way radio, AM for airband, WFM for FM broadcast, USB/LSB for HF voice and weather fax, CW for Morse, DIG and DIG25 for digital signals (DIG25 is the wider one for TETRA and satellites). The current mode is lit."],
