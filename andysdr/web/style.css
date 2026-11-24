@@ -976,8 +976,15 @@ body.sz-spec #spec { height: calc(var(--user-spec) + var(--bp-strip, 30px)) !imp
 body.sz-wf #wf { height: var(--user-wf) !important; min-height: 0 !important; flex: none !important; }
 
 /* aircraft text + sondes */
-#acarsTable td.msg { white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; }
-#acarsTable td.lbl { white-space: nowrap; }
+/* one compact line per message - the full text is in the details pop-up (click the row) */
+#acarsTable { table-layout: fixed; width: 100%; }
+#acarsTable th, #acarsTable td { padding: 3px 10px; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#acarsTable th:nth-child(1) { width: 7.5em; } #acarsTable th:nth-child(2) { width: 7.5em; }
+#acarsTable th:nth-child(3) { width: 12em; } #acarsTable th:nth-child(4) { width: 8em; } #acarsTable th:nth-child(5) { width: 5em; }
+#acarsTable td.msg { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; }
+#acarsTable td .via { font-size: 10.5px; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; margin-left: 4px; vertical-align: 1px; }
+#acarsTable tbody tr:hover td { background: var(--panel2); }
+@media (max-width: 700px) { #acarsTable th:nth-child(2), #acarsTable td:nth-child(2) { display: none; } }
 #acarsFreqs .btn { margin-right: 4px; }
 #sondeTable td { white-space: nowrap; }
 #sondeTable tr.old td { opacity: .55; }

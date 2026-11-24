@@ -1533,7 +1533,7 @@ function acarsMatch(m) {
 }
 function acarsRow(m, isNew) {
   const f = m.freq ? `<td class="f" data-f="${m.freq}" title="Tune here">${fmtMHz(m.freq, 3)}</td>` : "<td>—</td>";
-  return `<tr class="${isNew ? "new" : ""}" data-id="${m.id}" title="Click for details about this aircraft and message"><td class="t">${esc(m.t)}</td>${f}<td><b>${esc(m.reg || "—")}</b>${m.via ? ` <span class='muted' title='Heard on the VDL2 digital link${m.icao ? ", aircraft address " + m.icao : ""}'>VDL2</span>` : ""}</td><td>${esc(m.flight || "")}</td>` +
+  return `<tr class="${isNew ? "new" : ""}" data-id="${m.id}" title="Click for details about this aircraft and message"><td class="t">${esc(m.t)}</td>${f}<td><b>${esc(m.reg || "—")}</b>${m.via ? `<span class='muted via' title='Heard on the VDL2 digital link${m.icao ? ", aircraft address " + m.icao : ""}'>VDL2</span>` : ""}</td><td>${esc(m.flight || "")}</td>` +
     `<td class="lbl" title="${esc(m.label_name || "")}">${esc(m.label)}${m.down ? "" : " <span class='muted' title='Sent from a ground station to the aircraft'>→a/c</span>"}</td>` +
     `<td class="msg">${m.text ? esc(m.text) : '<span class="muted">(no text)</span>'}${m.more ? ' <span class="muted">…more</span>' : ""}</td></tr>`;
 }
@@ -1592,7 +1592,8 @@ function addSonde(r) {
   if (!$("tab-sonde").classList.contains("active")) { DL.unS++; dlBadges(); }
   else renderSondes();
 }
-["acarsHideEmpty"].forEach((id) => ($(id).onchange = renderAcars));
+try { $("acarsHideEmpty").checked = localStorage.getItem("acarsHideEmpty") !== "0"; } catch (e) { $("acarsHideEmpty").checked = true; }
+$("acarsHideEmpty").onchange = () => { try { localStorage.setItem("acarsHideEmpty", $("acarsHideEmpty").checked ? "1" : "0"); } catch (e) { /* private window */ } renderAcars(); };
 $("acarsSearch").oninput = renderAcars;
 $("acarsTable").addEventListener("click", (e) => {
   const f = e.target.closest("td.f[data-f]");
