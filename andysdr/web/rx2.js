@@ -59,6 +59,33 @@ function rxStripRender() {
   const b = rx2$("rx2Badge"); if (b) b.hidden = st.k !== "rec" && st.k !== "view";
 }
 
+/* ---------- manual RF gain (works while it is recording or in live view, and is remembered) ---------- */
+const RX2G = { drag: false, sendT: 0, last: null };
+function rx2GainSet(v, final) {
+  const r = SCH && SCH.satrx; if (!r) return;
+  v = Math.max(r.gain_min, Math.min(r.gain_max, Math.round(v * 2) / 2));
+  rx2$("rx2GVal").textContent = v.toFixed(1) + " dB"; rx2$("rx2GRange").value = v;
+  const now = Date.now();
+  if (final || now - RX2G.sendT > 150) { RX2G.sendT = now; RX2G.last = v; send({ cmd: "satrx_gain", gain: v, final: !!final }); }
+}
+(function () {
+  const rg = rx2$("rx2GRange"); if (!rg) return;
+  rg.oninput = () => { RX2G.drag = true; rx2GainSet(+rg.value, false); };
+  rg.onchange = () => { rx2GainSet(+rg.value, true); setTimeout(() => (RX2G.drag = false), 400); };
+  rx2$("rx2GDn").onclick = () => rx2GainSet(+rg.value - 1, true);
+  rx2$("rx2GUp").onclick = () => rx2GainSet(+rg.value + 1, true);
+})();
+function rx2GainShow() {
+  const r = SCH && SCH.satrx, rg = rx2$("rx2GRange"); if (!r || !rg) return;
+  rg.min = r.gain_min; rg.max = r.gain_max;
+  const lv = RX2.live && RX2.live.on ? RX2.live : null;
+  const g = lv && lv.gain != null ? Number(lv.gain) : r.gain;
+  if (!RX2G.drag && document.activeElement !== rg) { rg.value = g; rx2$("rx2GVal").textContent = g.toFixed(1) + " dB"; }
+  rx2$("rx2GHelp").textContent = r.gain_mode === "auto"
+    ? "'Learn the best' is on (Settings): each pass starts from this number and the program tries a little lower and higher on later passes. Changing it here sets the new starting point."
+    : "Turn it up until the background noise (the grass on the trace) just starts to rise, but stop before the waterfall turns bright all over or lots of false spikes appear – that means it is too high. Meteor passes usually like 35 to 45 dB.";
+}
+
 /* ---------- the screen ---------- */
 function rx2Render() {
   const r = SCH && SCH.satrx; if (!r || !rx2Visible()) return;
@@ -116,6 +143,7 @@ function rx2Render() {
   rx2$("rx2Hint").textContent = lv.on && lv.freq < 136e6
     ? "Aircraft messages are short bursts, so the bar jumps only while a plane is sending – watch the “best so far”. Turn the antenna a little, wait a minute, and compare. Reset between tries."
     : "The red box marks where a Meteor-M signal appears (a soft hump about 120 kHz wide). It drifts a little as the satellite passes (Doppler).";
+  rx2GainShow();
   rx2Meter();
   rx2Pics(lv);
   rx2Passes();

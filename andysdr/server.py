@@ -895,6 +895,13 @@ class Server:
                 lvl, text = await asyncio.get_running_loop().run_in_executor(None, r.satrx.check)
                 self._reply(c, "event", {"level": lvl, "text": text, "rx2": True})
                 r.scheduler._emit()
+            elif cmd == "satrx_gain":
+                try:
+                    r.satrx.set_gain(m.get("gain"))
+                except (TypeError, ValueError):
+                    r._emit("event", {"level": "warn", "text": "Second receiver: that gain was not understood"})
+                if m.get("final"):
+                    r.scheduler._emit()
             elif cmd == "satrx_view":
                 if m.get("on", True):
                     ok, text = await asyncio.get_running_loop().run_in_executor(None, lambda: r.satrx.begin_preview(m.get("freq"), m.get("bw")))

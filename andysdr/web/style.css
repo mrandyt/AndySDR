@@ -1226,3 +1226,9 @@ body.customise #qJump .key::after { content: none; }
 .rx2-log li.warn, .rx2-log li.error { color: var(--warn); }
 #rx2Badge { width: 9px; height: 9px; padding: 0; border-radius: 50%; background: #ff4d4d; display: inline-block; vertical-align: middle; animation: rx2pulse 1.2s infinite; }
 #rx2Badge[hidden] { display: none; }
+
+.rx2-gain { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.rx2-gtop { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rx2-gval { min-width: 5.5em; text-align: center; font-size: 18px; }
+.rx2-gain input[type=range] { width: 100%; height: 34px; accent-color: var(--accent); }
+body.phone .rx2-gain .btn { min-height: 44px; min-width: 44px; }

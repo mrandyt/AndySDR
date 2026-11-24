@@ -705,6 +705,12 @@
     <div class="card rx2-live" data-help="rx2live">
       <div class="row wrapline"><b>Live view of this receiver</b><span class="muted small" id="rx2LiveNote"></span></div>
       <div class="row wrapline rx2-ctl" id="rx2Ctl"></div>
+      <div class="rx2-gain" id="rx2Gain">
+        <div class="rx2-gtop"><b>RF gain</b><span class="muted small">how much the dongle amplifies – you can change it while it is working</span><span class="grow"></span>
+          <button class="btn sm" id="rx2GDn" title="Down 1 dB">−</button><b id="rx2GVal" class="rx2-gval">–</b><button class="btn sm" id="rx2GUp" title="Up 1 dB">+</button></div>
+        <input type="range" id="rx2GRange" min="0" max="49.6" step="1" value="38">
+        <div class="small muted" id="rx2GHelp">Turn it up until the background noise (the grass on the trace) just starts to rise, but stop before the waterfall turns bright all over or lots of false spikes appear – that means it is too high. Meteor passes usually like 35 to 45 dB.</div>
+      </div>
       <div class="rx2-scopewrap">
         <canvas id="rx2Spec"></canvas>
         <canvas id="rx2Wf"></canvas>

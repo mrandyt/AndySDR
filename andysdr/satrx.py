@@ -236,6 +236,26 @@ class SatRx:
             self._event("info", f"Second receiver recording: {dev.label}, gain {self.job_gain:.1f} dB")
             return True
 
+    def set_gain(self, g):
+        """Change the RF gain by hand - also while the dongle is working (a pass or a live view); it is remembered."""
+        lo, hi = self._gain_range
+        g = max(lo, min(hi, float(g)))
+        self.s["satrx_gain"] = g
+        try:
+            self.s.save()
+        except Exception:                            # noqa: BLE001
+            log.exception("settings not saved")
+        with self.lock:
+            dev = self.dev
+            if self.job is not None and dev is not None:
+                try:
+                    dev.set_gain(g)
+                    self.job_gain = float(dev.gain)
+                except Exception as e:               # noqa: BLE001
+                    log.warning("second receiver gain: %s", e)
+        self._push_live(force=True)
+        return g
+
     def begin_preview(self, freq=None, bw=None):
         """A short live view (no recording) so the antenna and dongle can be seen working any time.
         `freq` (Hz) and `bw` (Hz, the width the signal meter measures) let it be pointed at any steady signal."""
