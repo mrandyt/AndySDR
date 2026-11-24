@@ -1232,3 +1232,18 @@ body.customise #qJump .key::after { content: none; }
 .rx2-gval { min-width: 5.5em; text-align: center; font-size: 18px; }
 .rx2-gain input[type=range] { width: 100%; height: 34px; accent-color: var(--accent); }
 body.phone .rx2-gain .btn { min-height: 44px; min-width: 44px; }
+
+/* aircraft text message details */
+.modal-box.acars-info { width: min(760px, 100%); }
+.acars-info .modal-body { padding: 16px 20px; overflow: auto; }
+.ai-sec { margin: 0 0 18px; }
+.ai-sec h3 { margin: 0 0 8px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.ai-grid { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; }
+.ai-grid > span:nth-child(odd) { color: var(--muted); }
+.ai-plane { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.ai-plane img { width: 260px; max-width: 100%; border-radius: 10px; border: 1px solid var(--line); }
+.ai-plane .ai-grid { flex: 1; min-width: 220px; }
+.ai-route { font-size: 17px; margin: 2px 0 4px; }
+.ai-raw { font-family: var(--mono, monospace); white-space: pre-wrap; word-break: break-all; background: var(--panel2);
+          border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 0; font-size: 13px; }
+#acarsTable tbody tr { cursor: pointer; }

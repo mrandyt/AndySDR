@@ -118,6 +118,7 @@ function onJSON(m) {
     case "ft8": onFt8(d); break;
     case "morse": onMorse(d); break;
     case "acars": addAcars(d); break;
+    case "acars_info": acarsInfoShow(d); break;
     case "sonde": addSonde(d); break;
     case "datalink_all": DL.acars = d.acars || []; DL.sondes = {}; (d.sondes || []).forEach((r) => (DL.sondes[r.id] = r)); renderAcars(); renderSondes(); break;
     case "datalink_status": dlStatus(d); break;
@@ -460,7 +461,7 @@ document.querySelectorAll(".radio [data-k]").forEach((b) => b.addEventListener("
 
 document.addEventListener("keydown", (e) => {
   if (e.target.matches("input, select, textarea") || !$("loginModal").hidden) return;
-  if (e.key === "Escape") { if (explainOn) setExplain(false); $("helpModal").hidden = true; key("clr"); return; }
+  if (e.key === "Escape") { if (explainOn) setExplain(false); $("helpModal").hidden = true; $("acarsModal").hidden = true; key("clr"); return; }
   const map = { Enter: "e", ArrowUp: "up", ArrowDown: "down", Backspace: "clr", ".": ".", s: "scan", m: "man", p: "pgm", l: "lo", n: "skip" };
   if (/^[0-9]$/.test(e.key)) key(e.key);
   else if (e.key === "h" || e.key === "?") openHelp();
@@ -1532,7 +1533,7 @@ function acarsMatch(m) {
 }
 function acarsRow(m, isNew) {
   const f = m.freq ? `<td class="f" data-f="${m.freq}" title="Tune here">${fmtMHz(m.freq, 3)}</td>` : "<td>—</td>";
-  return `<tr class="${isNew ? "new" : ""}"><td class="t">${esc(m.t)}</td>${f}<td><b>${esc(m.reg || "—")}</b>${m.via ? ` <span class='muted' title='Heard on the VDL2 digital link${m.icao ? ", aircraft address " + m.icao : ""}'>VDL2</span>` : ""}</td><td>${esc(m.flight || "")}</td>` +
+  return `<tr class="${isNew ? "new" : ""}" data-id="${m.id}" title="Click for details about this aircraft and message"><td class="t">${esc(m.t)}</td>${f}<td><b>${esc(m.reg || "—")}</b>${m.via ? ` <span class='muted' title='Heard on the VDL2 digital link${m.icao ? ", aircraft address " + m.icao : ""}'>VDL2</span>` : ""}</td><td>${esc(m.flight || "")}</td>` +
     `<td class="lbl" title="${esc(m.label_name || "")}">${esc(m.label)}${m.down ? "" : " <span class='muted' title='Sent from a ground station to the aircraft'>→a/c</span>"}</td>` +
     `<td class="msg">${m.text ? esc(m.text) : '<span class="muted">(no text)</span>'}${m.more ? ' <span class="muted">…more</span>' : ""}</td></tr>`;
 }
@@ -1593,7 +1594,77 @@ function addSonde(r) {
 }
 ["acarsHideEmpty"].forEach((id) => ($(id).onchange = renderAcars));
 $("acarsSearch").oninput = renderAcars;
-$("acarsTable").addEventListener("click", (e) => { const f = e.target.closest("td.f[data-f]"); if (f) send({ cmd: "tune", freq: +f.dataset.f }); });
+$("acarsTable").addEventListener("click", (e) => {
+  const f = e.target.closest("td.f[data-f]");
+  if (f) { send({ cmd: "tune", freq: +f.dataset.f }); return; }
+  const tr = e.target.closest("tr[data-id]");
+  if (tr) acarsInfoOpen(+tr.dataset.id);
+});
+
+/* clicking a message: aircraft, route, airports and what the message is, looked up online */
+let ACARS_INFO_ID = 0;
+function acarsInfoOpen(id) {
+  const m = DL.acars.find((x) => x.id === id); if (!m) return;
+  ACARS_INFO_ID = id;
+  $("acarsInfoTitle").textContent = [m.reg, m.flight].filter(Boolean).join(" · ") || "Message details";
+  $("acarsInfoBody").innerHTML = acarsInfoHtml(m, null);
+  $("acarsModal").hidden = false;
+  send({ cmd: "acars_info", id });
+}
+function acarsInfoShow(d) {
+  if (!d || d.id !== ACARS_INFO_ID || $("acarsModal").hidden) return;
+  const m = DL.acars.find((x) => x.id === d.id); if (!m) return;
+  $("acarsInfoBody").innerHTML = acarsInfoHtml(m, d);
+}
+function acarsInfoHtml(m, d) {
+  const row = (k, v) => (v ? `<span>${esc(k)}</span><span>${v}</span>` : "");
+  const looking = '<span class="muted">Looking up…</span>';
+  const a = (d && d.aircraft) || {}, fl = (d && d.flight) || {};
+  const place = (p) => p ? esc([p.name, p.city, p.country].filter(Boolean).filter((x, i, arr) => arr.indexOf(x) === i).join(", ")) +
+    ` <span class="muted">${esc([p.icao, p.iata].filter(Boolean).join(" / "))}</span>` : "";
+  let h = "";
+  // the message itself
+  const lbl = (d && d.label) || { code: m.label, name: m.label_name, what: "" };
+  h += `<div class="ai-sec"><h3>The message</h3><div class="ai-grid">
+    ${row("Heard", esc(`${m.date || ""} ${m.t}`) + (m.freq ? ` on ${fmtMHz(m.freq, 3)} MHz` : "") + (m.via ? " (VDL2 digital link)" : " (ACARS)"))}
+    ${row("Sent", d ? esc(d.direction) : (m.down ? "from the aircraft" : "from the ground to the aircraft"))}
+    ${row("Type", `<b>${esc(lbl.code || "–")}</b> ${esc(lbl.name || "")}`)}
+    ${row("What it is", esc(lbl.what || ""))}
+    </div>${m.text ? `<pre class="ai-raw">${esc(m.text)}</pre>` : '<p class="muted">This message has no text.</p>'}</div>`;
+  // the aircraft
+  const typ = [a.maker && a.type && !a.type.toLowerCase().includes(a.maker.toLowerCase()) ? a.maker : "", a.type].filter(Boolean).join(" ");
+  h += `<div class="ai-sec"><h3>The aircraft</h3><div class="ai-plane">
+    ${a.photo ? `<a href="${esc(a.photo_link || a.photo)}" target="_blank" rel="noopener"><img src="${esc(a.photo)}" alt="Photo of ${esc(m.reg || "the aircraft")}"></a>` : ""}
+    <div class="ai-grid">
+      ${row("Registration", `<b>${esc(m.reg || a.reg || "–")}</b>`)}
+      ${row("Aircraft", typ ? esc(typ) + (a.tcode ? ` <span class="muted">(${esc(a.tcode)})</span>` : "") : (d ? "" : looking))}
+      ${row("Owner / operator", esc(a.owner || ""))}
+      ${row("Country", esc(a.owner_country || ""))}
+      ${row("Radio address", esc(a.hex || m.icao || ""))}
+      ${a.photographer ? row("Photo", "© " + esc(a.photographer) + " (planespotters.net)") : ""}
+    </div></div>
+    ${d && !typ && d.online ? '<p class="muted small">No details found online for this aircraft.</p>' : ""}</div>`;
+  // the flight
+  if (m.flight) {
+    const fromTo = fl.origin || fl.dest ? `<div class="ai-route">${place(fl.origin) || "?"} &nbsp;→&nbsp; ${place(fl.dest) || "?"}</div>` : "";
+    h += `<div class="ai-sec"><h3>The flight</h3><div class="ai-grid">
+      ${row("Flight", `<b>${esc(m.flight)}</b>` + (fl.callsign && fl.callsign !== m.flight ? ` <span class="muted">radio callsign ${esc(fl.callsign)}</span>` : ""))}
+      ${row("Airline", esc(fl.airline || ""))}
+      ${!fromTo && fl.route ? row("Route", esc(fl.route)) : ""}
+      </div>${fromTo}${!d ? looking : !fl.route && !fl.origin && d.online ? '<p class="muted small">This flight\'s route isn\'t in the online database (charter, cargo or positioning flights often aren\'t).</p>' : ""}
+      <p class="muted small">The route is the flight's usual timetable route, so on a rare day it can differ.</p></div>`;
+  }
+  // airports named in the text
+  if (d && d.airports && d.airports.length) {
+    h += `<div class="ai-sec"><h3>Airports in this message</h3><div class="ai-grid">
+      ${d.airports.map((p) => row(p.icao, esc(p.name) + (p.country ? ` <span class="muted">${esc(p.country)}</span>` : ""))).join("")}</div></div>`;
+  }
+  if (d && d.error) h += `<p class="muted">${esc(d.error)}</p>`;
+  if (d && !d.online) h += '<p class="muted small">Online lookups are switched off (ADS-B tab settings), so only what was received is shown.</p>';
+  return h;
+}
+$("acarsInfoClose").onclick = () => ($("acarsModal").hidden = true);
+$("acarsModal").addEventListener("click", (e) => { if (e.target === $("acarsModal")) $("acarsModal").hidden = true; });
 $("sondeTable").addEventListener("click", (e) => { const f = e.target.closest("td.f[data-f]"); if (f) send({ cmd: "tune", freq: +f.dataset.f }); });
 $("acarsFreqs").addEventListener("click", (e) => { const b = e.target.closest("button[data-f]"); if (b) { send({ cmd: "tune", freq: +b.dataset.f, mode: "AM" }); setTimeout(() => send({ cmd: "decoder", id: "acars" }), 150); } });
 $("acarsStart").onclick = () => send({ cmd: "decoder", id: "acars" });
@@ -3481,7 +3552,7 @@ const HELP = {
   morsebox: ["Morse code decoder", "Press the MORSE key (DECODE row) to open this box. AndySDR switches to CW mode and reads Morse from the audio: it finds the pitch of the tone by itself, follows the sending speed (about 5-50 WPM) and prints the letters on the ticker tape, newest on the right; the box underneath keeps everything decoded. SPEED, TONE and SIGNAL show what it hears and the green light flashes with the keying. Click a popular frequency to tune it – most activity is near the QRP spots (7.030, 14.060 MHz), the IARU beacons (14.100, 28.200 MHz) and aviation NDB beacons (190-530 kHz). Weak or very fast signals decode with mistakes (shown as ¿); a clean tone with the signal 15 dB or more above the noise works best. ✕ hides the box but decoding carries on; ■ Stop ends it."],
   ft8tab: ["FT8 / FT4", "Weak-signal amateur digital modes. Pick a band and press ▶ FT8 (or ▶ FT4): AndySDR tunes USB to the dial frequency and decodes every 15 s UTC slot (FT4: 7.5 s). It also starts by itself when you tune or scan onto an FT8/FT4 channel from the band plan and something is on the air. The PC clock must be accurate. CQ only hides everything except stations calling CQ. From/Grid are read from the message."],
   wfsize: ["Spectrum / waterfall size", "Each box has its own handle. Drag the small bar between the spectrum and the waterfall to make the spectrum taller or shorter, and the small bar under the waterfall to size the waterfall (double-click either bar to reset both). The Waterfall menu picks a fixed waterfall height – Small, Medium, Large or Huge – and Auto fills the space that is left. Once you size a box the panel grows with it and the page scrolls. Reset size puts both back to normal. Your choice is remembered."],
-  acars: ["Aircraft text (ACARS)", "ACARS is the airlines' text messaging with aircraft: position and weather reports, flight times (out, off, on, in), maintenance data and short messages. In the UK it is on AM channels around 131 MHz – 131.525, 131.725 and 131.825 are the busiest. Press ▶ Start ACARS (or the ACARS key) and tune one; AndySDR switches to AM and lists what it reads: aircraft registration, flight number, the two-letter label and the message. Click a frequency button to tune it. A block with a damaged character is repaired when it can be, otherwise it is dropped, so a weak signal gives fewer messages rather than wrong ones. Link tests and acknowledgements have no text – tick Hide link tests to hide them. Messages are saved to a CSV file each day, and Export CSV saves the list. ▶ Start VDL2 does the same job for the newer digital link on 136 MHz (UK: 136.975 MHz is the busiest, then 136.725 to 136.925): it reads the 25 kHz wide data signal and lists the ACARS messages inside it, marked VDL2 next to the aircraft. Pick a VDL2 frequency button, wait for a burst – the line at the top counts bursts and frames. VDL2 needs a reasonably strong signal (a short airband or wideband VHF antenna and a clear view); the receiver is set to the 25 kHz digital mode automatically."],
+  acars: ["Aircraft text (ACARS)", "ACARS is the airlines' text messaging with aircraft: position and weather reports, flight times (out, off, on, in), maintenance data and short messages. In the UK it is on AM channels around 131 MHz – 131.525, 131.725 and 131.825 are the busiest. Press ▶ Start ACARS (or the ACARS key) and tune one; AndySDR switches to AM and lists what it reads: aircraft registration, flight number, the two-letter label and the message. Click any message to open its details: the aircraft (type, owner and a photo), the flight's route from and to, the airports the message mentions and what that kind of message is – looked up online (only the registration, flight number and airport codes are sent). Click a frequency button to tune it. A block with a damaged character is repaired when it can be, otherwise it is dropped, so a weak signal gives fewer messages rather than wrong ones. Link tests and acknowledgements have no text – tick Hide link tests to hide them. Messages are saved to a CSV file each day, and Export CSV saves the list. ▶ Start VDL2 does the same job for the newer digital link on 136 MHz (UK: 136.975 MHz is the busiest, then 136.725 to 136.925): it reads the 25 kHz wide data signal and lists the ACARS messages inside it, marked VDL2 next to the aircraft. Pick a VDL2 frequency button, wait for a burst – the line at the top counts bursts and frames. VDL2 needs a reasonably strong signal (a short airband or wideband VHF antenna and a clear view); the receiver is set to the 25 kHz digital mode automatically."],
   sonde: ["Weather balloons (radiosondes)", "A radiosonde is the small box a weather balloon carries up to 30 km. It sends its GPS position every second on 400.15–406 MHz. The Met Office launches from about 11:00 and 23:00 UTC at several UK sites. Tune one (use SRCH, or watch the waterfall for a signal about 10 kHz wide) and press ▶ Start sonde decoder: AndySDR switches to narrow FM, 16 kHz wide, and lists every balloon it hears with serial, position, height, speed, climb, heading and satellites, plus the distance and bearing from you when My position is set (ADS-B tab, or a USB GPS unit). Click the position to see it on a map (internet needed). Only Vaisala RS41 sondes are read; other makes (DFM, M10, iMet) are ignored."],
   gps: ["USB GPS unit", "Plug in a USB GPS unit (a GPS 'puck' or dongle that appears as a COM port), tick the box and AndySDR fills in My position by itself – for satellite passes and the ADS-B distance and bearing. Leave Port on Auto-find, or pick the unit from the list (★ marks likely GPS units). The chip shows Fix and the number of satellites once it has a position; the first fix can take a few minutes, and it works best near a window or outdoors. By default it checks once a day (then lets go of the unit); the Check menu can make it every hour, or all the time so it follows you if you move. While this is ticked it replaces any position you typed in."],
   phonelayout: ["Phone layout", "On a phone (or a small tablet held upright or sideways) AndySDR switches to a layout made for thumbs. Four buttons along the bottom: RADIO (the display, big Down and Up buttons that repeat when held, Scan / Search / Skip, and Volume, Squelch and RF gain sliders), MEMORY (your channels as cards – tap the frequency to tune it and jump back to the radio), WEATHER (Pictures, and Passes and schedule) and MORE (every other screen, plus the Phone / Full layout choice). The spectrum options are tucked behind one button so the waterfall gets the room. Tablets and PCs keep the full layout; if a phone is showing the full layout by choice, the Phone layout button brings the phone one back."],

@@ -24,6 +24,7 @@ CALLSIGN_URL = "https://api.adsbdb.com/v0/callsign/%s"          # airline, origi
 AIRPORT_URL = "https://hexdb.io/api/v1/airport/icao/%s"
 AIRCRAFT2_URL = "https://api.adsbdb.com/v0/aircraft/%s"
 PHOTO_URL = "https://api.planespotters.net/pub/photos/hex/%s"
+PHOTO_REG_URL = "https://api.planespotters.net/pub/photos/reg/%s"
 NEG_TTL = 6 * 3600                   # "not found" answers are retried after this many seconds
 MAX_CACHE = 20000
 
@@ -135,6 +136,93 @@ class AircraftInfo:
             e = self.cache.get("ap:" + code.strip().upper())
             out.append((e or {}).get("name") or code.strip())
         return " → ".join(out) if route else ""
+
+    # ---------------------------------------------------------------- one-off lookups (aircraft text details)
+    # These run in a worker thread when you open a message, so they may wait for the internet.
+    def hex_now(self, hexid):
+        """Registry + photo for an ICAO hex, looked up now if not cached.  Returns public() fields."""
+        hexid = (hexid or "").strip().lower()
+        if not hexid or not self.enabled():
+            return {}
+        e = self.cache.get(hexid)
+        if not (e and (e.get("found") or time.time() - e.get("t", 0) < NEG_TTL)):
+            try:
+                self._do_registry(hexid)
+            except Exception as ex:                                        # noqa: BLE001 - offline
+                log.debug("registry %s: %s", hexid, ex)
+        if not (self.cache.get(hexid) or {}).get("photo_done"):
+            try:
+                self._do_photo(hexid)
+            except Exception as ex:                                        # noqa: BLE001
+                log.debug("photo %s: %s", hexid, ex)
+        return dict(self.public(hexid), hex=hexid.upper())
+
+    def reg_now(self, reg):
+        """Aircraft details from a registration such as G-EZAV (ACARS gives the registration, not the hex)."""
+        reg = (reg or "").strip().upper().lstrip(".")
+        if not reg or not self.enabled():
+            return {}
+        key = "reg:" + reg
+        e = self.cache.get(key)
+        if e is None or (not e.get("hex") and time.time() - e.get("t", 0) > NEG_TTL):
+            hexid = ""
+            try:
+                x = ((self.fetch(AIRCRAFT2_URL % reg) or {}).get("response") or {}).get("aircraft") or {}
+                hexid = str(x.get("mode_s") or "").strip().lower() if isinstance(x, dict) else ""
+            except Exception as ex:                                        # noqa: BLE001 - not found / offline
+                log.debug("reg %s: %s", reg, ex)
+            with self.lock:
+                self.cache[key] = e = {"hex": hexid, "t": time.time()}
+                self.dirty = True
+        if e.get("hex"):
+            return self.hex_now(e["hex"])
+        out = {"reg": reg}                                                  # no hex: at least try a photo by registration
+        try:
+            ph = (self.fetch(PHOTO_REG_URL % reg).get("photos") or [None])[0]
+            if ph:
+                th = ph.get("thumbnail_large") or ph.get("thumbnail") or {}
+                out.update(photo=str(th.get("src", "")), photo_link=str(ph.get("link", "")),
+                           photographer=str(ph.get("photographer", "")))
+        except Exception:                                                  # noqa: BLE001
+            pass
+        return out
+
+    def route_now(self, callsign):
+        """route_details() for a callsign, looked up now if not cached in the last hour."""
+        callsign = (callsign or "").strip().upper()
+        if not callsign or not self.enabled():
+            return {}
+        e = self.cache.get("r:" + callsign)
+        if not (e and time.time() - e.get("t", 0) < 3600):
+            try:
+                self._do_route(callsign)
+            except Exception as ex:                                        # noqa: BLE001
+                log.debug("route %s: %s", callsign, ex)
+        return dict(self.route_details(callsign), route=self.cached_route(callsign))
+
+    def airport_now(self, code):
+        """{'icao','name','country'} for a 4-letter airport code, or {} if it is not an airport."""
+        code = (code or "").strip().upper()
+        if len(code) != 4 or not code.isalpha():
+            return {}
+        key = "ap:" + code
+        e = self.cache.get(key)
+        if e is None and self.enabled():
+            try:
+                a = self.fetch(AIRPORT_URL % code)
+                e = {"name": str(a.get("airport") or "").strip() if isinstance(a, dict) else "",
+                     "country": str(a.get("country_code") or "").strip() if isinstance(a, dict) else "", "t": time.time()}
+            except urllib.error.HTTPError as ex:
+                e = {"name": "", "t": time.time()} if ex.code == 404 else None
+            except Exception:                                              # noqa: BLE001 - offline: try again next time
+                e = None
+            if e is not None:
+                with self.lock:
+                    self.cache[key] = e
+                    self.dirty = True
+        if not e or not e.get("name"):
+            return {}
+        return {"icao": code, "name": e["name"], "country": e.get("country", "")}
 
     def shutdown(self):
         self._save(True)

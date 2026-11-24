@@ -22,7 +22,7 @@ import threading
 import time
 import urllib.parse
 
-from . import capturemeta
+from . import acarsinfo, capturemeta
 from .alerts import Alerts, KINDS as ALERT_KINDS, clean_watch_list
 from . import diagnose
 from . import repeaters
@@ -804,6 +804,21 @@ class Server:
                 started = r.dmrdb.refresh(force=True)
                 self._reply(c, "event", {"level": "info", "text": "Downloading the callsign list ..." if started
                                          else "A download is already running"})
+            elif cmd == "acars_info":
+                mid = int(m.get("id") or 0)
+                rec = next((x for x in list(r.datalink.acars) if x.get("id") == mid), None)
+                if rec is None:
+                    self._reply(c, "acars_info", {"id": mid, "error": "That message is no longer in the list"})
+                else:
+                    async def _info(rec=rec):
+                        try:
+                            d = await asyncio.get_running_loop().run_in_executor(
+                                None, acarsinfo.explain, rec, getattr(r.adsb, "info", None))
+                        except Exception as e:                      # noqa: BLE001
+                            log.exception("acars info")
+                            d = {"id": rec.get("id"), "error": str(e)}
+                        self._reply(c, "acars_info", d)
+                    asyncio.create_task(_info())
             elif cmd == "datalink_clear":
                 r.datalink.clear(m.get("which", "all"))
             elif cmd == "pager_alias":
