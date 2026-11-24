@@ -19,7 +19,7 @@ from .dmrdb import DmrDb
 from .repeaters import Repeaters
 from .lastheard import LastHeard
 from .autodetect import SignalClassifier
-from .config import data_dir
+from .config import DEFAULTS as SETTINGS_DEFAULTS, data_dir
 from .decoders import DecoderManager
 from .pager import PagerStore
 from .dsp import (AUDIO_RATE, BLOCK_SECONDS, MODES, Receiver, Spectrum, find_peaks_db,
@@ -225,6 +225,7 @@ class Radio:
             real = [d for d in self.dev_list if d.kind != "sim"]
             # saved receiver not found (e.g. listed under a new name) - use the first real one
             dev = real[0] if (real and key != "sim") else self.dev_list[-1]
+        self._fix_saved_freq(dev)
         try:
             # pick a sample rate the DSP chain divides evenly
             want = int(self.s.get("sample_rate") or 0)
@@ -269,6 +270,26 @@ class Radio:
         self.dev.set_center(self._hw_center_for(self.freq, self.dev.sample_rate))
         self.discard = 2
         self._emit("device", self.device_info())
+
+    def _fix_saved_freq(self, dev):
+        """A saved frequency the receiver can't tune (e.g. kHz typed as MHz in an older version) makes the RSP
+        refuse to start at all, so bring it back into range before the radio is opened."""
+        try:
+            lo, hi = dev.freq_range()
+        except Exception:
+            lo, hi = 1e3, 2e9
+        f = int(self.freq)
+        if lo <= f <= hi:
+            return
+        g = f
+        while g > hi and g >= 1000:
+            g //= 1000                        # 131725000000 -> 131725000 (131.725 MHz)
+        if not (lo <= g <= hi):
+            g = int(SETTINGS_DEFAULTS["frequency"]) if lo <= SETTINGS_DEFAULTS["frequency"] <= hi else int(lo)
+        log.warning("saved frequency %d Hz is outside %s's range - using %d Hz", f, dev.label, g)
+        self.freq = g
+        self.s["frequency"] = g
+        self._emit("event", {"level": "warn", "text": f"The saved frequency was out of range - reset to {g / 1e6:,.4f} MHz"})
 
     def device_info(self):
         if not self.dev:
