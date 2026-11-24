@@ -1025,11 +1025,6 @@ body.sz-wf #wf { height: var(--user-wf) !important; min-height: 0 !important; fl
 .grid th { top: var(--topbar-h, 0px); z-index: 2; }                                                             /* column headings stay just under the top bar while the page scrolls */
 [data-theme] .q-jump { order: 1; margin: 0; }
 [data-theme] .quick { order: 1; }
-@media (min-width: 1101px) {
-  [data-theme] .wrap { grid-template-rows: auto auto; align-items: start; }
-  [data-theme] .wrap > .radio { position: static; height: auto; max-height: none; overflow: visible; align-self: start; }
-  [data-theme] .wrap > .scope { position: sticky; top: 76px; height: calc(100vh - 92px); max-height: none; align-self: start; overflow: visible; }
-}
 /* customise mode: hidden buttons stay hidden; in customise mode every button gets a cross */
 .u-hide { display: none !important; }
 #qCust, #qRestore { cursor: pointer; font: inherit; font-size: 11px; font-weight: 600; letter-spacing: .6px; padding: 5px 11px; border-radius: 999px; border: 1px dashed var(--line); background: transparent; color: var(--muted, #8a93a6); }
@@ -1059,11 +1054,9 @@ body.customise #qJump .key::after { content: none; }
 [data-theme] .quick :is(#qMode, #qBand, #qDec, #qLock, #qTog, #qFiles) { grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)); gap: 6px; }
 [data-theme] .quick .key.q { padding: 8px 2px; font-size: 12px; }
 
-/* each of the spectrum and waterfall boxes can be sized on its own; once sized, the panel grows with them and the page scrolls */
+/* each of the spectrum and waterfall boxes can be sized on its own.  The panel keeps the same screen-high work area as the
+   radio card beside it (it scrolls inside if you make it taller than the screen), so there is never an empty block next to the controls. */
 .splitter-end { margin: 2px 0 0; }
-@media (min-width: 1101px) {
-  :is(body.sz-spec, body.sz-wf)[data-theme] .wrap > .scope { height: auto; position: static; }
-}
 
 /* last heard */
 .lhcard { margin-top: 10px; }

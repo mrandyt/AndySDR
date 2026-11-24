@@ -46,6 +46,13 @@ class H(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
+    def do_HEAD(self):
+        if self.path.startswith("/dl/"):
+            data = SETUP if self.path.endswith(".exe") else ZIP
+            self.send_response(200); self.send_header("Content-Length", str(len(data))); self.end_headers()
+        else:
+            self.send_response(404); self.end_headers()
+
     def do_GET(self):
         base = f"http://127.0.0.1:{self.server.server_port}"
         if self.path == "/api/latest":
@@ -64,6 +71,10 @@ class H(http.server.BaseHTTPRequestHandler):
                      "size": len(ZIP), "digest": dig(ZIP)}]}).encode()
             self.send_response(200); self.send_header("Content-Length", str(len(body))); self.end_headers()
             self.wfile.write(body)
+        elif self.path == "/latest":
+            if STATE.get("page_status", 302) != 302:
+                self.send_response(STATE["page_status"]); self.end_headers(); return
+            self.send_response(302); self.send_header("Location", base + "/releases/tag/" + STATE["tag"]); self.end_headers()
         elif self.path.startswith("/dl/"):
             data = SETUP if self.path.endswith(".exe") else ZIP
             self.send_response(200); self.send_header("Content-Length", str(len(data))); self.end_headers()
@@ -87,7 +98,7 @@ def make(mode="installer", **settings):
     s = FakeSettings(update_check=True)
     s.update(settings)
     u = Updater(s, lambda k, p: events.append((k, p)), shutdown=lambda: None,
-                api_url=BASE + "/api/latest", allowed_prefix=BASE + "/dl/", mode=mode)
+                api_url=BASE + "/api/latest", allowed_prefix=BASE + "/dl/", mode=mode, page_url=BASE + "/latest")
     u.dir = tempfile.mkdtemp()
     return u, s, events
 
@@ -173,10 +184,17 @@ except RuntimeError:
 
 print("errors")
 STATE["status"] = 403
+STATE["page_status"] = 403
 u, s, ev = make(); u.check(manual=True); wait(u, ("error",))
 check("manual check reports rate limit", u.state == "error" and "limiting" in u.error)
 u, s, ev = make(); u.check(manual=False); wait(u, ("idle", "error"))
 check("automatic check fails silently", u.state == "idle" and u.error == "")
+STATE["page_status"] = 302
+u, s, ev = make(); u.check(manual=True); wait(u, ("available", "error"))
+check("API rate-limited: the release page still finds the new version", u.state == "available" and u.release["version"] == "9.9.9")
+check("  ... with the right download link and size", u.release["asset_url"].endswith("/dl/v9.9.9/AndySDR-Setup.exe") and u.release["size"] == len(SETUP))
+u.download(); wait(u, ("ready", "error"))
+check("  ... and it downloads intact", u.state == "ready" and open(u.file, "rb").read() == SETUP)
 STATE["status"] = 404
 u, s, ev = make(); u.check(manual=True); wait(u, ("error",))
 check("no release yet -> friendly message", "No published release" in u.error)

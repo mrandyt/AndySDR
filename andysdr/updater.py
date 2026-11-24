@@ -24,6 +24,7 @@ import threading
 import time
 import ssl
 import urllib.error
+import urllib.parse
 import urllib.request
 import webbrowser
 import zipfile
@@ -66,13 +67,14 @@ def install_mode():
 
 
 class Updater:
-    def __init__(self, settings, notify, shutdown, api_url=None, allowed_prefix=None, mode=None):
+    def __init__(self, settings, notify, shutdown, api_url=None, allowed_prefix=None, mode=None, page_url=None):
         """notify(kind, payload) pushes to every client; shutdown() stops the radio before we exit."""
         self.s = settings
         self.notify = notify
         self.shutdown = shutdown
         self.api_url = api_url or f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
         self.allowed_prefix = allowed_prefix or f"https://github.com/{GITHUB_REPO}/releases/download/"
+        self.page_url = page_url or f"https://github.com/{GITHUB_REPO}/releases/latest"
         self.mode = mode or install_mode()
         self.dir = os.path.join(data_dir(), "updates")
         self.lock = threading.Lock()
@@ -145,7 +147,15 @@ class Updater:
             if manual:
                 self.s["update_skip"] = ""           # asking yourself overrides "skip this version"
                 self._set("checking", error="")
-            data = self._get_json(self.api_url)
+            try:
+                data = self._get_json(self.api_url)
+            except urllib.error.HTTPError as e:
+                if e.code not in (403, 429):
+                    raise
+                # GitHub's API lets one internet connection ask only a few times an hour (shared with every other
+                # program and PC on it).  The ordinary "latest release" web page is not limited that way.
+                log.info("GitHub API is limiting requests - reading the latest-release page instead")
+                data = self._latest_from_page()
             rel = self._parse_release(data)
             self.s["update_last_check"] = time.time()
             self.s.save()
@@ -177,6 +187,26 @@ class Updater:
         req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/vnd.github+json"})
         with _urlopen(req, timeout=20) as r:
             return json.loads(r.read().decode("utf-8"))
+
+    def _latest_from_page(self):
+        """The newest release worked out from the release web page (no API, so no hourly limit).  No SHA-256 or notes."""
+        loc = _redirect_target(urllib.request.Request(self.page_url, headers={"User-Agent": UA}))
+        m = re.search(r"/tag/([^/?#]+)$", loc or "")
+        if not m:
+            raise IOError("could not read the latest version from GitHub")
+        tag = urllib.parse.unquote(m.group(1))
+        base = self.allowed_prefix + urllib.parse.quote(tag) + "/"
+        assets = []
+        for name in (INSTALLER_ASSET, PORTABLE_ASSET):
+            size = 0
+            try:
+                with _urlopen(urllib.request.Request(base + name, method="HEAD", headers={"User-Agent": UA}), timeout=20) as r:
+                    size = int(r.headers.get("Content-Length") or 0)
+            except Exception:                        # noqa: BLE001
+                pass
+            assets.append({"name": name, "browser_download_url": base + name, "size": size})
+        return {"tag_name": tag, "html_url": self.page_url, "assets": assets,
+                "body": "GitHub is limiting requests just now, so the release notes are not shown here - they are on the release page."}
 
     def _parse_release(self, d):
         if not isinstance(d, dict) or d.get("draft") or d.get("prerelease"):
@@ -377,6 +407,34 @@ def _urlopen(req, timeout):
             if ctx is not None:
                 log.info("system certificates failed - retrying with the bundled CA list")
                 return urllib.request.urlopen(req, timeout=timeout, context=ctx)
+        raise
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **k):
+        return None
+
+
+def _redirect_target(req, timeout=20):
+    """Where a web address redirects to (without following it)."""
+    def attempt(ctx):
+        handlers = [_NoRedirect] + ([urllib.request.HTTPSHandler(context=ctx)] if ctx else [])
+        try:
+            with urllib.request.build_opener(*handlers).open(req, timeout=timeout) as r:
+                return r.headers.get("Location") or r.geturl()
+        except urllib.error.HTTPError as e:
+            if 300 <= e.code < 400:
+                return e.headers.get("Location", "")
+            raise
+    try:
+        return attempt(None)
+    except urllib.error.HTTPError:
+        raise
+    except urllib.error.URLError as e:
+        if "CERTIFICATE_VERIFY" in str(e) or isinstance(getattr(e, "reason", None), ssl.SSLCertVerificationError):
+            ctx = _certifi_context()
+            if ctx is not None:
+                return attempt(ctx)
         raise
 
 
