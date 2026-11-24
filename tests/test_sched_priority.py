@@ -12,7 +12,7 @@ def check(n, ok, extra=""):
 class FakeRadio:
     def __init__(self): self.started, self.ended, self.events = [], 0, []
     def begin_job(self, job): self.started.append(job["name"])
-    def end_job(self): self.ended += 1
+    def end_job(self, why=None): self.ended += 1
     def retune_job(self, f): pass
     def _emit(self, k, v): self.events.append((k, v))
 class S(dict):

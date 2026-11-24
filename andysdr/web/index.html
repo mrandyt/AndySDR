@@ -743,11 +743,13 @@
         <span class="muted small" id="gpsMsg"></span>
       </div>
       </details>
-      <div class="tablewrap"><table class="grid" id="satTable">
-        <thead><tr><th>Record</th><th>Satellite</th><th>Frequency</th><th title="Follow the Doppler shift during each pass">Track</th><th>Min elev.</th><th>Days</th><th>Only between dates</th><th>Orbit data</th><th>Notes</th></tr></thead><tbody></tbody></table></div>
+      <div id="satTable" class="satlist"></div>
       <div class="row wrapline"><b>Pass schedule – recording starts and stops by itself on each pass</b><span class="grow"></span><button class="btn sm" id="satMore" hidden>Show all passes</button></div>
       <div class="tablewrap"><table class="grid" id="satPasses">
         <thead><tr><th>Satellite</th><th>Starts</th><th>Ends</th><th>Peak</th><th>Rises at</th><th>Freq</th><th>Status</th></tr></thead><tbody></tbody></table></div>
+      <div class="row wrapline" style="margin-top:14px" data-help="passreport"><b>Pass report – how each recorded pass went</b><span class="grow"></span><span class="muted small">Signal = how far the satellite stood above the noise, at its best</span></div>
+      <div class="tablewrap"><table class="grid" id="satLog">
+        <thead><tr><th>When</th><th>Satellite</th><th>Peak</th><th>RF gain</th><th>Signal</th><th>Result</th></tr></thead><tbody></tbody></table></div>
     </div>
     <p class="muted small">Tips: Met Office Northwood fax charts are sent throughout the day – look up the current broadcast schedule and add a capture for the charts you want. ISS SSTV events are announced by ARISS a week or two ahead. Meteor-M passes over the UK happen several times a day; a satellite-pass app gives the times. Pictures appear in WEATHER IMAGES.</p>
   </div>

@@ -200,6 +200,8 @@ class SatPlanner:
             out[sid] = {"enabled": bool(u.get("enabled", False)), "freq": freq,
                         "min_el": float(u.get("min_el") if u.get("min_el") not in (None, "") else d["min_el"]),
                         "track": bool(u.get("track", True)),
+                        "gain_mode": u.get("gain_mode") if u.get("gain_mode") in ("knob", "fixed", "auto") else "knob",
+                        "gain": (float(u["gain"]) if u.get("gain") not in (None, "") else None),
                         "from": str(u.get("from") or ""), "to": str(u.get("to") or ""),
                         "days": sorted({int(x) for x in (u.get("days") or []) if str(x).isdigit() and 0 <= int(x) <= 6})}
         return out
@@ -209,7 +211,7 @@ class SatPlanner:
             return
         c = dict(self.s.get("sat_auto") or {})
         u = dict(c.get(sid) or {})
-        for k in ("enabled", "freq", "min_el", "from", "to", "days", "track"):
+        for k in ("enabled", "freq", "min_el", "from", "to", "days", "track", "gain_mode", "gain"):
             if k in kw:
                 u[k] = kw[k]
         c[sid] = u
@@ -336,6 +338,16 @@ class SatPlanner:
             return c["freq"]
         return doppler_freq(sat, obs[0], obs[1], obs[2], now or time.time(), c["freq"])
 
+    def look(self, sid, ts):
+        """(elevation deg, range km) of a satellite at unix time ts from the observer, or None."""
+        obs = self.observer()
+        d = SATELLITES.get(sid)
+        sr = self.satrec(d["norad"]) if d else None
+        if not obs or sr is None:
+            return None
+        la = look_angles(sr, obs[0], obs[1], obs[2], ts)
+        return (la[0], la[2]) if la else None
+
     def geo_visible(self, sid, now=None):
         obs, sat = self.observer(), self.satrec(SATELLITES[sid]["norad"])
         if not obs or sat is None:
@@ -373,7 +385,8 @@ class SatPlanner:
         until = p["los"] + d["tail"]
         job = {"id": key, "name": f"{d['name']} pass (max {p['max_el']:.0f}°)" if not p.get("geo") else d["name"],
                "freq": self.tuned_freq(sid, now), "nominal": c["freq"], "sat": sid, "mode": d["mode"], "action": d["action"],
-               "duration": max(1, int((until - now) / 60) + 1)}
+               "duration": max(1, int((until - now) / 60) + 1), "geo": bool(p.get("geo")),
+               "max_el": round(float(p["max_el"]), 1) if not p.get("geo") else None}
         if not p.get("geo") and "az_aos" in p and "az_los" in p:
             # heading north (ends further north than it began): Meteor pictures come out upside down
             job["northbound"] = math.cos(math.radians(p["az_los"])) > math.cos(math.radians(p["az_aos"]))

@@ -1103,7 +1103,7 @@ body.customise #qJump .key::after { content: none; }
 .satpos[open] { display: flex; flex-direction: column; gap: 8px; }
 .satdays { display: flex; flex-wrap: wrap; gap: 2px 8px; min-width: 9em; max-width: 14em; }
 .satdays label { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
-#satTable input[type="date"] { width: 9.5em; }
+.sat input[type="date"] { width: 9.5em; }
 #schTable td { vertical-align: middle; }
 #schTable td:nth-child(2), #schTable td:nth-child(4), #schTable td:nth-child(5), #schTable td:nth-child(7), #schTable td:nth-child(8), #schTable td:nth-child(9), #schTable td:last-child { white-space: nowrap; }
 #schTable td:nth-child(3) { min-width: 14em; }
@@ -1117,7 +1117,6 @@ body.customise #qJump .key::after { content: none; }
 }
 @media (max-width: 600px) {
   #schTable td:nth-child(5), #schTable th:nth-child(5), #schTable td:nth-child(9), #schTable th:nth-child(9) { display: none; }
-  #satTable td:nth-child(n+7), #satTable th:nth-child(n+7) { display: none; }
   .sch-form { gap: 8px; }
 }
 
@@ -1150,3 +1149,24 @@ body.customise #qJump .key::after { content: none; }
 #ismTable .ism-v { display: inline-block; margin: 0 .5em .15em 0; white-space: nowrap; }
 #ismTable .ism-v.low { color: #ff7a5c; font-weight: 600; }
 #ismTable tr.live td { background: rgba(80, 220, 120, .10); }
+
+/* satellite list: one compact card per satellite, the settings tucked under Options */
+.satlist { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.sat { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; background: var(--panel); }
+.sat.on { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+.sat-main { display: flex; align-items: center; gap: 8px 18px; flex-wrap: wrap; }
+.sat-rec { flex: 1 1 230px; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.sat-freq { flex: 0 0 11em; font-family: var(--mono); }
+.sat-next { flex: 1 1 200px; font-size: 13px; }
+.sat-detail { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.sat-detail[hidden] { display: none; }
+.sat-grid { display: flex; flex-wrap: wrap; gap: 10px 26px; align-items: center; }
+.sat-grid .satdays { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+.sat-note { margin-top: 6px; color: var(--muted); max-width: 70em; }
+
+/* LCD lines that are too long slide to and fro (set by lcdText in app.js) */
+.lcd-tag > span, .lcd-decode > span { display: inline-block; white-space: nowrap; }
+.lcd-tag.scrolling, .lcd-decode.scrolling { text-overflow: clip; }
+.lcd-tag.scrolling > span, .lcd-decode.scrolling > span { animation: lcdslide 12s ease-in-out infinite alternate; }
+@keyframes lcdslide { 0%, 14% { transform: translateX(0); } 86%, 100% { transform: translateX(calc(-1 * var(--sh, 0px))); } }
+@media (prefers-reduced-motion: reduce) { .lcd-tag.scrolling > span, .lcd-decode.scrolling > span { animation: none; } .lcd-tag.scrolling, .lcd-decode.scrolling { text-overflow: ellipsis; } }

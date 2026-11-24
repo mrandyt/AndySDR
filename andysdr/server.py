@@ -90,11 +90,14 @@ def downloads_dir():
     return os.path.join(os.path.expanduser("~"), "Downloads")
 
 
-def _diag_extra():
+def _diag_extra(radio=None):
     """Extra files for the diagnostics zip: what the decoders printed recently (it never reaches andysdr.log)."""
     try:
-        from .decoders import RECENT
-        return {"decoder-recent.txt": "\n".join(RECENT)}
+        from .decoders import RECENT, RECENT_DSD
+        out = {"decoder-recent.txt": "\n".join(RECENT), "decoder-dsd.txt": "\n".join(RECENT_DSD)}
+        if radio is not None:
+            out["satellite-passes.jsonl"] = radio.passlog.text()
+        return out
     except Exception:              # noqa: BLE001 - the zip must still be made
         return {}
 
@@ -246,7 +249,7 @@ class Server:
             if rep is None:
                 rep = await asyncio.get_running_loop().run_in_executor(None, self._run_checks)
             data = await asyncio.get_running_loop().run_in_executor(
-                None, lambda: diagnose.build_zip(rep, self.s.data, extra=_diag_extra()))
+                None, lambda: diagnose.build_zip(rep, self.s.data, extra=_diag_extra(self.radio)))
             fname = time.strftime("AndySDR-diagnostics-%Y%m%d-%H%M.zip")
             await self._send(writer, 200, data, "application/zip",
                              extra={"Content-Disposition": f'attachment; filename="{fname}"', "Cache-Control": "no-store"})
@@ -718,7 +721,7 @@ class Server:
                 def save_diag():
                     try:
                         rep = self._last_check if (self._last_check and time.time() - self._last_check["when"] < 120) else self._run_checks()
-                        data = diagnose.build_zip(rep, self.s.data, extra=_diag_extra())
+                        data = diagnose.build_zip(rep, self.s.data, extra=_diag_extra(r))
                         dest_dir = downloads_dir()
                         os.makedirs(dest_dir, exist_ok=True)
                         dest = os.path.join(dest_dir, time.strftime("AndySDR-diagnostics-%Y%m%d-%H%M.zip"))
@@ -856,7 +859,14 @@ class Server:
             elif cmd == "schedule_delete":
                 r.scheduler.delete_job(str(m["id"]))
             elif cmd == "sat_cfg":
-                kw = {k: m[k] for k in ("enabled", "freq", "min_el", "from", "to", "days", "track") if k in m}
+                kw = {k: m[k] for k in ("enabled", "freq", "min_el", "from", "to", "days", "track", "gain_mode", "gain") if k in m}
+                if "gain_mode" in kw and kw["gain_mode"] not in ("knob", "fixed", "auto"):
+                    kw["gain_mode"] = "knob"
+                if "gain" in kw:
+                    try:
+                        kw["gain"] = None if kw["gain"] in (None, "") else float(kw["gain"])
+                    except (TypeError, ValueError):
+                        kw["gain"] = None
                 if "freq" in kw:
                     kw["freq"] = int(kw["freq"])
                 if "min_el" in kw:

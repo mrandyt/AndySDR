@@ -165,8 +165,11 @@ z3 = zipfile.ZipFile(io.BytesIO(D.build_zip(rep, {}, tempfile.mkdtemp(), extra={
 check("decoder output can be added to the zip (and an empty one is left out)", z3.read("decoder-recent.txt") == b"DSD-FME started" and "empty.txt" not in z3.namelist())
 from andysdr import decoders as _dec
 _dd = _dec.DecoderManager.__new__(_dec.DecoderManager); _dd.emit = lambda *a: None; _dd.active = "dsd"
-_dec.RECENT.clear(); _dd.log("Sync: no sync"); _dd.log("x" * 1000, kind="other")
-check("decoder log lines are kept for the zip, long ones cut, other kinds ignored", len(_dec.RECENT) == 1 and "[dsd] Sync: no sync" in _dec.RECENT[0])
+_dec.RECENT.clear(); _dec.RECENT_DSD.clear(); _dd.log("Sync: no sync"); _dd.log("x" * 1000, kind="other")
+check("digital voice lines are kept for the zip, in their own list; other kinds ignored", len(_dec.RECENT_DSD) == 1 and "[dsd] Sync: no sync" in _dec.RECENT_DSD[0] and len(_dec.RECENT) == 0)
+_dd.active = "lrpt"; _dd.log("Recording Meteor LRPT pass")
+for _i in range(1000): _dec.RECENT_DSD.append("frame")
+check("a satellite pass line stays even when digital voice floods its own list", len(_dec.RECENT) == 1 and "[lrpt] Recording" in _dec.RECENT[0] and len(_dec.RECENT_DSD) == 400)
 
 # ---------------------------------------------------------------- why no weather pictures
 import tempfile, time as _t

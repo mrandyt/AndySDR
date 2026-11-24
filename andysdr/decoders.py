@@ -46,7 +46,9 @@ from .tetrapol import TetrapolDemod
 log = logging.getLogger("andysdr.decoders")
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 # the last few hundred lines of decoder output, kept in memory so CHECK MY SYSTEM can include them in the diagnostics zip
-RECENT = deque(maxlen=400)
+# (digital voice prints a line per frame, so it has a list of its own and cannot push a satellite pass or a pager out of the other one)
+RECENT = deque(maxlen=400)          # every decoder except DSD-FME
+RECENT_DSD = deque(maxlen=400)      # DSD-FME (DMR, P25, NXDN, ...)
 
 ISM_RATE = 250000          # rtl_433's usual sample rate; fine for the 433 / 868 / 315 / 915 MHz sensors
 ISM_AGC = 12.0             # keep the background noise at about this many 8-bit steps (a dongle at normal gain gives 5-15)
@@ -257,6 +259,8 @@ class DecoderManager:
     def __init__(self, settings, emit):
         self.settings = settings
         self.emit = emit           # emit(kind, payload) -> GUI
+        self.pass_key = None       # satellite pass being recorded (for the pass report)
+        self.pass_done = None      # callback(key, pictures, total, note) when SatDump has finished a pass
         self.active = None
         self.sub = "auto"
         self.proc = None
@@ -338,7 +342,8 @@ class DecoderManager:
     def log(self, text, kind="decoder"):
         self.emit(kind, {"t": time.strftime("%H:%M:%S"), "text": text, "decoder": self.active})
         if kind == "decoder":
-            RECENT.append(time.strftime("%Y-%m-%d %H:%M:%S ") + "[" + str(self.active or "-") + "] " + str(text)[:300])
+            (RECENT_DSD if self.active == "dsd" else RECENT).append(
+                time.strftime("%Y-%m-%d %H:%M:%S ") + "[" + str(self.active or "-") + "] " + str(text)[:300])
 
     # ------------------------------------------------------------------
     def _acars_msg(self, m):
@@ -1009,8 +1014,11 @@ class DecoderManager:
     def _run_satdump(self, path):
         exe = find_exe("satdump", self.settings.get("decoder_paths", {}))
         if not exe or not path:
+            if path and self.pass_done and self.pass_key:
+                self.pass_done(self.pass_key, 0, 0, "SatDump not found")
             return
         out = os.path.join(self.images_dir, os.path.splitext(os.path.basename(path))[0])
+        pkey = self.pass_key
         args = [exe, "meteor_m2-x_lrpt", "baseband", path, out,
                 "--samplerate", "240000", "--baseband_format", "s16"]
         self.log("Running SatDump – pictures will appear in the Images tab when done")
@@ -1035,6 +1043,8 @@ class DecoderManager:
             if flip and shown:
                 self.log("Northbound pass: pictures turned round so north is at the top")
             self.log(f"{shown} picture(s) kept" + (f", {len(pngs) - shown} blank one(s) discarded" if len(pngs) > shown else ""))
+            if self.pass_done and pkey:
+                self.pass_done(pkey, shown, len(pngs))
             # the pictures are the product: drop the huge raw IQ recording once SatDump has made them
             if pngs and not self.settings.get("keep_iq", False):
                 try:

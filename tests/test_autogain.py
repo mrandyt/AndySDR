@@ -16,7 +16,8 @@ class Dev:
 
 def radio(auto=True, gain=90.0, agc=False):
     r = types.SimpleNamespace(dev=Dev(), s={"rf_gain": gain, "agc": agc, "auto_gain": auto}, scan={"state": "manual"},
-                              freq=167_925_000, level_db=-80.0, ag_cur=None, ag_freq=None, ag_over=0, ag_t=0.0, ag_log_t=0.0)
+                              freq=167_925_000, level_db=-80.0, ag_cur=None, ag_freq=None, ag_over=0, ag_t=0.0, ag_log_t=0.0, job_gain=None)
+    r._knob = lambda: E.Radio._knob(r)
     return r
 tick = lambda r, t: E.Radio._autogain_tick(r, t)
 

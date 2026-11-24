@@ -19,6 +19,7 @@ import secrets
 import threading
 import time
 
+from . import passlog
 from .satpass import SATELLITES, SatPlanner
 
 log = logging.getLogger("andysdr.scheduler")
@@ -291,6 +292,18 @@ class Scheduler:
         if best:
             self._start(best)
 
+    def _pass_gain(self, sid):
+        """(gain, mode) for a satellite pass: the knob (None), a fixed value, or what the learning picks."""
+        c = self.sats.cfg().get(sid) or {}
+        mode = c.get("gain_mode", "knob")
+        if mode == "fixed" and c.get("gain") is not None:
+            return float(c["gain"]), "fixed"
+        dev = getattr(self.radio, "dev", None)
+        if mode == "auto" and dev is not None:
+            lo, hi = dev.gain_range()
+            return passlog.suggest_gain((self.radio.passlog.for_sat(sid) if getattr(self.radio, "passlog", None) else []), float(self.s["rf_gain"]), lo, hi), "auto"
+        return None, "knob"
+
     # ------------------------------------------------------------------ run / stop
     def run_now(self, jid):
         job = next((j for j in self.jobs() if j["id"] == jid), None)
@@ -304,7 +317,14 @@ class Scheduler:
         self.running = {"id": job["id"], "name": job["name"], "until": until, "occurrence": key, "job": job,
                         "prio": job.get("priority", 1) if prio is None else prio,
                         "action": job["action"], "freq": job["freq"]}
+        if job.get("sat") and not job.get("geo"):
+            job = dict(job)
+            job["gain"], job["gain_mode"] = self._pass_gain(job["sat"])
+            self.running["job"] = job
+            sid = job["sat"]
+            self.radio.pass_el = lambda ts, sid=sid: self.sats.look(sid, ts)
         self.radio.begin_job(job)
+        log.info("capture started: %s (%s, %.4f MHz) until %s", job["name"], job["action"], job["freq"] / 1e6, until.strftime("%H:%M"))
         self.radio._emit("event", {"level": "info", "text": f"Scheduled capture started: {job['name']} "
                                                             f"until {until.strftime('%H:%M')}"})
         self._emit()
@@ -314,7 +334,8 @@ class Scheduler:
             return
         name = self.running["name"]
         self.running = None
-        self.radio.end_job()
+        log.info("capture %s: %s%s", "stopped" if why else "finished", name, f" ({why})" if why else "")
+        self.radio.end_job(why)
         self.radio._emit("event", {"level": "warn" if why else "info",
                                    "text": f"Scheduled capture {'stopped' if why else 'finished'}: {name}" + (f" ({why})" if why else "")})
         self._emit()
@@ -327,7 +348,18 @@ class Scheduler:
             r["until"] = self.running["until"].strftime("%H:%M")
         return {"jobs": self.jobs(), "running": r, "next": self.next_runs(),
                 "presets": PRESETS, "actions": ACTIONS, "conflicts": self.conflicts(), "now": dt.datetime.now().strftime("%H:%M"),
-                "sats": self.sats.status()}
+                "sats": self._sat_status(), "pass_log": self.radio.passlog.view(20) if getattr(self.radio, "passlog", None) else []}
+
+    def _sat_status(self):
+        st = self.sats.status()
+        dev = getattr(self.radio, "dev", None)
+        lo, hi = dev.gain_range() if dev else (0.0, 50.0)
+        step = max(1.0, round(0.08 * (hi - lo)))
+        for row in st["sats"]:
+            b = passlog.best_gain(self.radio.passlog.for_sat(row["id"]) if getattr(self.radio, "passlog", None) else [], step)
+            row["gain_best"] = list(b) if b else None
+            row["gain_range"] = [lo, hi]
+        return st
 
     def _emit(self):
         self.radio._emit("schedule", self.status())

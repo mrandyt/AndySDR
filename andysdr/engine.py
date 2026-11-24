@@ -27,6 +27,7 @@ from .dsp import (AUDIO_RATE, BLOCK_SECONDS, MODES, Receiver, Spectrum, find_pea
 from .memory import MemoryBank
 from .scheduler import Scheduler
 from .biasmon import BiasMonitor, judge
+from . import passlog
 from .sstv import SstvDecoder
 
 log = logging.getLogger("andysdr.engine")
@@ -95,6 +96,12 @@ class Radio:
         self.ag_over = 0
         self.ag_t = 0.0
         self.ag_log_t = 0.0
+        self.pass_images = 0      # pictures that came out while the pass was running
+        self.job_gain = None      # RF gain chosen for the satellite pass being recorded (None = the knob's value)
+        self.pass_meter = None    # measures the signal during a satellite pass
+        self.pass_el = None       # ts -> (elevation, range km) of that satellite
+        self.passlog = passlog.PassLog(os.path.join(data_dir(), "passes.jsonl"))
+        self.decoders.pass_done = self._pass_images_done
         self.sq_open = False
         self.channel = None               # (bank, ch, entry) when on a memory channel
         self.classifier = SignalClassifier()
@@ -123,6 +130,8 @@ class Radio:
         self.listeners.append(fn)
 
     def _emit(self, kind, payload):
+        if kind == "image" and self.passlog.open_key:
+            self.pass_images += 1
         for fn in list(self.listeners):
             try:
                 fn(kind, payload)
@@ -463,6 +472,18 @@ class Radio:
             self._auto_reset()
             self.channel = None
             self.job = job
+            self.pass_meter, self.pass_images, self.job_gain = None, 0, None
+            self.passlog.open_key = None
+            if job.get("sat") and not job.get("geo"):              # a satellite pass: measure it, and use the gain picked for it
+                self.pass_meter = passlog.PassMeter(self.pass_el)
+                self.passlog.open_key = job["id"]
+                g = job.get("gain")
+                if g is not None and self.dev and not (self.s["agc"] or getattr(self.dev, "agc", False)):
+                    self.job_gain = float(g)
+                    self.ag_cur = None
+                    self.dev.set_gain(self.job_gain)
+                    log.info("pass gain %.1f (%s)", self.job_gain, job.get("gain_mode"))
+            self.decoders.pass_key = job.get("id")
             self._tune(job["freq"], job.get("mode"), force=True)
             act = job.get("action")
             if act in ("wefax", "sstv", "lrpt", "goes", "metop") and self.rec:
@@ -475,6 +496,42 @@ class Radio:
                 self.record(True)
             self._push_state(True)
         self.call(do)
+
+    def _pass_tick(self, spec_db, fs, now):
+        m = self.pass_meter
+        if m is None or not self.job or now - m._last < 1.0 or not self.dev:
+            return
+        snr = passlog.band_snr(spec_db, self.dev.center, fs, self.freq, passlog.BAND_HALF_HZ.get(self.job.get("action"), 20e3))
+        m.add(now, snr, self.job_gain if self.job_gain is not None else (None if self.s["agc"] else float(self.s["rf_gain"])))
+
+    def _finish_pass(self, job, why):
+        meter, self.pass_meter = self.pass_meter, None
+        self.passlog.open_key = None
+        had_gain, self.job_gain = self.job_gain, None
+        if had_gain is not None and self.dev:                       # the knob's gain comes back
+            self.ag_cur = None
+            self.dev.set_gain(float(self.s["rf_gain"]))
+        if not job or meter is None:
+            return
+        sm = meter.summary()
+        rec = {"key": job["id"], "sat": job["sat"], "name": str(job["name"]).split(" pass")[0], "action": job.get("action"),
+               "start": int(meter.t0), "end": int(time.time()), "max_el": job.get("max_el"), "gain_mode": job.get("gain_mode"),
+               "stopped": why, "images": self.pass_images, **sm}
+        if rec.get("gain") is None and had_gain is not None:
+            rec["gain"] = round(had_gain, 1)
+        self.pass_images = 0
+        self.passlog.add(rec)
+        log.info("pass report: %s peak %s deg, gain %s, SNR peak %s / typical %s dB (score %s, %d samples), %s",
+                 rec["name"], rec.get("max_el"), rec.get("gain"), rec.get("snr_peak"), rec.get("snr_med"), rec.get("score"),
+                 rec.get("samples", 0), self.passlog.result(rec))
+
+    def _pass_images_done(self, key, shown, total, note=""):
+        """SatDump finished working on a recorded pass: say how many pictures came out."""
+        self.passlog.set_images(key, shown, total, note)
+        rec = self.passlog.find(key)
+        if rec:
+            log.info("pass report: %s - %s", rec.get("name"), self.passlog.result(rec))
+        self._emit("schedule", self.scheduler.status())
 
     def retune_job(self, f):
         """Nudge the frequency during a satellite pass (Doppler) without restarting anything."""
@@ -492,13 +549,15 @@ class Radio:
             self._push_state()
         self.call(do)
 
-    def end_job(self):
+    def end_job(self, why=None):
         def do():
             job, prev = self.job, self.job_prev or {}
             self.job, self.job_prev = None, None
             if job and job.get("action") in ("wefax", "sstv", "lrpt", "goes", "metop", "pager", "data", "dsd"):
                 self.decoders.stop()
             self.decoders.pass_northbound = False
+            self._finish_pass(job, why)
+            self.decoders.pass_key = None
             if job and job.get("action") == "record" and self.rec and not prev.get("recording"):
                 self.rec.close()
                 self.rec = None
@@ -578,6 +637,10 @@ class Radio:
             self._push_state(True)
         self.call(do)
 
+    def _knob(self):
+        """The RF gain that applies now: the knob, or the gain picked for a satellite pass."""
+        return float(self.job_gain) if self.job_gain is not None else float(self.s["rf_gain"])
+
     def _autogain_tick(self, now):
         """Auto RF gain (optional): the RF GAIN knob is the most gain you want. When a signal in the channel is so strong that it
         distorts (a digital decoder will not lock on a distorted signal), ease the gain down a step at a time; going to another
@@ -585,8 +648,8 @@ class Radio:
         dev = self.dev
         if dev is None:
             return
-        ceiling = float(self.s["rf_gain"])
-        if not self.s.get("auto_gain") or self.s["agc"] or getattr(dev, "agc", False) or self.scan["state"] != "manual":
+        ceiling = self._knob()
+        if not self.s.get("auto_gain") or self.job_gain is not None or self.s["agc"] or getattr(dev, "agc", False) or self.scan["state"] != "manual":
             if self.ag_cur is not None:                  # switched off or not applicable: the knob's value comes back
                 self.ag_cur = None
                 dev.set_gain(ceiling)
@@ -1329,7 +1392,7 @@ class Radio:
         return {
             "freq": self.freq, "mode": self.mode, "step": int(self.s["step"]),
             "gain": float(self.s["rf_gain"]), "agc": bool(self.s["agc"]),
-            "gain_eff": (round(self.ag_cur, 1) if self.ag_cur is not None and self.ag_cur != float(self.s["rf_gain"]) else None),
+            "gain_eff": (round(self.job_gain, 1) if self.job_gain is not None and self.job_gain != float(self.s["rf_gain"]) else round(self.ag_cur, 1) if self.ag_cur is not None and self.ag_cur != float(self.s["rf_gain"]) else None),
             "auto_gain": bool(self.s.get("auto_gain")),
             "squelch": float(self.s["squelch"]), "level": round(self.level_db, 1),
             "sq_open": bool(self.sq_open), "scan": sc, "scan_prev": self.scan.get("prev"),
@@ -1408,6 +1471,8 @@ class Radio:
 
             spec_db = self.spec.process(iq, alpha=0.6 if self.scan["state"] == "manual" else 1.0)
             self.spec_fresh = True
+            if self.pass_meter is not None:
+                self._pass_tick(spec_db, fs, time.time())
             self._bias_tick(spec_db, time.time())
             q = np.clip((spec_db - SPEC_MIN_DB) / (SPEC_MAX_DB - SPEC_MIN_DB) * 255, 0, 255).astype(np.uint8)
             self._emit("spectrum", {"center": self.dev.center, "fs": fs, "freq": self.freq,

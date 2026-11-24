@@ -1,6 +1,32 @@
 /* AndySDR front panel – works locally (desktop window) and remotely (any browser). */
 "use strict";
 const $ = (id) => document.getElementById(id);
+/* LCD text lines: when the text is wider than the line it slides to and fro so all of it can be read */
+function lcdText(el, text) {
+  if (!el) return;
+  if (el._txt === text) return;
+  el._txt = text;
+  el.classList.remove("scrolling");
+  el.textContent = "";
+  const s = document.createElement("span");
+  s.textContent = text;
+  el.appendChild(s);
+  lcdFit(el);
+}
+function lcdFit(el) {
+  const s = el.firstElementChild;
+  if (!s) return;
+  s.style.animation = "none";
+  const over = Math.ceil(s.offsetWidth - el.clientWidth);
+  el.classList.toggle("scrolling", over > 2);
+  if (over > 2) {
+    s.style.setProperty("--sh", over + "px");
+    s.style.animation = "";
+    s.style.animationDuration = Math.max(5, over / 25 + 4) + "s";
+  }
+  el.title = over > 2 ? el._txt : "";
+}
+window.addEventListener("resize", () => document.querySelectorAll("#lcdTag, #lcdDecode").forEach(lcdFit));
 const fmtMHz = (hz, d = 5) => (hz / 1e6).toFixed(d);
 
 const MODES = ["NFM", "FM", "AM", "WFM", "USB", "LSB", "CW", "DIG", "DIG25"];
@@ -233,7 +259,7 @@ function renderLCD() {
   else if (S.channel) tag = S.channel.name || `BANK ${S.channel.bank} CH ${S.channel.ch}`;
   else if (S.scan === "search" || S.scan_prev === "search") tag = `SEARCH ${fmtMHz(S.search.start, 3)}-${fmtMHz(S.search.stop, 3)}`;
   else { const b = S.freq ? bandsAt(S.freq).filter((x) => !x.point)[0] : null; tag = b ? b.name.toUpperCase() : "MANUAL"; }
-  $("lcdTag").textContent = tag;
+  lcdText($("lcdTag"), tag);
   const flag = (id, on) => $(id).classList.toggle("on", !!on);
   flag("fScan", S.scan === "scan" || (S.scan === "hold" && S.scan_prev === "scan"));
   flag("fSrch", S.scan === "search" || (S.scan === "hold" && S.scan_prev === "search"));
@@ -1350,7 +1376,7 @@ function decLine(text, t) {
   log.textContent += `[${t || new Date().toLocaleTimeString()}] ${text}\n`;
   if (log.textContent.length > 120000) log.textContent = log.textContent.slice(-90000);
   if (atBottom) log.scrollTop = log.scrollHeight;
-  $("lcdDecode").textContent = text;
+  lcdText($("lcdDecode"), text);
 }
 
 /* ----- pager messages ----- */
@@ -2870,7 +2896,7 @@ function renderSignal() {
     el.className = "sig-chip " + (r.kind === "SSTV" || r.kind === "WEFAX" ? "pic" : SIG_DIGITAL.test(r.kind) ? "dig" : "ana");
     el.title = `Identified automatically · SNR ${r.snr ?? "?"} dB · bandwidth ${r.bw ?? "?"} kHz` + (r.baud ? ` · ${r.baud} Bd` : "");
   }
-  if (r && r.stable !== false && !S.decoder) $("lcdDecode").textContent = "ID: " + r.label;
+  if (r && r.stable !== false && !S.decoder) lcdText($("lcdDecode"), "ID: " + r.label);
 }
 $("muteDig").onchange = (e) => send({ cmd: "settings", values: { mute_digital_audio: e.target.checked }, quiet: true });
 $("dsdGate").onchange = (e) => send({ cmd: "settings", values: { dsd_gate: e.target.checked }, quiet: true });
@@ -2946,6 +2972,7 @@ $("ft8Start4").onclick = () => ft8Go("ft4");
 const fmtLocal = (t) => new Date(t * 1000).toLocaleString([], { weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 const azName = (a) => ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(a / 45) % 8];
 let SAT_ALL = false, SAT_POS_SHOWN = false;
+const SAT_OPEN = new Set();          // satellites whose Options are open
 $("satMore").onclick = () => { SAT_ALL = !SAT_ALL; renderSats(); };
 function renderSats() {
   const st = SCH && SCH.sats; if (!st) return;
@@ -2953,27 +2980,76 @@ function renderSats() {
   if (!busy("satLat") && !busy("satLon")) { $("satLat").value = st.observer ? st.observer[0] : ""; $("satLon").value = st.observer ? st.observer[1] : ""; }
   $("satMsg").textContent = !st.have_sgp4 ? "Orbit maths library missing – reinstall AndySDR." : !st.observer ? "Enter your position (or use my location) to see passes." : st.busy ? "Downloading orbit data …" : st.error || "";
   if ([...document.querySelectorAll("#satTable input")].some((e) => e === document.activeElement)) return;
-  $("satTable").querySelector("tbody").innerHTML = st.sats.filter((x) => !(x.kind === "geo" && st.observer && x.el != null && !x.visible)).map((x) => {   // satellites that never rise at your position are not listed
-    const fr = x.freqs.length > 1 ? `<select data-k="freq">${x.freqs.map((f) => `<option value="${f}" ${f === x.freq ? "selected" : ""}>${(f / 1e6).toFixed(3)} MHz</option>`).join("")}</select>` : `${(x.freqs[0] / 1e6).toFixed(3)} MHz`;
+  const gl = SCH.pass_log || [];
+  $("satLog").querySelector("tbody").innerHTML = gl.length ? gl.map((r) => {
+    const mode = { fixed: "fixed", auto: "learning" }[r.gain_mode] || "knob";
+    const snr = r.snr == null ? "–" : `${r.snr} dB`;
+    const good = r.images > 0 ? ' style="color:var(--ok,#4ddb7a)"' : "";
+    return `<tr><td>${fmtLocal(r.start)}</td><td>${esc(r.name || r.sat)}</td><td>${r.max_el == null ? "–" : Math.round(r.max_el) + "°"}</td>
+      <td>${r.gain == null ? "AGC" : r.gain} <span class="muted small">${mode}</span></td>
+      <td title="${r.samples ? r.samples + " readings" : "no signal readings"}${r.score != null ? " · distance-corrected " + r.score + " dB" : ""}">${snr}</td>
+      <td${good}>${esc(r.result)}${r.stopped ? ' <span class="muted small">(cut short)</span>' : ""}</td></tr>`;
+  }).join("") : `<tr><td colspan="6" class="muted">Nothing yet – each pass AndySDR records leaves a line here.</td></tr>`;
+  const nextPass = (id) => st.passes.find((p) => p.sat === id && !p.geo);
+  $("satTable").innerHTML = st.sats.filter((x) => !(x.kind === "geo" && st.observer && x.el != null && !x.visible)).map((x) => {   // satellites that never rise at your position are not listed
+    const fr = x.freqs.length > 1 ? `<select data-k="freq" title="Frequency">${x.freqs.map((f) => `<option value="${f}" ${f === x.freq ? "selected" : ""}>${(f / 1e6).toFixed(3)} MHz</option>`).join("")}</select>` : `<span class="mono">${(x.freqs[0] / 1e6).toFixed(3)} MHz</span>`;
     let note = esc(x.note);
     if (x.kind === "geo" && st.observer && x.el != null) note = (x.visible ? `<b style="color:var(--ok,#4ddb7a)">Above your horizon (${x.el}°).</b> ` : x.above_horizon ? `<b>Only ${x.el}° up – too low to track.</b> ` : `<b style="color:var(--warn,#ffb020)">Below your horizon from here (${x.el}°) – nothing to receive.</b> `) + note;
-    const geoNoDates = x.kind === "geo";
-    return `<tr data-id="${x.id}"><td><input type="checkbox" data-k="enabled" ${x.enabled ? "checked" : ""}></td><td>${esc(x.name)}</td><td>${fr}</td>
-      <td>${x.kind === "geo" ? '<span class="muted">–</span>' : `<input type="checkbox" data-k="track" ${x.track ? "checked" : ""} title="Retune every 2 s to follow the Doppler shift">`}</td>
-      <td><input class="inp" data-k="min_el" type="number" min="0" max="80" value="${x.min_el}" style="width:4.5em">°</td>
-      <td>${geoNoDates ? '<span class="muted">–</span>' : `<div class="satdays">${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((n, i) => `<label class="small"><input type="checkbox" data-day="${i}" ${(x.days || []).includes(i) ? "checked" : ""}>${n}</label>`).join("")}</div>`}</td>
-      <td>${geoNoDates ? '<span class="muted">–</span>' : `<input class="inp" data-k="from" type="date" value="${esc(x.from)}"> – <input class="inp" data-k="to" type="date" value="${esc(x.to)}">`}</td>
-      <td class="muted">${x.tle_age_h == null ? "not downloaded" : x.tle_age_h + " h old"}</td><td class="small">${note}</td></tr>`;
+    const geo = x.kind === "geo";
+    const np = nextPass(x.id);
+    const next = !x.enabled ? "off" : geo ? (x.visible ? "continuous" : "") : np ? `next ${fmtLocal(np.aos)} · ${np.max_el}°` : (st.observer ? "no pass in the next 4 days" : "set your position");
+    const open = SAT_OPEN.has(x.id);
+    const days = (x.days || []).length ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].filter((n, i) => x.days.includes(i)).join(" ") : "every day";
+    return `<div class="sat ${x.enabled ? "on" : ""}" data-id="${x.id}">
+      <div class="sat-main">
+        <label class="sat-rec"><input type="checkbox" data-k="enabled" ${x.enabled ? "checked" : ""}> <b>${esc(x.name)}</b></label>
+        <span class="sat-freq">${fr}</span>
+        <span class="sat-next ${x.enabled ? "" : "muted"}">${esc(next)}</span>
+        <button class="btn sm sat-opt" data-opt title="Doppler tracking, minimum elevation, days and dates">${open ? "▾" : "▸"} Options</button>
+      </div>
+      <div class="sat-detail" ${open ? "" : "hidden"}>
+        <div class="sat-grid">
+          ${geo ? "" : `<label class="small" title="Retune every 2 s to follow the Doppler shift"><input type="checkbox" data-k="track" ${x.track ? "checked" : ""}> Follow Doppler</label>`}
+          <label class="small">Minimum elevation <input class="inp" data-k="min_el" type="number" min="0" max="80" value="${x.min_el}" style="width:4.5em">°</label>
+          ${geo ? "" : `<div class="satdays small"><span class="muted">Days:</span>${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((n, i) => `<label><input type="checkbox" data-day="${i}" ${(x.days || []).includes(i) ? "checked" : ""}>${n}</label>`).join("")}</div>`}
+          ${geo ? "" : `<div class="small"><span class="muted">Only between</span> <input class="inp" data-k="from" type="date" value="${esc(x.from)}"> – <input class="inp" data-k="to" type="date" value="${esc(x.to)}"></div>`}
+        </div>
+        ${geo ? "" : (() => {
+          const gm = x.gain_mode || "knob", gb = x.gain_best, rg = x.gain_range || [0, 100];
+          return `<div class="sat-gain small"><span class="muted">RF gain on passes:</span>
+            <select data-k="gain_mode" title="Which RF gain to use while recording this satellite">
+              <option value="knob" ${gm === "knob" ? "selected" : ""}>Use the RF GAIN knob</option>
+              <option value="fixed" ${gm === "fixed" ? "selected" : ""}>Fixed value</option>
+              <option value="auto" ${gm === "auto" ? "selected" : ""}>Learn the best</option></select>
+            ${gm === "fixed" ? `<input class="inp" data-k="gain" type="number" min="${rg[0]}" max="${rg[1]}" step="1" value="${x.gain == null ? "" : x.gain}" style="width:5em" placeholder="gain">` : ""}
+            <span class="muted">${gb ? `Best so far: ${gb[0]} (score ${gb[1]} dB, ${gb[2]} pass${gb[2] === 1 ? "" : "es"})` : "No measured passes yet"}</span>
+            ${gb && !(gm === "fixed" && x.gain === gb[0]) ? `<button class="btn sm" data-usebest="${gb[0]}">Use ${gb[0]}</button>` : ""}</div>`;
+        })()}
+        <div class="small muted" style="margin-top:6px">Orbit data: ${x.tle_age_h == null ? "not downloaded" : x.tle_age_h + " h old"}${geo ? "" : " · recording on: " + days}</div>
+        <div class="small sat-note">${note}</div>
+      </div>
+    </div>`;
   }).join("");
-  $("satTable").querySelectorAll("tr[data-id] [data-day]").forEach((el) => {
-    el.onchange = () => {
-      const tr = el.closest("tr");
-      send({ cmd: "sat_cfg", id: tr.dataset.id, days: [...tr.querySelectorAll("[data-day]:checked")].map((c) => +c.dataset.day) });
+  $("satTable").querySelectorAll(".sat [data-opt]").forEach((el) => {
+    el.onclick = () => {
+      const box = el.closest(".sat"), d = box.querySelector(".sat-detail"), id = box.dataset.id;
+      d.hidden = !d.hidden;
+      if (d.hidden) SAT_OPEN.delete(id); else SAT_OPEN.add(id);
+      el.textContent = (d.hidden ? "▸" : "▾") + " Options";
     };
   });
-  $("satTable").querySelectorAll("tr[data-id] [data-k]").forEach((el) => {
+  $("satTable").querySelectorAll(".sat [data-usebest]").forEach((el) => {
+    el.onclick = () => send({ cmd: "sat_cfg", id: el.closest(".sat").dataset.id, gain_mode: "fixed", gain: +el.dataset.usebest });
+  });
+  $("satTable").querySelectorAll(".sat [data-day]").forEach((el) => {
     el.onchange = () => {
-      const k = el.dataset.k, id = el.closest("tr").dataset.id;
+      const box = el.closest(".sat");
+      send({ cmd: "sat_cfg", id: box.dataset.id, days: [...box.querySelectorAll("[data-day]:checked")].map((c) => +c.dataset.day) });
+    };
+  });
+  $("satTable").querySelectorAll(".sat [data-k]").forEach((el) => {
+    el.onchange = () => {
+      const k = el.dataset.k, id = el.closest(".sat").dataset.id;
       send({ cmd: "sat_cfg", id, [k]: el.type === "checkbox" ? el.checked : el.value });
     };
   });
@@ -3313,7 +3389,8 @@ const HELP = {
   acars: ["Aircraft text (ACARS)", "ACARS is the airlines' text messaging with aircraft: position and weather reports, flight times (out, off, on, in), maintenance data and short messages. In the UK it is on AM channels around 131 MHz – 131.525, 131.725 and 131.825 are the busiest. Press ▶ Start ACARS (or the ACARS key) and tune one; AndySDR switches to AM and lists what it reads: aircraft registration, flight number, the two-letter label and the message. Click a frequency button to tune it. A block with a damaged character is repaired when it can be, otherwise it is dropped, so a weak signal gives fewer messages rather than wrong ones. Link tests and acknowledgements have no text – tick Hide link tests to hide them. Messages are saved to a CSV file each day, and Export CSV saves the list. ▶ Start VDL2 does the same job for the newer digital link on 136 MHz (UK: 136.975 MHz is the busiest, then 136.725 to 136.925): it reads the 25 kHz wide data signal and lists the ACARS messages inside it, marked VDL2 next to the aircraft. Pick a VDL2 frequency button, wait for a burst – the line at the top counts bursts and frames. VDL2 needs a reasonably strong signal (a short airband or wideband VHF antenna and a clear view); the receiver is set to the 25 kHz digital mode automatically."],
   sonde: ["Weather balloons (radiosondes)", "A radiosonde is the small box a weather balloon carries up to 30 km. It sends its GPS position every second on 400.15–406 MHz. The Met Office launches from about 11:00 and 23:00 UTC at several UK sites. Tune one (use SRCH, or watch the waterfall for a signal about 10 kHz wide) and press ▶ Start sonde decoder: AndySDR switches to narrow FM, 16 kHz wide, and lists every balloon it hears with serial, position, height, speed, climb, heading and satellites, plus the distance and bearing from you when My position is set (ADS-B tab, or a USB GPS unit). Click the position to see it on a map (internet needed). Only Vaisala RS41 sondes are read; other makes (DFM, M10, iMet) are ignored."],
   gps: ["USB GPS unit", "Plug in a USB GPS unit (a GPS 'puck' or dongle that appears as a COM port), tick the box and AndySDR fills in My position by itself – for satellite passes and the ADS-B distance and bearing. Leave Port on Auto-find, or pick the unit from the list (★ marks likely GPS units). The chip shows Fix and the number of satellites once it has a position; the first fix can take a few minutes, and it works best near a window or outdoors. By default it checks once a day (then lets go of the unit); the Check menu can make it every hour, or all the time so it follows you if you move. While this is ticked it replaces any position you typed in."],
-  satauto: ["Satellite auto-capture", "Tick Record on a satellite and AndySDR predicts every pass over your position for the next 4 days (listed day by day) (set it with My position or 📍), tunes at acquisition of signal, follows the Doppler shift if Track is ticked, runs the right decoder and stops when the satellite sets – then puts the radio back as it was. ISS SSTV listens on 145.800 MHz FM (limit it to the ARISS event dates with the date boxes); Meteor-M N2-3 and N2-4 are LRPT on 137.900 MHz (switch to 137.100 if the satellite moves); GOES-19/18 are 1694.1 MHz HRIT from geostationary orbit – AndySDR says honestly when the satellite is below your horizon. Tick the days of the week you want (none ticked = every day) – you never type a time, AndySDR starts each capture only when the satellite is actually above your horizon. Min elevation hides low, weak passes. Orbit data (TLEs) is downloaded from CelesTrak and refreshed automatically. A capture you add by hand always takes priority. Only satellites you can actually receive from your position are listed (the GOES satellites over the Americas are hidden in the UK). NOAA 15, 18 and 19 (classic 137 MHz APT) were retired in 2025. From the UK the weather pictures you can receive are Meteor-M N2-3 / N2-4 (137 MHz LRPT – a simple turnstile or V-dipole antenna and an LNA are enough) and Metop-B / Metop-C (1701.3 MHz AHRPT – needs a dish, an L-band LNA and the 6 or 10 MS/s sample rate)."],
+  passreport: ["Pass report", "One line for every satellite pass AndySDR records: when, the highest the satellite climbed, the RF gain used, how far its signal stood above the noise (Signal, in dB – bigger is better) and what came out (pictures, or none). Meteor pictures are made a few minutes after the pass ends, so the newest line says 'processing' for a while. Use it to find the RF gain that works best: open a satellite's Options and choose RF gain on passes – 'Use the RF GAIN knob' (default), 'Fixed value', or 'Learn the best'. Learn the best tries a little lower and a little higher than its best gain on successive passes, compares the signal (corrected for distance, so low and high passes can be compared) and keeps the winner, re-checking now and then in case things change; passes below 20° do not count. The Use button copies the best gain found so far into a fixed value. The hardware AGC, if you turn it on, overrides all of this. The same lines are in the diagnostics zip (satellite-passes.jsonl)."],
+  satauto: ["Satellite auto-capture", "Tick Record on a satellite and AndySDR predicts every pass over your position for the next 4 days (listed day by day) (set it with My position or 📍), tunes at acquisition of signal, follows the Doppler shift if Follow Doppler is ticked (open a satellite's Options button for that, minimum elevation, days, dates and RF gain), runs the right decoder and stops when the satellite sets – then puts the radio back as it was. ISS SSTV listens on 145.800 MHz FM (limit it to the ARISS event dates with the date boxes); Meteor-M N2-3 and N2-4 are LRPT on 137.900 MHz (switch to 137.100 if the satellite moves); GOES-19/18 are 1694.1 MHz HRIT from geostationary orbit – AndySDR says honestly when the satellite is below your horizon. Tick the days of the week you want (none ticked = every day) – you never type a time, AndySDR starts each capture only when the satellite is actually above your horizon. Minimum elevation hides low, weak passes. Orbit data (TLEs) is downloaded from CelesTrak and refreshed automatically. A capture you add by hand always takes priority. Only satellites you can actually receive from your position are listed (the GOES satellites over the Americas are hidden in the UK). NOAA 15, 18 and 19 (classic 137 MHz APT) were retired in 2025. From the UK the weather pictures you can receive are Meteor-M N2-3 / N2-4 (137 MHz LRPT – a simple turnstile or V-dipole antenna and an LNA are enough) and Metop-B / Metop-C (1701.3 MHz AHRPT – needs a dish, an L-band LNA and the 6 or 10 MS/s sample rate)."],
   sched: ["Scheduler", "Captures that run by themselves at set times – ideal for weather fax charts, ISS SSTV events and Meteor-M satellite passes. Pick a station from Quick pick (or type a frequency), choose what to do (WEFAX, SSTV, LRPT, record…), the start time on this PC's clock and how long, and either tick days of the week or pick a single date. At the start time AndySDR stops scanning, tunes, runs the decoder; at the end it saves the pictures and puts the radio back exactly as it was. Only one capture can run at a time: if two overlap, the one with the higher Priority takes over the radio (satellite passes count as High) and an interrupted capture carries on afterwards if time is left; overlaps are flagged with ⚠ and listed above the table. ▶ Now runs one straight away. AndySDR must be running (it can run as a server in the background)."],
   bppick: ["Plan › Band › Section", "Drill down through the UK band plan: pick a Plan (amateur, aviation, marine, PMR…), then a Band in it, then a Section (sub-band or key frequency). Tune goes there in the right mode and step; Search section loads it into the Live Activity search; 'Add key frequencies to bank' stores every key frequency in that band (e.g. marine Ch 16/70/AIS, airband 121.5/123.1) into the memory bank you choose. Clicking a coloured strip on the spectrum or a band name in the list also selects it here. Tap the coloured plan buttons underneath to show or hide each plan on the spectrum."],
   bandplan: ["Band plan size", "Shows the UK band plan as coloured strips across the top of the spectrum and in the band map above it. Off hides it; Small shows main allocations only; Medium adds sub-bands (e.g. 2 m FM simplex) and markers for key frequencies (Ch 16, 121.5, APRS…); Large makes the strips bigger and names the key frequencies. Each computer remembers its own choice."],
@@ -3370,7 +3447,7 @@ function openHelp() {
   <h3>QUICK BUTTONS (under the display)</h3>${ctl(["qmode", "qbw", "qband", "qhot", "qdigi", "qdec", "qnotch", "qlock", "qtog", "qfiles", "replay"])}
   <h3>FUNCTION KEYS</h3>${ctl(["k_skip", "k_scan", "k_man", "k_srch", "k_pgm", "k_lo", "k_pri", "k_mode", "k_step", "k_bank", "k_dly", "k_rec", "k_dec", "k_arrows", "k_typefreq"])}
   <p class="small">Keyboard: digits and <code>.</code> type, <code>Enter</code> tunes, <code>↑ ↓</code> step, <code>S</code> scan, <code>M</code> manual, <code>P</code> program, <code>L</code> lockout, <code>I</code> skip 10 min, <code>H</code> help, <code>Esc</code> clear. Click the big frequency to type one with the mouse or on a touch screen.</p>
-  <h3>SCREENS</h3>${ctl(["scope", "zoom", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "satauto", "gps", "acars", "sonde", "ft8tab", "morsebox", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "updates", "receiver", "remote", "theme", "conn"])}
+  <h3>SCREENS</h3>${ctl(["scope", "zoom", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "satauto", "passreport", "gps", "acars", "sonde", "ft8tab", "morsebox", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "updates", "receiver", "remote", "theme", "conn"])}
   <h3>DECODER PROGRAMS</h3>
   <p>AndySDR has WEFAX and SSTV built in (SSTV: Martin, Scottie, Robot and PD modes – ISS 145.800 NFM, 2 m 144.500 NFM, 20 m 14.230 USB). DSD-FME, multimon-ng and SatDump now come bundled in the <code>decoders</code> folder next to <code>AndySDR.exe</code>. If one shows ✖ in the DECODERS tab, press <b>⬇ Download missing decoders</b> and AndySDR fetches it from GitHub into <code>%APPDATA%\\AndySDR\\decoders</code>. You can also unzip your own copy into either folder (any sub-folder is fine – AndySDR finds the .exe):</p>
   <dl><dt>DSD-FME</dt><dd>github.com/lwvmobile/dsd-fme – DMR, P25 1/2, NXDN, dPMR, YSF, M17. AndySDR feeds it like SDR++'s network sink (TCP 127.0.0.1:7355, 48 kHz); DSD-FME plays decoded voice on your speakers itself (AndySDR starts the PulseAudio sound server that comes with it).</dd>
