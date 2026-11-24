@@ -1,0 +1,155 @@
+/* AndySDR phone layout - every rule here is under body.phone (set by phone.js on small screens), so PCs and tablets are untouched */
+#phNav, #phBar, #phMore, #phScopeOpt, #phCtl, #phToPhone { display: none; }
+
+body.phone { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+body.phone.ph-typing { padding-bottom: 12px; }
+
+/* bottom bar */
+body.phone #phNav { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; background: var(--panel); border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom, 0px); }
+body.phone.ph-typing #phNav { display: none; }
+#phNav button { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 58px; padding: 6px 2px;
+  background: none; border: 0; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+#phNav svg { width: 24px; height: 24px; }
+#phNav button.on { color: var(--accent); font-weight: 600; }
+
+/* which page shows */
+body.phone .tabbar { display: none; }
+body.phone[data-pp="radio"] section.tabs, body.phone[data-pp="more"] section.tabs { display: none; }
+body.phone:not([data-pp="radio"]) section.radio, body.phone:not([data-pp="radio"]) section.scope { display: none; }
+body.phone:not([data-pp="radio"]) #phBar { display: flex; }
+body.phone[data-pp="more"] #phMore { display: block; }
+
+#phBar { align-items: center; gap: 10px; min-height: 48px; padding: 0 2px; }
+#phBar #phTitle { font-size: 18px; font-weight: 600; }
+#phBack, #phSeg { display: none; }
+body.phone[data-pp="sub"] #phBack { display: inline-flex; }
+body.phone[data-pp="weather"] #phSeg { display: flex; flex: 1; }
+body.phone[data-pp="weather"] #phTitle { display: none; }
+#phBack { align-items: center; min-height: 44px; padding: 0 14px 0 8px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel2); color: var(--text); font: inherit; font-size: 15px; cursor: pointer; }
+#phSeg { gap: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+#phSeg button { flex: 1; min-height: 44px; border: 0; background: var(--panel2); color: var(--muted); font: inherit; font-size: 14px; cursor: pointer; }
+#phSeg button.on { background: var(--accent); color: #0b0b0b; font-weight: 600; }
+
+/* the radio page: display, big controls, quick buttons, optional scanner keys, spectrum */
+body.phone .radio-left { display: none; }
+body.phone .radio-right { display: none; }
+body.phone.ph-keys-open .radio-right { display: block; order: 5; }
+body.phone .fkeys { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+body.phone .fkeys .key { min-height: 46px; }
+body.phone .arrows { display: none; }
+body.phone .model-badge { display: none; }
+body.phone .radio-top { min-height: 0; padding-top: 4px; padding-bottom: 0; }
+body.phone .radio-body { display: flex; flex-direction: column; gap: 12px; }
+body.phone .lcd { order: 0; }
+body.phone #phCtl { display: flex; flex-direction: column; gap: 10px; order: 1; }
+body.phone .q-jump { order: 2; }
+body.phone .quick { order: 3; }
+
+.ph-tune { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ph-big { min-height: 66px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel2); color: var(--text); font: inherit;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer; touch-action: manipulation;
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+.ph-big b { font-size: 26px; line-height: 1; font-weight: 500; }
+.ph-big span { font-size: 13px; color: var(--muted); }
+.ph-big:active { border-color: var(--accent); transform: scale(.98); }
+.ph-act { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.ph-btn { min-height: 48px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel2); color: var(--text); font: inherit; font-size: 15px; cursor: pointer;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.ph-btn.on { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.ph-btn:active { transform: scale(.98); }
+.ph-sliders { display: flex; flex-direction: column; gap: 2px; }
+.ph-sl { display: grid; grid-template-columns: 72px minmax(0, 1fr) 58px; gap: 10px; align-items: center; min-height: 46px; font-size: 14px; }
+.ph-sl span { color: var(--muted); }
+.ph-sl input[type="range"] { width: 100%; min-width: 0; height: 34px; margin: 0; touch-action: pan-y; accent-color: var(--accent); }
+.ph-sl output { text-align: right; font-family: var(--mono, ui-monospace, monospace); font-size: 13px; }
+
+/* spectrum on the phone: options are tucked away */
+body.phone #phScopeOpt { display: block; width: 100%; min-height: 44px; margin: 0 0 8px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel2); color: var(--text); font: inherit; font-size: 14px; cursor: pointer; }
+body.phone .scope-bar { display: none; }
+body.phone.ph-scope-opts .scope-bar { display: flex; flex-wrap: wrap; }
+body.phone .vfo-hint { display: none; }
+
+/* More page */
+#phMoreList { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--panel); }
+.ph-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 58px; padding: 0 16px; border: 0; border-bottom: 1px solid var(--line); background: none;
+  color: var(--text); font: inherit; font-size: 16px; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.ph-item:last-child { border-bottom: 0; }
+.ph-item span { flex: 1; }
+.ph-item em { font-style: normal; font-size: 12px; font-weight: 600; min-width: 22px; text-align: center; padding: 2px 7px; border-radius: 999px; background: var(--accent); color: #0b0b0b; }
+.ph-item em[hidden] { display: none; }
+.ph-item i { font-style: normal; font-size: 24px; color: var(--muted); }
+.ph-item:active { background: var(--panel2); }
+.ph-layout { margin-top: 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+.ph-layout label { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 15px; }
+.ph-layout select { min-height: 40px; max-width: 60%; }
+.ph-layout p { margin: 8px 0 0; }
+
+/* "Full" chosen on a phone: a way back */
+body.phone-off #phToPhone { display: block; position: fixed; right: 12px; bottom: 12px; z-index: 60; min-height: 44px; padding: 0 16px; border-radius: 999px;
+  border: 1px solid var(--accent); background: var(--panel); color: var(--accent); font: inherit; font-size: 14px; cursor: pointer; }
+
+/* phone held sideways: display on the left, spectrum on the right */
+body.phone-land[data-pp="radio"] main.wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+body.phone-land[data-pp="radio"] section.scope { position: sticky; top: 8px; }
+body.phone-land #phNav button { min-height: 46px; flex-direction: row; gap: 8px; font-size: 13px; }
+body.phone-land #phNav svg { width: 20px; height: 20px; }
+body.phone-land { padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px)); }
+
+@media (prefers-reduced-motion: reduce) { .ph-big:active, .ph-btn:active { transform: none; } }
+
+/* radio first, spectrum after it; pop-up notices sit above the bottom bar */
+body.phone section.radio { order: 1; }
+body.phone section.scope { order: 2; }
+body.phone #phBar { order: 0; }
+body.phone .toasts { left: 8px; right: 8px; bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+body.phone .toast { max-width: none; }
+
+/* the desktop grid puts the spectrum first below 1100px; on a phone the radio leads */
+body.phone[data-theme] .wrap, body.phone .wrap { grid-template-columns: minmax(0, 1fr); grid-template-areas: "radio" "scope" "tabs"; grid-template-rows: none; padding: 8px; gap: 10px; }
+body.phone[data-theme] .wrap > .scope { position: static; }
+
+/* sideways: radio on the left, spectrum on the right (must come after the one-column rule above) */
+body.phone-land[data-pp="radio"][data-theme] main.wrap, body.phone-land[data-pp="radio"] main.wrap {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "radio scope"; align-items: start; gap: 10px; }
+body.phone-land[data-pp="radio"][data-theme] .wrap > .scope { position: sticky; top: 8px; max-height: calc(100vh - 76px); overflow-y: auto; }
+body.phone-land[data-pp="radio"] .top-status { display: none; }
+body.phone-land[data-pp="radio"] .lcd .lcd-keys, body.phone-land[data-pp="radio"] .lcd .keyrow { gap: 4px; }
+
+/* memory channels as cards instead of a wide table */
+body.phone #tab-mem .tablewrap { overflow: visible; border: 0; background: none; }
+body.phone #memTable, body.phone #memTable tbody { display: block; width: 100%; }
+body.phone #memTable thead { display: none; }
+body.phone #memTable tr[data-ch] { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; grid-template-areas: "freq freq freq ch" "name name name name" "mode mode dec dec" "lo dly act act"; gap: 8px 10px; align-items: center;
+  padding: 12px; margin: 0 0 10px; border: 1px solid var(--line, rgba(255,255,255,.12)); border-radius: 14px; background: var(--panel2, rgba(255,255,255,.04)); }
+body.phone #memTable td { display: block; padding: 0; border: 0; min-width: 0; }
+body.phone #memTable td:nth-child(1) { grid-area: ch; font-size: 12px; opacity: .7; text-align: right; }
+body.phone #memTable td:nth-child(2) { grid-area: freq; font-size: 22px; font-weight: 600; min-height: 44px; display: flex; align-items: center; }
+body.phone #memTable td:nth-child(3) { grid-area: mode; }
+body.phone #memTable td:nth-child(4) { grid-area: name; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 36px; display: flex; align-items: center; }
+body.phone #memTable td:nth-child(5) { display: none; }
+body.phone #memTable td:nth-child(6) { grid-area: dec; }
+body.phone #memTable td:nth-child(7) { grid-area: lo; }
+body.phone #memTable td:nth-child(8) { grid-area: dly; }
+body.phone #memTable td:nth-child(7), body.phone #memTable td:nth-child(8) { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+body.phone #memTable td:nth-child(7)::before { content: "L/O"; font-size: 12px; opacity: .7; }
+body.phone #memTable td:nth-child(8)::before { content: "DLY"; font-size: 12px; opacity: .7; }
+body.phone #memTable td:nth-child(9) { grid-area: act; display: flex; gap: 6px; justify-content: flex-end; }
+body.phone #memTable td:nth-child(9) .btn { min-height: 44px; min-width: 44px; padding: 0 10px; }
+body.phone #memTable select { min-height: 44px; width: 100%; }
+body.phone #memTable input[type=checkbox] { width: 24px; height: 24px; }
+body.phone #memTable td[colspan] { grid-column: 1 / -1; padding: 12px; }
+
+/* decoder list: one wide, easy-to-hit button per decoder */
+body.phone #decBtns { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+body.phone #decBtns .btn, body.phone #decBtns button { width: 100%; min-height: 48px; text-align: left; }
+
+/* header fits a 360px phone */
+body.phone header { padding-left: 8px; padding-right: 8px; gap: 6px; flex-wrap: nowrap; }
+body.phone .brand { min-width: 0; flex: 0 1 auto; }
+body.phone .brand-name { font-size: 18px; }
+body.phone header .theme-pick { min-width: 0; flex: 1 1 auto; }
+body.phone header .theme-pick select { min-width: 0; width: 100%; max-width: 130px; }
+body.phone .help-btn { flex: 0 0 auto; padding-left: 10px; padding-right: 10px; }
+body.phone .top-status { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+body.phone .top-status .tchip { min-width: 0; padding-left: 6px; padding-right: 6px; }
