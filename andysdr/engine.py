@@ -289,6 +289,14 @@ class Radio:
 
     def _tune(self, f, mode=None, force=False):
         f = int(f)
+        if self.dev:
+            lo, hi = self.dev.freq_range()
+            if not (lo <= f <= hi):
+                # a mistyped frequency (e.g. kHz typed as MHz) must never reach the receiver: the RSP refuses it and locks up
+                log.warning("refused to tune to %d Hz - outside %s's range (%d - %d Hz)", f, self.dev.label, lo, hi)
+                self._emit("event", {"level": "warn", "text": f"{f / 1e6:,.4f} MHz is outside what this receiver can tune "
+                                                              f"({lo / 1e6:g} - {hi / 1e6:g} MHz) - check the frequency you typed"})
+                return False
         if self.decoders.active in ("goes", "metop") and abs(f - self.freq) > 1000000:
             self.decoders.stop()              # moved off the GOES channel
         if self.decoders.active == "meshsdr" and abs(f - self.freq) > 100000:
