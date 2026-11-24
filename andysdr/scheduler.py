@@ -19,7 +19,7 @@ import secrets
 import threading
 import time
 
-from . import passlog
+from . import passlog, satrx
 from .satpass import SATELLITES, SatPlanner
 
 log = logging.getLogger("andysdr.scheduler")
@@ -75,6 +75,7 @@ class Scheduler:
         self.radio = radio
         self.s = settings
         self.running = None          # {"id", "name", "until", "occurrence"}
+        self.running2 = None         # the same, for a pass the second (satellite-only) receiver is recording
         self.done = set()            # occurrences already run ("id@YYYY-MM-DDTHH:MM")
         self.lock = threading.Lock()
         self.alive = True
@@ -87,6 +88,10 @@ class Scheduler:
 
     def stop(self):
         self.alive = False
+        try:
+            self.stop_job2("program closed")
+        except Exception:
+            log.exception("second receiver stop")
 
     # ------------------------------------------------------------------ jobs
     def jobs(self):
@@ -272,8 +277,62 @@ class Scheduler:
                 log.exception("scheduler")
             time.sleep(2 if self.running else 5)
 
+    # ------------------------------------------------------------------ the second receiver
+    def _satrx(self):
+        return getattr(self.radio, "satrx", None)
+
+    def _tick_satrx(self, now):
+        """137 MHz Meteor passes go to the second receiver when there is one; it runs alongside the main radio."""
+        rx = self._satrx()
+        if rx is None:
+            return
+        if self.running2:
+            r2 = self.running2
+            if now >= r2["until"] or not rx.busy():
+                self.stop_job2(None if now >= r2["until"] else "second receiver stopped")
+                return
+            rx.retune_job(self.sats.tuned_freq(r2["sat"], now.timestamp()))
+            return
+        if not rx.usable():
+            return
+        due = self.sats.due(now.timestamp(), only=satrx.takes)
+        if not due:
+            return
+        sid, p, key, job, until = due
+        job = dict(job)
+        job["gain"], job["gain_mode"] = rx.pass_gain(sid)
+        rx.pass_el = lambda ts, sid=sid: self.sats.look(sid, ts)
+        self.sats.done.add(key)                         # claimed: the main radio will not also start it
+        if rx.begin_job(job):
+            until_dt = dt.datetime.fromtimestamp(until)
+            self.running2 = {"id": job["id"], "name": job["name"], "until": until_dt, "sat": sid, "freq": job["freq"]}
+            log.info("capture started on the second receiver: %s (%.4f MHz) until %s", job["name"], job["freq"] / 1e6,
+                     until_dt.strftime("%H:%M"))
+            self.radio._emit("event", {"level": "info", "text": f"Second receiver started: {job['name']} until {until_dt.strftime('%H:%M')}"})
+            self._emit()
+        else:
+            self.sats.done.discard(key)                 # it could not be started: the main radio takes this pass instead
+            log.warning("second receiver could not start %s - the main radio will take it", job["name"])
+
+    def stop_job2(self, why=None):
+        if not self.running2:
+            return
+        name = self.running2["name"]
+        self.running2 = None
+        log.info("second receiver capture %s: %s%s", "stopped" if why else "finished", name, f" ({why})" if why else "")
+        rx = self._satrx()
+        if rx is not None:
+            rx.end_job(why)
+        self.radio._emit("event", {"level": "warn" if why else "info",
+                                   "text": f"Second receiver capture {'stopped' if why else 'finished'}: {name}" + (f" ({why})" if why else "")})
+        self._emit()
+
     def tick(self, now=None):
         now = now or dt.datetime.now()
+        try:
+            self._tick_satrx(now)
+        except Exception:
+            log.exception("second receiver")
         if self.running:
             if now >= self.running["until"]:
                 self.stop_job()
@@ -346,9 +405,20 @@ class Scheduler:
         if self.running:
             r = {k: self.running[k] for k in ("id", "name", "action", "freq")}
             r["until"] = self.running["until"].strftime("%H:%M")
-        return {"jobs": self.jobs(), "running": r, "next": self.next_runs(),
+        r2 = None
+        if self.running2:
+            r2 = {k: self.running2[k] for k in ("id", "name", "freq")}
+            r2["until"] = self.running2["until"].strftime("%H:%M")
+        rx = self._satrx()
+        rows = list(self.radio.passlog.view(20)) if getattr(self.radio, "passlog", None) else []
+        if rx is not None:
+            for row in rx.passlog.view(20):
+                rows.append(dict(row, rx="rx2"))
+            rows.sort(key=lambda x: x.get("start") or 0, reverse=True)
+            rows = rows[:20]
+        return {"jobs": self.jobs(), "running": r, "running2": r2, "next": self.next_runs(),
                 "presets": PRESETS, "actions": ACTIONS, "conflicts": self.conflicts(), "now": dt.datetime.now().strftime("%H:%M"),
-                "sats": self._sat_status(), "pass_log": self.radio.passlog.view(20) if getattr(self.radio, "passlog", None) else []}
+                "sats": self._sat_status(), "pass_log": rows, "satrx": rx.status() if rx is not None else None}
 
     def _sat_status(self):
         st = self.sats.status()

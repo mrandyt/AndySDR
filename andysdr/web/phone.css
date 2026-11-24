@@ -153,3 +153,7 @@ body.phone header .theme-pick select { min-width: 0; width: 100%; max-width: 130
 body.phone .help-btn { flex: 0 0 auto; padding-left: 10px; padding-right: 10px; }
 body.phone .top-status { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 body.phone .top-status .tchip { min-width: 0; padding-left: 6px; padding-right: 6px; }
+
+/* second receiver card on a phone: one control per line, thumb-sized */
+body.phone .satrx select, body.phone .satrx .inp, body.phone .satrx .btn { min-height: 44px; }
+body.phone .satrx .row { flex-direction: column; align-items: stretch; gap: 8px; }

@@ -67,6 +67,7 @@ jobs:
           python tests/test_autogain.py
           python tests/test_dsdmemory.py
           python tests/test_passlog.py
+          python tests/test_satrx.py
 
       - name: New-feature self-tests (informational)
         continue-on-error: true

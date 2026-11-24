@@ -2979,13 +2979,14 @@ function renderSats() {
   const busy = (id) => document.activeElement === $(id);
   if (!busy("satLat") && !busy("satLon")) { $("satLat").value = st.observer ? st.observer[0] : ""; $("satLon").value = st.observer ? st.observer[1] : ""; }
   $("satMsg").textContent = !st.have_sgp4 ? "Orbit maths library missing – reinstall AndySDR." : !st.observer ? "Enter your position (or use my location) to see passes." : st.busy ? "Downloading orbit data …" : st.error || "";
+  renderSatRx();
   if ([...document.querySelectorAll("#satTable input")].some((e) => e === document.activeElement)) return;
   const gl = SCH.pass_log || [];
   $("satLog").querySelector("tbody").innerHTML = gl.length ? gl.map((r) => {
     const mode = { fixed: "fixed", auto: "learning" }[r.gain_mode] || "knob";
     const snr = r.snr == null ? "–" : `${r.snr} dB`;
     const good = r.images > 0 ? ' style="color:var(--ok,#4ddb7a)"' : "";
-    return `<tr><td>${fmtLocal(r.start)}</td><td>${esc(r.name || r.sat)}</td><td>${r.max_el == null ? "–" : Math.round(r.max_el) + "°"}</td>
+    return `<tr><td>${fmtLocal(r.start)}</td><td>${esc(r.name || r.sat)}${r.rx === "rx2" ? ' <span class="muted small" title="Recorded on the second receiver">· 2nd rx</span>' : ""}</td><td>${r.max_el == null ? "–" : Math.round(r.max_el) + "°"}</td>
       <td>${r.gain == null ? "AGC" : r.gain} <span class="muted small">${mode}</span></td>
       <td title="${r.samples ? r.samples + " readings" : "no signal readings"}${r.score != null ? " · distance-corrected " + r.score + " dB" : ""}">${snr}</td>
       <td${good}>${esc(r.result)}${r.stopped ? ' <span class="muted small">(cut short)</span>' : ""}</td></tr>`;
@@ -3014,7 +3015,8 @@ function renderSats() {
           ${geo ? "" : `<div class="satdays small"><span class="muted">Days:</span>${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((n, i) => `<label><input type="checkbox" data-day="${i}" ${(x.days || []).includes(i) ? "checked" : ""}>${n}</label>`).join("")}</div>`}
           ${geo ? "" : `<div class="small"><span class="muted">Only between</span> <input class="inp" data-k="from" type="date" value="${esc(x.from)}"> – <input class="inp" data-k="to" type="date" value="${esc(x.to)}"></div>`}
         </div>
-        ${geo ? "" : (() => {
+        ${geo ? "" : x.action === "lrpt" && SCH.satrx && SCH.satrx.enabled ? `<div class="sat-gain small muted">RF gain on passes: set in <b>Second receiver</b> above (used while it is plugged in; if it is not, the RF GAIN settings below apply to the main radio).</div>` : ""}
+        ${geo || (x.action === "lrpt" && SCH.satrx && SCH.satrx.enabled) ? "" : (() => {
           const gm = x.gain_mode || "knob", gb = x.gain_best, rg = x.gain_range || [0, 100];
           return `<div class="sat-gain small"><span class="muted">RF gain on passes:</span>
             <select data-k="gain_mode" title="Which RF gain to use while recording this satellite">
@@ -3069,6 +3071,43 @@ function renderSats() {
   }
   $("satPasses").querySelector("tbody").innerHTML = rows ||
     `<tr><td colspan="7" class="muted">${st.observer ? "Tick Record on a satellite above – every pass for the next 4 days appears here, grouped by day, and is recorded automatically." : "Set your position first."}</td></tr>`;
+}
+function renderSatRx() {
+  const x = SCH && SCH.satrx, el = $("satRx"); if (!x || !el) return;
+  const state = !x.enabled ? "off" : x.busy ? `recording${x.snr != null ? " · signal " + x.snr + " dB" : ""}` : x.ready ? "ready" : "not found";
+  $("satRxSum").textContent = "· " + state;
+  if (el.contains(document.activeElement) && document.activeElement.tagName !== "BUTTON") return;
+  const dv = x.devices || [];
+  el.innerHTML = `
+    <div class="row wrapline"><label><input type="checkbox" data-sk="enabled" ${x.enabled ? "checked" : ""}> <b>Use a second receiver for Meteor-M passes (137 MHz)</b></label></div>
+    <div class="row wrapline">
+      <label>Receiver <select data-sk="device"><option value="">Automatic (first free RTL-SDR)</option>
+        ${dv.map((d) => `<option value="${esc(d.key)}" ${d.key === x.device ? "selected" : ""}>${esc(d.label)}</option>`).join("")}
+        ${x.device && !dv.some((d) => d.key === x.device) ? `<option value="${esc(x.device)}" selected>${esc(x.device)} (not plugged in)</option>` : ""}</select></label>
+      <button class="btn sm" data-sact="refresh" title="Look for dongles again">⟳ Find</button>
+      <button class="btn sm" data-sact="check" title="Open the receiver for a moment and check it works">Check it</button>
+    </div>
+    <div class="row wrapline">
+      <label>RF gain <input class="inp" data-sk="gain" type="number" min="${x.gain_min}" max="${x.gain_max}" step="1" value="${x.gain}" style="width:5em"> dB</label>
+      <label>on passes <select data-sk="gain_mode"><option value="fixed" ${x.gain_mode === "fixed" ? "selected" : ""}>Use this gain</option>
+        <option value="auto" ${x.gain_mode === "auto" ? "selected" : ""}>Learn the best (starts here)</option></select></label>
+      <label title="Powers an LNA through the coax. Leave off unless your antenna amplifier needs it."><input type="checkbox" data-sk="bias" ${x.bias ? "checked" : ""}> Bias-T</label>
+      <label title="Frequency correction in parts per million. The Nooelec has a TCXO – normally leave at 0.">PPM <input class="inp" data-sk="ppm" type="number" min="-200" max="200" step="1" value="${x.ppm}" style="width:4.5em"></label>
+    </div>
+    <div class="small ${x.enabled && !x.ready && !x.busy ? "" : "muted"}">${
+      !x.enabled ? "Off – Meteor passes use the main receiver."
+      : x.busy ? `Recording a pass on <b>${esc(x.using)}</b>.`
+      : x.ready ? `Ready: <b>${esc(x.using)}</b>. Meteor-M N2-3 / N2-4 passes are recorded on it; the main receiver stays free${x.main_is_rtl ? "" : " for listening"}.`
+      : !x.driver ? "The RTL-SDR driver was not found – see Help."
+      : x.error ? esc(x.error) + " – Meteor passes use the main receiver until it works."
+      : dv.length ? "The chosen receiver is not plugged in – Meteor passes use the main receiver."
+      : "No spare RTL-SDR dongle found (one the main receiver is using cannot be shared) – Meteor passes use the main receiver."}</div>`;
+  el.querySelectorAll("[data-sk]").forEach((c) => {
+    c.onchange = () => send({ cmd: "satrx_cfg", [c.dataset.sk]: c.type === "checkbox" ? c.checked : c.value });
+  });
+  el.querySelectorAll("[data-sact]").forEach((b) => {
+    b.onclick = () => send({ cmd: b.dataset.sact === "check" ? "satrx_check" : "satrx_refresh" });
+  });
 }
 $("satPosSet").onclick = () => send({ cmd: "sat_observer", lat: $("satLat").value.trim().replace(",", "."), lon: $("satLon").value.trim().replace(",", ".") });
 $("satPosGps").onclick = () => {
@@ -3390,6 +3429,7 @@ const HELP = {
   sonde: ["Weather balloons (radiosondes)", "A radiosonde is the small box a weather balloon carries up to 30 km. It sends its GPS position every second on 400.15–406 MHz. The Met Office launches from about 11:00 and 23:00 UTC at several UK sites. Tune one (use SRCH, or watch the waterfall for a signal about 10 kHz wide) and press ▶ Start sonde decoder: AndySDR switches to narrow FM, 16 kHz wide, and lists every balloon it hears with serial, position, height, speed, climb, heading and satellites, plus the distance and bearing from you when My position is set (ADS-B tab, or a USB GPS unit). Click the position to see it on a map (internet needed). Only Vaisala RS41 sondes are read; other makes (DFM, M10, iMet) are ignored."],
   gps: ["USB GPS unit", "Plug in a USB GPS unit (a GPS 'puck' or dongle that appears as a COM port), tick the box and AndySDR fills in My position by itself – for satellite passes and the ADS-B distance and bearing. Leave Port on Auto-find, or pick the unit from the list (★ marks likely GPS units). The chip shows Fix and the number of satellites once it has a position; the first fix can take a few minutes, and it works best near a window or outdoors. By default it checks once a day (then lets go of the unit); the Check menu can make it every hour, or all the time so it follows you if you move. While this is ticked it replaces any position you typed in."],
   phonelayout: ["Phone layout", "On a phone (or a small tablet held upright or sideways) AndySDR switches to a layout made for thumbs. Four buttons along the bottom: RADIO (the display, big Down and Up buttons that repeat when held, Scan / Search / Skip, and Volume, Squelch and RF gain sliders), MEMORY (your channels as cards – tap the frequency to tune it and jump back to the radio), WEATHER (Pictures, and Passes and schedule) and MORE (every other screen, plus the Phone / Full layout choice). The spectrum options are tucked behind one button so the waterfall gets the room. Tablets and PCs keep the full layout; if a phone is showing the full layout by choice, the Phone layout button brings the phone one back."],
+  satrx: ["Second receiver (137 MHz Meteor)", "Lets a cheap RTL-SDR dongle – for example a Nooelec NESDR SMArt v5 on its own 137 MHz antenna – record the Meteor-M N2-3 / N2-4 pictures while the main receiver (the RSP2 Pro) stays free for listening, scanning and decoding. Plug the dongle in, tick 'Use a second receiver' and press 'Check it' (it opens the dongle for a moment and says what it found). The dongle is opened only while a pass is being recorded and let go of afterwards. RF gain is its own setting: 'Use this gain' always uses the number you type; 'Learn the best' starts there and tries a little lower and higher on successive passes, keeping what gives the strongest signal (see the Pass report, where passes recorded on it are marked '2nd rx'). Bias-T powers an antenna amplifier through the coax – leave it off unless you have one that needs it. If the dongle is missing, is the same one the main receiver uses, or will not open, Meteor passes simply go to the main receiver as before. It records only the 137 MHz Meteors; ISS, Metop and GOES stay on the main receiver. If both Meteors are overhead together, the second receiver takes one and the main receiver the other."],
   passreport: ["Pass report", "One line for every satellite pass AndySDR records: when, the highest the satellite climbed, the RF gain used, how far its signal stood above the noise (Signal, in dB – bigger is better) and what came out (pictures, or none). Meteor pictures are made a few minutes after the pass ends, so the newest line says 'processing' for a while. Use it to find the RF gain that works best: open a satellite's Options and choose RF gain on passes – 'Use the RF GAIN knob' (default), 'Fixed value', or 'Learn the best'. Learn the best tries a little lower and a little higher than its best gain on successive passes, compares the signal (corrected for distance, so low and high passes can be compared) and keeps the winner, re-checking now and then in case things change; passes below 20° do not count. The Use button copies the best gain found so far into a fixed value. The hardware AGC, if you turn it on, overrides all of this. The same lines are in the diagnostics zip (satellite-passes.jsonl)."],
   satauto: ["Satellite auto-capture", "Tick Record on a satellite and AndySDR predicts every pass over your position for the next 4 days (listed day by day) (set it with My position or 📍), tunes at acquisition of signal, follows the Doppler shift if Follow Doppler is ticked (open a satellite's Options button for that, minimum elevation, days, dates and RF gain), runs the right decoder and stops when the satellite sets – then puts the radio back as it was. ISS SSTV listens on 145.800 MHz FM (limit it to the ARISS event dates with the date boxes); Meteor-M N2-3 and N2-4 are LRPT on 137.900 MHz (switch to 137.100 if the satellite moves); GOES-19/18 are 1694.1 MHz HRIT from geostationary orbit – AndySDR says honestly when the satellite is below your horizon. Tick the days of the week you want (none ticked = every day) – you never type a time, AndySDR starts each capture only when the satellite is actually above your horizon. Minimum elevation hides low, weak passes. Orbit data (TLEs) is downloaded from CelesTrak and refreshed automatically. A capture you add by hand always takes priority. Only satellites you can actually receive from your position are listed (the GOES satellites over the Americas are hidden in the UK). NOAA 15, 18 and 19 (classic 137 MHz APT) were retired in 2025. From the UK the weather pictures you can receive are Meteor-M N2-3 / N2-4 (137 MHz LRPT – a simple turnstile or V-dipole antenna and an LNA are enough) and Metop-B / Metop-C (1701.3 MHz AHRPT – needs a dish, an L-band LNA and the 6 or 10 MS/s sample rate)."],
   sched: ["Scheduler", "Captures that run by themselves at set times – ideal for weather fax charts, ISS SSTV events and Meteor-M satellite passes. Pick a station from Quick pick (or type a frequency), choose what to do (WEFAX, SSTV, LRPT, record…), the start time on this PC's clock and how long, and either tick days of the week or pick a single date. At the start time AndySDR stops scanning, tunes, runs the decoder; at the end it saves the pictures and puts the radio back exactly as it was. Only one capture can run at a time: if two overlap, the one with the higher Priority takes over the radio (satellite passes count as High) and an interrupted capture carries on afterwards if time is left; overlaps are flagged with ⚠ and listed above the table. ▶ Now runs one straight away. AndySDR must be running (it can run as a server in the background)."],
@@ -3448,7 +3488,7 @@ function openHelp() {
   <h3>QUICK BUTTONS (under the display)</h3>${ctl(["qmode", "qbw", "qband", "qhot", "qdigi", "qdec", "qnotch", "qlock", "qtog", "qfiles", "replay"])}
   <h3>FUNCTION KEYS</h3>${ctl(["k_skip", "k_scan", "k_man", "k_srch", "k_pgm", "k_lo", "k_pri", "k_mode", "k_step", "k_bank", "k_dly", "k_rec", "k_dec", "k_arrows", "k_typefreq"])}
   <p class="small">Keyboard: digits and <code>.</code> type, <code>Enter</code> tunes, <code>↑ ↓</code> step, <code>S</code> scan, <code>M</code> manual, <code>P</code> program, <code>L</code> lockout, <code>I</code> skip 10 min, <code>H</code> help, <code>Esc</code> clear. Click the big frequency to type one with the mouse or on a touch screen.</p>
-  <h3>SCREENS</h3>${ctl(["scope", "zoom", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "satauto", "passreport", "phonelayout", "gps", "acars", "sonde", "ft8tab", "morsebox", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "updates", "receiver", "remote", "theme", "conn"])}
+  <h3>SCREENS</h3>${ctl(["scope", "zoom", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "satauto", "satrx", "passreport", "phonelayout", "gps", "acars", "sonde", "ft8tab", "morsebox", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "updates", "receiver", "remote", "theme", "conn"])}
   <h3>DECODER PROGRAMS</h3>
   <p>AndySDR has WEFAX and SSTV built in (SSTV: Martin, Scottie, Robot and PD modes – ISS 145.800 NFM, 2 m 144.500 NFM, 20 m 14.230 USB). DSD-FME, multimon-ng and SatDump now come bundled in the <code>decoders</code> folder next to <code>AndySDR.exe</code>. If one shows ✖ in the DECODERS tab, press <b>⬇ Download missing decoders</b> and AndySDR fetches it from GitHub into <code>%APPDATA%\\AndySDR\\decoders</code>. You can also unzip your own copy into either folder (any sub-folder is fine – AndySDR finds the .exe):</p>
   <dl><dt>DSD-FME</dt><dd>github.com/lwvmobile/dsd-fme – DMR, P25 1/2, NXDN, dPMR, YSF, M17. AndySDR feeds it like SDR++'s network sink (TCP 127.0.0.1:7355, 48 kHz); DSD-FME plays decoded voice on your speakers itself (AndySDR starts the PulseAudio sound server that comes with it).</dd>

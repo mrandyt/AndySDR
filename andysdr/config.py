@@ -45,6 +45,12 @@ DEFAULTS = {
     "step": 12500,
     "rf_gain": 30.0,              # dB
     "agc": False,
+    "satrx_enabled": False,       # a second receiver (RTL-SDR dongle) used only for 137 MHz Meteor passes
+    "satrx_device": "",           # its key ("" = the first RTL-SDR dongle the main radio is not using)
+    "satrx_gain": 38.0,           # dB
+    "satrx_gain_mode": "fixed",   # fixed | auto (learn the best)
+    "satrx_bias": False,          # bias-T (powers an LNA through the coax)
+    "satrx_ppm": 0,
     "keep_iq": False,             # keep the raw Meteor IQ recording after SatDump has made the pictures (large files)
     "hotspot_name": "My hotspot", "hotspot_freq": 438800000, "hotspot_cc": 1, "hotspot_ts": 2, "hotspot_tg": "",   # saved DMR hotspot
     "notch_on": False, "notch_hz": 1000, "notch_q": 20, "auto_notch": False,   # audio notch filters

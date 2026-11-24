@@ -363,14 +363,17 @@ class SatPlanner:
         day = time.strftime("%Y-%m-%d", time.localtime(now))
         return (not c["from"] or day >= c["from"]) and (not c["to"] or day <= c["to"])
 
-    def due(self, now=None):
-        """The enabled pass we should be recording right now: (sid, pass, job dict) or None."""
+    def due(self, now=None, only=None):
+        """The enabled pass we should be recording right now: (sid, pass, job dict) or None.
+        `only(sid, satellite)` can restrict it to some satellites (the second receiver takes just the 137 MHz ones)."""
         now = now or time.time()
         best = None
         for sid, c in self.cfg().items():
             if not c["enabled"] or not self.in_window(sid, now):
                 continue
             d = SATELLITES[sid]
+            if only is not None and not only(sid, d):
+                continue
             for p in self.passes(sid, now):
                 if p["aos"] - d["lead"] <= now < p["los"] + d["tail"]:
                     key = f"sat:{sid}:{int(p['aos'] // 60)}" if not p.get("geo") else f"sat:{sid}:{int(now // GEO_BLOCK)}"

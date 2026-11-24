@@ -97,6 +97,8 @@ def _diag_extra(radio=None):
         out = {"decoder-recent.txt": "\n".join(RECENT), "decoder-dsd.txt": "\n".join(RECENT_DSD)}
         if radio is not None:
             out["satellite-passes.jsonl"] = radio.passlog.text()
+            if getattr(radio, "satrx", None) is not None:
+                out["satellite-passes-rx2.jsonl"] = radio.satrx.passlog.text()
         return out
     except Exception:              # noqa: BLE001 - the zip must still be made
         return {}
@@ -876,6 +878,20 @@ class Server:
                         kw[b] = bool(kw[b])
                 r.scheduler.sats.set_cfg(str(m.get("id")), **kw)
                 r.scheduler.sats.refresh_tles()
+                r.scheduler._emit()
+            elif cmd == "satrx_cfg":
+                kw = {k: m[k] for k in ("enabled", "device", "gain", "gain_mode", "bias", "ppm") if k in m}
+                try:
+                    r.satrx.configure(**kw)
+                except (TypeError, ValueError):
+                    r._emit("event", {"level": "warn", "text": "Second receiver: a setting was not understood"})
+                r.scheduler._emit()
+            elif cmd == "satrx_check":
+                lvl, text = await asyncio.get_running_loop().run_in_executor(None, r.satrx.check)
+                self._reply(c, "event", {"level": lvl, "text": text})
+                r.scheduler._emit()
+            elif cmd == "satrx_refresh":
+                await asyncio.get_running_loop().run_in_executor(None, lambda: r.satrx.candidates(True))
                 r.scheduler._emit()
             elif cmd == "sat_observer":
                 if r.scheduler.sats.set_observer(m.get("lat"), m.get("lon"), m.get("alt")):

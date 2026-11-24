@@ -1170,3 +1170,7 @@ body.customise #qJump .key::after { content: none; }
 .lcd-tag.scrolling > span, .lcd-decode.scrolling > span { animation: lcdslide 12s ease-in-out infinite alternate; }
 @keyframes lcdslide { 0%, 14% { transform: translateX(0); } 86%, 100% { transform: translateX(calc(-1 * var(--sh, 0px))); } }
 @media (prefers-reduced-motion: reduce) { .lcd-tag.scrolling > span, .lcd-decode.scrolling > span { animation: none; } .lcd-tag.scrolling, .lcd-decode.scrolling { text-overflow: ellipsis; } }
+
+/* second receiver card (Scheduler tab) */
+.satrx { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.satrx .row label { display: inline-flex; align-items: center; gap: 6px; }

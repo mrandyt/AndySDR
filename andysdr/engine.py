@@ -118,6 +118,8 @@ class Radio:
         self.job = None                   # scheduled capture in progress
         self.job_prev = None
         self.scheduler = Scheduler(self, settings)
+        from .satrx import SatRx
+        self.satrx = SatRx(self)             # an optional second receiver for 137 MHz Meteor passes
         self.biasmon = BiasMonitor()
         self._bias_emit = 0.0
         from .meshlink import MeshLink
@@ -178,6 +180,10 @@ class Radio:
         except Exception:
             pass
         self.scheduler.stop()
+        try:
+            self.satrx.shutdown()
+        except Exception:
+            pass
         try:
             self.mesh.stop()
         except Exception:
