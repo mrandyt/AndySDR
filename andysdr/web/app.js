@@ -3014,7 +3014,7 @@ $("ft8Start4").onclick = () => ft8Go("ft4");
 /* ---- satellite auto-capture */
 const fmtLocal = (t) => new Date(t * 1000).toLocaleString([], { weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 const azName = (a) => ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(a / 45) % 8];
-let SAT_ALL = false, SAT_POS_SHOWN = false;
+let SAT_ALL = false, SAT_POS_SHOWN = false, SAT_SHOW_REMOVED = false;
 const SAT_OPEN = new Set();          // satellites whose Options are open
 $("satMore").onclick = () => { SAT_ALL = !SAT_ALL; renderSats(); };
 function renderSats() {
@@ -3035,7 +3035,9 @@ function renderSats() {
       <td${good}>${esc(r.result)}${r.stopped ? ' <span class="muted small">(cut short)</span>' : ""}</td></tr>`;
   }).join("") : `<tr><td colspan="6" class="muted">Nothing yet – each pass AndySDR records leaves a line here.</td></tr>`;
   const nextPass = (id) => st.passes.find((p) => p.sat === id && !p.geo);
-  $("satTable").innerHTML = st.sats.filter((x) => !(x.kind === "geo" && st.observer && x.el != null && !x.visible)).map((x) => {   // satellites that never rise at your position are not listed
+  const removed = st.sats.filter((x) => x.hidden);
+  $("satTable").innerHTML = st.sats.filter((x) => !(x.kind === "geo" && st.observer && x.el != null && !x.visible))   // satellites that never rise at your position are not listed
+    .filter((x) => SAT_SHOW_REMOVED || !x.hidden).map((x) => {
     const fr = x.freqs.length > 1 ? `<select data-k="freq" title="Frequency">${x.freqs.map((f) => `<option value="${f}" ${f === x.freq ? "selected" : ""}>${(f / 1e6).toFixed(3)} MHz</option>`).join("")}</select>` : `<span class="mono">${(x.freqs[0] / 1e6).toFixed(3)} MHz</span>`;
     let note = esc(x.note);
     if (x.kind === "geo" && st.observer && x.el != null) note = (x.visible ? `<b style="color:var(--ok,#4ddb7a)">Above your horizon (${x.el}°).</b> ` : x.above_horizon ? `<b>Only ${x.el}° up – too low to track.</b> ` : `<b style="color:var(--warn,#ffb020)">Below your horizon from here (${x.el}°) – nothing to receive.</b> `) + note;
@@ -3044,12 +3046,16 @@ function renderSats() {
     const next = !x.enabled ? "off" : geo ? (x.visible ? "continuous" : "") : np ? `next ${fmtLocal(np.aos)} · ${np.max_el}°` : (st.observer ? "no pass in the next 4 days" : "set your position");
     const open = SAT_OPEN.has(x.id);
     const days = (x.days || []).length ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].filter((n, i) => x.days.includes(i)).join(" ") : "every day";
+    if (x.hidden) return `<div class="sat" data-id="${x.id}"><div class="sat-main">
+        <span class="muted"><b>${esc(x.name)}</b> – removed</span><span></span><span></span>
+        <button class="btn sm" data-restore title="Put this satellite back in the list">↩ Put back</button></div></div>`;
     return `<div class="sat ${x.enabled ? "on" : ""}" data-id="${x.id}">
       <div class="sat-main">
         <label class="sat-rec"><input type="checkbox" data-k="enabled" ${x.enabled ? "checked" : ""}> <b>${esc(x.name)}</b></label>
         <span class="sat-freq">${fr}</span>
         <span class="sat-next ${x.enabled ? "" : "muted"}">${esc(next)}</span>
         <button class="btn sm sat-opt" data-opt title="Doppler tracking, minimum elevation, days and dates">${open ? "▾" : "▸"} Options</button>
+        <button class="btn sm" data-remove title="Take this satellite off the list (you can put it back with 'Show removed' below)">✕ Remove</button>
       </div>
       <div class="sat-detail" ${open ? "" : "hidden"}>
         <div class="sat-grid">
@@ -3074,7 +3080,14 @@ function renderSats() {
         <div class="small sat-note">${note}</div>
       </div>
     </div>`;
-  }).join("");
+  }).join("") + (removed.length ? `<div class="small" style="margin-top:8px"><button class="btn sm" id="satShowRemoved">${SAT_SHOW_REMOVED ? "Hide removed" : `Show removed (${removed.length})`}</button></div>` : "");
+  if ($("satShowRemoved")) $("satShowRemoved").onclick = () => { SAT_SHOW_REMOVED = !SAT_SHOW_REMOVED; renderSats(); };
+  $("satTable").querySelectorAll(".sat [data-remove]").forEach((el) => {
+    el.onclick = () => send({ cmd: "sat_cfg", id: el.closest(".sat").dataset.id, hidden: true, enabled: false });
+  });
+  $("satTable").querySelectorAll(".sat [data-restore]").forEach((el) => {
+    el.onclick = () => send({ cmd: "sat_cfg", id: el.closest(".sat").dataset.id, hidden: false });
+  });
   $("satTable").querySelectorAll(".sat [data-opt]").forEach((el) => {
     el.onclick = () => {
       const box = el.closest(".sat"), d = box.querySelector(".sat-detail"), id = box.dataset.id;

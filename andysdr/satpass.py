@@ -203,7 +203,8 @@ class SatPlanner:
                         "gain_mode": u.get("gain_mode") if u.get("gain_mode") in ("knob", "fixed", "auto") else "knob",
                         "gain": (float(u["gain"]) if u.get("gain") not in (None, "") else None),
                         "from": str(u.get("from") or ""), "to": str(u.get("to") or ""),
-                        "days": sorted({int(x) for x in (u.get("days") or []) if str(x).isdigit() and 0 <= int(x) <= 6})}
+                        "days": sorted({int(x) for x in (u.get("days") or []) if str(x).isdigit() and 0 <= int(x) <= 6}),
+                        "hidden": bool(u.get("hidden", False))}
         return out
 
     def set_cfg(self, sid, **kw):
@@ -211,9 +212,11 @@ class SatPlanner:
             return
         c = dict(self.s.get("sat_auto") or {})
         u = dict(c.get(sid) or {})
-        for k in ("enabled", "freq", "min_el", "from", "to", "days", "track", "gain_mode", "gain"):
+        for k in ("enabled", "freq", "min_el", "from", "to", "days", "track", "gain_mode", "gain", "hidden"):
             if k in kw:
                 u[k] = kw[k]
+        if u.get("hidden"):
+            u["enabled"] = False              # a removed satellite never records
         c[sid] = u
         self.s["sat_auto"] = c
         self.s.save()
