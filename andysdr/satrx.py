@@ -25,6 +25,10 @@ BLOCK_SECONDS = 0.05
 SAMPLE_RATE = 1200000            # a whole multiple of 240 kS/s, and easy on a USB hub
 ENUM_EVERY = 20.0                # seconds between looks for the dongle
 RETRY_AFTER_FAIL = 180.0         # after a failed start, leave the pass to the main radio for a while
+SPEC_MIN_DB, SPEC_MAX_DB = -130.0, -10.0       # same scale as the main spectrum
+SPEC_EVERY = 3                    # send every 3rd block (about 7 pictures a second) to the screens
+PREVIEW_SECONDS = 90              # a "live view" test stops by itself
+PREVIEW_FREQ = 137900000
 ACTIONS = ("lrpt",)              # what this receiver records (137 MHz Meteor pictures)
 
 
@@ -58,6 +62,15 @@ class SatRx:
         self.job_gain = None
         self.pass_images = 0
         self.snr = None
+        self.snr_hist = []
+        self.recent_images = []
+        self.cur_el = None
+        self.cur_range = None
+        self.t_start = 0.0
+        self._blk = 0
+        self._live_t = 0.0
+        self._live_snr_t = 0.0
+        self.view_bw = 60e3
         self.last_error = ""
         self.fail_until = 0.0
         self._found = ([], 0.0)         # (devices, when)
@@ -143,8 +156,13 @@ class SatRx:
 
     # ------------------------------------------------------------------ plumbing
     def _emit(self, kind, payload):
-        if kind == "image" and self.passlog.open_key:
-            self.pass_images += 1
+        if kind == "image":
+            if self.passlog.open_key:
+                self.pass_images += 1
+            try:
+                self.recent_images = ([payload["file"]] + [f for f in self.recent_images if f != payload["file"]])[:8]
+            except Exception:                        # noqa: BLE001
+                pass
         self.radio._emit(kind, payload)
 
     def _event(self, level, text):
@@ -156,6 +174,8 @@ class SatRx:
     # ------------------------------------------------------------------ a pass
     def begin_job(self, job):
         """Open the dongle and start recording.  False = it could not be done (the main radio should take the pass)."""
+        if self.job is not None and self.job.get("preview"):
+            self.end_job("live view ended for a pass")       # a test view never stands in the way of a real pass
         with self.lock:
             if self.job is not None:
                 return False
@@ -198,6 +218,10 @@ class SatRx:
             self.job = job
             self.discard = 3
             self.snr = None
+            self.snr_hist = []
+            self.cur_el = self.cur_range = None
+            self.t_start = time.time()
+            self._blk = 0
             self.pass_images = 0
             self.job_gain = float(dev.gain)
             self.pass_meter = passlog.PassMeter(self.pass_el)
@@ -211,6 +235,70 @@ class SatRx:
             log.info("second receiver: %s, gain %.1f (%s), %.4f MHz", dev.label, self.job_gain, job.get("gain_mode"), self.freq / 1e6)
             self._event("info", f"Second receiver recording: {dev.label}, gain {self.job_gain:.1f} dB")
             return True
+
+    def begin_preview(self, freq=None, bw=None):
+        """A short live view (no recording) so the antenna and dongle can be seen working any time.
+        `freq` (Hz) and `bw` (Hz, the width the signal meter measures) let it be pointed at any steady signal."""
+        try:
+            freq = int(float(freq)) if freq else PREVIEW_FREQ
+            bw = float(bw) if bw else 60e3
+        except (TypeError, ValueError):
+            return False, "That frequency was not understood"
+        if not 30e6 <= freq <= 1.7e9:
+            return False, "Choose a frequency between 30 and 1700 MHz"
+        bw = max(4e3, min(100e3, bw))
+        if self.job is not None:
+            return False, ("A pass is being recorded right now - the live view below is already showing it"
+                           if not self.job.get("preview") else "The live view is already running")
+        with self.lock:
+            dev = self.choose()
+            if dev is None:
+                return False, "The second receiver is not ready - press Check it"
+            c = self.cfg()
+            try:
+                dev.sample_rate = SAMPLE_RATE
+                dev.center = self._hw_center_for(freq, SAMPLE_RATE)
+                dev.gain = float(c["gain"])
+                dev.agc = False
+                dev.bias = c["bias"]
+                dev.open()
+                if dev.sample_rate != SAMPLE_RATE:
+                    dev.set_sample_rate(SAMPLE_RATE)
+                dev.set_ppm(c["ppm"])
+                dev.set_gain(dev.gain)
+            except Exception as e:                   # noqa: BLE001
+                try:
+                    dev.close()
+                except Exception:                    # noqa: BLE001
+                    pass
+                self.last_error = f"could not open {dev.label}: {e}"
+                return False, self.last_error
+            self.last_error = ""
+            self.dev = dev
+            self.fs = SAMPLE_RATE
+            self.rx = None
+            self.spec = Spectrum(2048)
+            self.freq = freq
+            self.view_bw = bw
+            self.job = {"id": "preview", "name": "Live view", "preview": True, "freq": freq}
+            self.pass_meter = None
+            self.discard = 3
+            self.snr = None
+            self.snr_hist = []
+            self.cur_el = self.cur_range = None
+            self.t_start = time.time()
+            self._blk = 0
+            self.job_gain = float(dev.gain)
+            self.gen += 1
+            self.thread = threading.Thread(target=self._run, args=(self.gen,), name="satrx-view", daemon=True)
+            self.thread.start()
+        self._push_live(force=True)
+        return True, f"Live view on {freq / 1e6:.3f} MHz for {PREVIEW_SECONDS} s"
+
+    def stop_preview(self):
+        if self.job is not None and self.job.get("preview"):
+            self.end_job("live view stopped")
+            self._push_live(force=True)
 
     def retune_job(self, f):
         """Follow the Doppler shift without restarting anything."""
@@ -237,10 +325,11 @@ class SatRx:
             meter, self.pass_meter = self.pass_meter, None
             self.passlog.open_key = None
             had_gain, self.job_gain = self.job_gain, None
-            try:
-                self.decoders.stop()                 # closes the recording and hands it to SatDump
-            except Exception:                        # noqa: BLE001
-                log.exception("second receiver decoder stop")
+            if not (job and job.get("preview")):
+                try:
+                    self.decoders.stop()             # closes the recording and hands it to SatDump
+                except Exception:                    # noqa: BLE001
+                    log.exception("second receiver decoder stop")
             self.decoders.pass_key = None
             self.decoders.pass_northbound = False
             if self.dev:
@@ -250,7 +339,9 @@ class SatRx:
                     pass
                 self.dev = None
             self.rx = None
+            self.snr = None
             if not job or meter is None:
+                self._push_live(force=True)
                 return
             sm = meter.summary()
             rec = {"key": job["id"], "sat": job["sat"], "name": str(job["name"]).split(" pass")[0], "action": job.get("action"),
@@ -260,6 +351,7 @@ class SatRx:
                 rec["gain"] = round(had_gain, 1)
             self.pass_images = 0
             self.passlog.add(rec)
+            self._push_live(force=True)
             log.info("second receiver pass report: %s peak %s deg, gain %s, SNR peak %s / typical %s dB (score %s, %d samples), %s",
                      rec["name"], rec.get("max_el"), rec.get("gain"), rec.get("snr_peak"), rec.get("snr_med"), rec.get("score"),
                      rec.get("samples", 0), self.passlog.result(rec))
@@ -317,22 +409,67 @@ class SatRx:
                 self.discard -= 1
                 continue
             now = time.time()
+            job = self.job
+            if job is None or self.gen != gen:       # the pass or live view was ended while this block was being read
+                break
+            preview = bool(job.get("preview"))
             try:
                 spec_db = self.spec.process(iq, alpha=0.6)
+                if spec_db is not None:
+                    self._blk += 1
+                    if self._blk % SPEC_EVERY == 0:
+                        q = np.clip((spec_db - SPEC_MIN_DB) / (SPEC_MAX_DB - SPEC_MIN_DB) * 255, 0, 255).astype(np.uint8)
+                        self.radio._emit("satspec", {"center": dev.center, "fs": fs, "freq": self.freq, "data": q.tobytes()})
                 m = self.pass_meter
-                if m is not None and spec_db is not None and now - m._last >= 1.0:
-                    snr = passlog.band_snr(spec_db, dev.center, fs, self.freq, passlog.BAND_HALF_HZ.get("lrpt", 60e3))
+                if spec_db is not None and (m is not None or preview) and now - self._live_snr_t >= (0.25 if preview else 1.0):
+                    self._live_snr_t = now
+                    snr = passlog.band_snr(spec_db, dev.center, fs, self.freq, self.view_bw if preview else passlog.BAND_HALF_HZ.get("lrpt", 60e3))
                     self.snr = None if snr is None else round(snr, 1)
-                    m.add(now, snr, self.job_gain)
+                    if snr is not None:
+                        self.snr_hist = (self.snr_hist + [self.snr])[-240:]
+                    if m is not None:
+                        m.add(now, snr, self.job_gain)
+                    if self.pass_el and not preview:
+                        try:
+                            la = self.pass_el(now)
+                        except Exception:            # noqa: BLE001
+                            la = None
+                        if la:
+                            self.cur_el, self.cur_range = la
                 rx = self.rx
-                x240 = rx.stage1.process(rx.mixer.process(iq, self.freq - dev.center, fs))
-                self.decoders.feed({"iq240": x240})
+                if not preview and rx is not None:
+                    x240 = rx.stage1.process(rx.mixer.process(iq, self.freq - dev.center, fs))
+                    self.decoders.feed({"iq240": x240})
             except Exception:                        # noqa: BLE001
                 log.exception("second receiver block")
+            self._push_live()
+            if preview and now - self.t_start > PREVIEW_SECONDS:
+                break
         if self.job is not None and self.gen == gen:    # ended by itself (not asked to): the scheduler notices job is None
             threading.Thread(target=self.end_job, args=("receiver stopped",), name="satrx-end", daemon=True).start()
 
     # ------------------------------------------------------------------ for the screen
+    def live(self):
+        """What the 2nd-receiver screen shows while the dongle is working (sent about once a second)."""
+        job = self.job
+        if not job:
+            return {"on": False, "snr": None, "hist": [], "images": self.pass_images, "recent": self.recent_images[:6]}
+        return {"on": True, "preview": bool(job.get("preview")), "name": job.get("name"), "freq": self.freq,
+                "gain": self.job_gain, "snr": self.snr, "el": None if self.cur_el is None else round(self.cur_el, 1),
+                "range": None if self.cur_range is None else int(self.cur_range), "images": self.pass_images,
+                "elapsed": int(time.time() - self.t_start) if self.t_start else 0,
+                "left": max(0, int(PREVIEW_SECONDS - (time.time() - self.t_start))) if job.get("preview") else None,
+                "bw": self.view_bw if job.get("preview") else None, "hist": self.snr_hist[-120:], "recent": self.recent_images[:6], "max_el": job.get("max_el")}
+
+    def _push_live(self, force=False):
+        now = time.time()
+        if not force and now - self._live_t < (0.25 if (self.job and self.job.get("preview")) else 1.0):
+            return
+        self._live_t = now
+        try:
+            self.radio._emit("satrx_live", self.live())
+        except Exception:                            # noqa: BLE001
+            pass
     def status(self):
         c = self.cfg()
         cands = self.candidates()
@@ -344,10 +481,13 @@ class SatRx:
                 "using": chosen.label if chosen else "", "ready": bool(chosen) and time.time() >= self.fail_until,
                 "busy": self.busy(), "snr": self.snr, "error": self.last_error,
                 "main_is_rtl": getattr(getattr(self.radio, "dev", None), "kind", "") == "rtlsdr",
-                "driver": bool(devices.rtl_lib())}
+                "driver": bool(devices.rtl_lib()), "live": self.live(),
+                "last": (self.passlog.view(1) or [None])[0], "fail_in": max(0, int(self.fail_until - time.time()))}
 
     def check(self):
         """Open the dongle for a moment and say what it is.  (Not while it is recording a pass.)"""
+        if self.job is not None and self.job.get("preview"):
+            self.end_job("live view stopped")
         if self.busy():
             return "warn", "The second receiver is recording a pass - try again afterwards"
         dev = self.choose()

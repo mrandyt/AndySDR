@@ -146,6 +146,11 @@ class Server:
             frame = _ws_frame(hdr + payload["data"], 2)
             for c in self.clients:
                 c.push(frame)
+        elif kind == "satspec":
+            hdr = struct.pack("<Bddd", 3, payload["center"], payload["fs"], payload["freq"])
+            frame = _ws_frame(hdr + payload["data"], 2)
+            for c in self.clients:
+                c.push(frame, droppable=True)
         elif kind == "audio":
             frame = _ws_frame(b"\x02" + payload, 2)
             for c in self.clients:
@@ -156,7 +161,7 @@ class Server:
                 payload = dict(payload, listeners=len(self.clients))
             frame = _ws_frame(json.dumps({"type": kind, "data": payload}).encode(), 1)
             for c in self.clients:
-                c.push(frame, droppable=(kind in ("state", "adsb", "meshsdr", "update_progress", "bias", "gps", "datalink_status")))
+                c.push(frame, droppable=(kind in ("state", "adsb", "meshsdr", "update_progress", "bias", "gps", "datalink_status", "satrx_live")))
 
     # ---------------------------------------------------------------- HTTP
     async def handle(self, reader, writer):
@@ -888,7 +893,14 @@ class Server:
                 r.scheduler._emit()
             elif cmd == "satrx_check":
                 lvl, text = await asyncio.get_running_loop().run_in_executor(None, r.satrx.check)
-                self._reply(c, "event", {"level": lvl, "text": text})
+                self._reply(c, "event", {"level": lvl, "text": text, "rx2": True})
+                r.scheduler._emit()
+            elif cmd == "satrx_view":
+                if m.get("on", True):
+                    ok, text = await asyncio.get_running_loop().run_in_executor(None, lambda: r.satrx.begin_preview(m.get("freq"), m.get("bw")))
+                    self._reply(c, "event", {"level": "info" if ok else "warn", "text": text, "rx2": True})
+                else:
+                    await asyncio.get_running_loop().run_in_executor(None, r.satrx.stop_preview)
                 r.scheduler._emit()
             elif cmd == "satrx_refresh":
                 await asyncio.get_running_loop().run_in_executor(None, lambda: r.satrx.candidates(True))

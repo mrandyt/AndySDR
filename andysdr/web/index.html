@@ -251,10 +251,12 @@
     <button class="tab" data-tab="bp">UK BAND PLAN</button>
     <button class="tab" data-tab="rep">REPEATERS</button>
     <button class="tab" data-tab="sch">SCHEDULER</button>
+    <button class="tab" data-tab="rx2">2ND RECEIVER <span class="tab-badge" id="rx2Badge" hidden></span></button>
     <button class="tab" data-tab="mesh">MESHCORE <span class="tab-badge" id="meshBadge" hidden></span></button>
     <button class="tab" data-tab="rx">RECEIVER</button>
     <button class="tab" data-tab="net">REMOTE &amp; SETTINGS</button>
   </nav>
+  <div class="rxstrip" id="rxStrip" data-help="rxstrip"></div>
 
   <!-- MEMORY -->
   <div class="tabpage active" id="tab-mem">
@@ -277,12 +279,14 @@
       <a class="btn" id="csvExport" href="#" download>Export all</a>
       <span id="csvResult" class="muted"></span>
     </div>
+    <div class="mempager" id="memPagerTop" data-help="mempages"></div>
     <div class="tablewrap">
       <table class="grid" id="memTable">
         <thead><tr><th>CH</th><th>Frequency</th><th>Mode</th><th>Name</th><th>Tag</th><th>Decoder</th><th>L/O</th><th>DLY</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
+    <div class="mempager" id="memPagerBot" data-help="mempages"></div>
   </div>
 
   <!-- ACTIVITY / SEARCH -->
@@ -690,6 +694,35 @@
   </div>
 
   <!-- SCHEDULER -->
+  <!-- SECOND RECEIVER -->
+  <div class="tabpage" id="tab-rx2">
+    <div class="rx2-banner off" id="rx2Banner" data-help="rx2">
+      <span class="rx2-dot"></span>
+      <div class="rx2-bmain"><b id="rx2Title">–</b><span id="rx2Sub"></span></div>
+      <div class="rx2-bbtn" id="rx2Btns"></div>
+    </div>
+    <div class="rx2-tiles" id="rx2Tiles"></div>
+    <div class="card rx2-live" data-help="rx2live">
+      <div class="row wrapline"><b>Live view of this receiver</b><span class="muted small" id="rx2LiveNote"></span></div>
+      <div class="row wrapline rx2-ctl" id="rx2Ctl"></div>
+      <div class="rx2-scopewrap">
+        <canvas id="rx2Spec"></canvas>
+        <canvas id="rx2Wf"></canvas>
+        <div class="rx2-idle" id="rx2Idle"></div>
+      </div>
+      <div class="rx2-meter">
+        <div class="rx2-barwrap"><div class="rx2-bar"><i id="rx2Fill"></i></div><span id="rx2SnrTxt" class="rx2-snr"></span></div>
+        <canvas id="rx2Spark" title="Signal over the last two minutes"></canvas>
+      </div>
+      <div class="small muted" id="rx2Hint">The red box marks where a Meteor-M signal appears (a soft hump about 120 kHz wide). It moves a little as the satellite passes (Doppler).</div>
+    </div>
+    <div class="card"><div class="row wrapline"><b>Pictures from this receiver</b><span class="grow"></span><button class="btn sm" id="rx2AllPics">All weather images ›</button></div>
+      <div id="rx2Pics" class="rx2-pics"></div></div>
+    <div class="card"><b>Its recent passes</b>
+      <div class="tablewrap"><table class="grid" id="rx2Passes"><thead><tr><th>When</th><th>Satellite</th><th>Peak</th><th>Gain</th><th>Signal</th><th>Result</th></tr></thead><tbody></tbody></table></div></div>
+    <div class="card"><b>What it has just done</b><ul id="rx2Log" class="rx2-log"></ul></div>
+  </div>
+
   <div class="tabpage" id="tab-sch">
     <div class="row wrapline" data-help="sched">
       <b>Scheduled captures</b>
@@ -948,6 +981,7 @@
 <div class="toasts" id="toasts"></div>
 <script src="bandplan.js"></script>
 <script src="app.js"></script>
+<script src="rx2.js"></script>
 <script src="phone.js"></script>
 </body>
 </html>

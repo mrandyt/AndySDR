@@ -1174,3 +1174,62 @@ body.customise #qJump .key::after { content: none; }
 /* second receiver card (Scheduler tab) */
 .satrx { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
 .satrx .row label { display: inline-flex; align-items: center; gap: 6px; }
+
+/* ---------- status strip under the tabs: what each receiver is doing ---------- */
+.rxstrip { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.rxs-chip { display: flex; align-items: center; gap: 10px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel2); min-width: 0; flex: 1 1 260px; }
+.rxs-chip > div { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.rxs-chip small { font-size: 10px; letter-spacing: .08em; opacity: .65; }
+.rxs-chip b { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rxs-chip span { font-size: 12.5px; opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rxs-dot { width: 11px; height: 11px; border-radius: 50%; background: #7a8088; flex: none; box-shadow: 0 0 0 3px rgba(122,128,136,.18); }
+.rxs-dot.ok, .rx2s.wait .rxs-dot { background: var(--ok); box-shadow: 0 0 0 3px rgba(76,208,138,.2); }
+.rx2s { cursor: pointer; }
+.rx2s.rec .rxs-dot { background: #ff4d4d; box-shadow: 0 0 0 3px rgba(255,77,77,.25); animation: rx2pulse 1.2s infinite; }
+.rx2s.view .rxs-dot { background: #4da3ff; animation: rx2pulse 1.6s infinite; }
+.rx2s.bad .rxs-dot { background: var(--warn); box-shadow: 0 0 0 3px rgba(255,180,84,.25); }
+.rx2s.rec { border-color: #ff4d4d; }
+@keyframes rx2pulse { 50% { opacity: .35; } }
+
+/* ---------- the memory list in pages ---------- */
+.mempager { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 0; }
+.mempager[hidden] { display: none; }
+.mempager .btn.cur { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.mempager .btn[disabled] { opacity: .4; }
+
+/* ---------- the 2nd receiver screen ---------- */
+.rx2-banner { display: flex; align-items: center; gap: 16px; padding: 18px 20px; border-radius: 14px; border: 2px solid var(--line); background: var(--panel2); margin-bottom: 12px; flex-wrap: wrap; }
+.rx2-dot { width: 22px; height: 22px; border-radius: 50%; background: #7a8088; flex: none; }
+.rx2-bmain { display: flex; flex-direction: column; gap: 4px; flex: 1 1 260px; min-width: 0; }
+.rx2-bmain b { font-size: 22px; letter-spacing: .02em; }
+.rx2-bmain span { font-size: 14.5px; opacity: .9; }
+.rx2-bbtn { display: flex; gap: 8px; flex-wrap: wrap; }
+.rx2-banner.wait { border-color: var(--ok); } .rx2-banner.wait .rx2-dot { background: var(--ok); }
+.rx2-banner.rec { border-color: #ff4d4d; background: rgba(255,77,77,.1); } .rx2-banner.rec .rx2-dot { background: #ff4d4d; animation: rx2pulse 1.2s infinite; }
+.rx2-banner.view { border-color: #4da3ff; } .rx2-banner.view .rx2-dot { background: #4da3ff; animation: rx2pulse 1.6s infinite; }
+.rx2-banner.bad { border-color: var(--warn); background: rgba(255,180,84,.1); } .rx2-banner.bad .rx2-dot { background: var(--warn); }
+.rx2-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.rx2-tile { background: var(--panel2); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.rx2-tile small { font-size: 10.5px; letter-spacing: .09em; opacity: .65; }
+.rx2-tile b { font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rx2-tile span { font-size: 12.5px; opacity: .8; }
+.rx2-live { margin-bottom: 12px; }
+.rx2-ctl select { max-width: 100%; }
+.rx2-scopewrap { position: relative; border-radius: 10px; overflow: hidden; background: #07090b; }
+.rx2-scopewrap canvas { display: block; width: 100%; }
+#rx2Spec { height: 150px; } #rx2Wf { height: 200px; }
+.rx2-idle { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 6px; align-items: center; justify-content: center; text-align: center; padding: 20px; background: rgba(7,9,11,.88); color: #cfd6dd; }
+.rx2-idle[hidden] { display: none; }
+.rx2-meter { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.rx2-barwrap { flex: 2 1 280px; display: flex; flex-direction: column; gap: 6px; }
+.rx2-bar { height: 34px; border-radius: 8px; background: rgba(127,127,127,.2); overflow: hidden; border: 1px solid var(--line); }
+.rx2-bar i { display: block; height: 100%; width: 0; background: #7a8088; transition: width .25s; }
+.rx2-bar i.lo { background: #7a8088; } .rx2-bar i.mid { background: var(--warn); } .rx2-bar i.hi { background: var(--ok); }
+.rx2-snr { font-size: 16px; }
+#rx2Spark { flex: 1 1 200px; height: 56px; width: 100%; background: rgba(127,127,127,.08); border-radius: 8px; }
+.rx2-pics { display: flex; gap: 8px; flex-wrap: wrap; }
+.rx2-pics img { height: 110px; border-radius: 8px; border: 1px solid var(--line); cursor: zoom-in; background: #000; }
+.rx2-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.rx2-log li.warn, .rx2-log li.error { color: var(--warn); }
+#rx2Badge { width: 9px; height: 9px; padding: 0; border-radius: 50%; background: #ff4d4d; display: inline-block; vertical-align: middle; animation: rx2pulse 1.2s infinite; }
+#rx2Badge[hidden] { display: none; }

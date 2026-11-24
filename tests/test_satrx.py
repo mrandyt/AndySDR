@@ -148,6 +148,38 @@ def make(sat):
     sch.sats.set_cfg("meteor_m24", enabled=True)
     return m, sch
 
+# ---- live view (a test look with no recording) and the screen's live data
+devices.list_rtl_native = lambda: [dongle]
+dongle.fail = False
+rx.fail_until = 0.0
+rx._found = ([], 0.0)
+radio.events.clear()
+rows_before = len(rx.passlog.rows)
+check("not busy before the live view", not rx.busy() and rx.live()["on"] is False)
+ok, msg = rx.begin_preview(131725000, 8000)
+check("live view starts", ok and rx.busy() and rx.live()["preview"] is True, msg)
+time.sleep(1.6)
+lv = rx.live()
+check("live view reports a signal reading and the width it measures", lv["on"] and lv["snr"] is not None and lv["bw"] == 8000, lv)
+check("live view sends spectrum frames and live updates to the screens",
+      any(k == "satspec" for k, _ in radio.events) and any(k == "satrx_live" for k, _ in radio.events))
+sp = [v for k, v in radio.events if k == "satspec"][-1]
+check("a spectrum frame is 2048 bytes around the tuned frequency", len(sp["data"]) == 2048 and sp["freq"] == 131725000, (len(sp["data"]), sp["freq"]))
+check("live view records nothing and writes no pass report", rx.passlog.open_key is None and len(rx.passlog.rows) == rows_before)
+check("a second live view is refused", rx.begin_preview()[0] is False)
+check("an out-of-range frequency is refused", (rx.stop_preview(), rx.begin_preview(5e9)[0])[1] is False)
+check("live view stops cleanly and lets the dongle go", not rx.busy() and rx.dev is None and rx.live()["on"] is False)
+rx.begin_preview()
+time.sleep(0.4)
+job2 = dict(job, id="sat:meteor_m24:2")
+check("a real pass takes over from a live view", rx.begin_job(job2) is True and rx.job.get("preview") is None)
+time.sleep(0.8)
+check("pass live data has the satellite name and no preview flag", rx.live()["preview"] is False and "Meteor" in str(rx.live()["name"]), rx.live())
+rx.end_job()
+check("and the dongle is free again", not rx.busy())
+st = rx.status()
+check("status carries live data and the last pass for the screen", "live" in st and "last" in st and "fail_in" in st)
+
 stub = StubRx()
 m, sch = make(stub)
 p0 = sch.sats.passes("meteor_m24", time.time())[0]
@@ -159,7 +191,7 @@ sch.tick(when + dt.timedelta(seconds=20))
 check("Doppler followed on the second receiver", len(stub.retunes) >= 1 and abs(stub.retunes[-1] - 137900000) < 4000, stub.retunes)
 check("no double start", len(stub.started) == 1 and not m.started)
 stt = sch.status()
-check("status shows the second receiver's pass", stt["running2"] and stt["satrx"] == {"enabled": True})
+check("status shows the second receiver's pass", stt["running2"] and stt["satrx"]["enabled"] is True and "next" in stt["satrx"])
 sch.tick(dt.datetime.fromtimestamp(p0["los"] + 60))
 check("second receiver pass ends after the pass", stub.ended == 1 and sch.running2 is None)
 sch.tick(dt.datetime.fromtimestamp(p0["los"] + 70))

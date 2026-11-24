@@ -418,7 +418,21 @@ class Scheduler:
             rows = rows[:20]
         return {"jobs": self.jobs(), "running": r, "running2": r2, "next": self.next_runs(),
                 "presets": PRESETS, "actions": ACTIONS, "conflicts": self.conflicts(), "now": dt.datetime.now().strftime("%H:%M"),
-                "sats": self._sat_status(), "pass_log": rows, "satrx": rx.status() if rx is not None else None}
+                "sats": self._sat_status(), "pass_log": rows, "satrx": self._satrx_status(rx)}
+
+    def _satrx_status(self, rx):
+        """The second receiver's own status, plus the next few passes it will take (for its screen's countdown)."""
+        if rx is None:
+            return None
+        out = rx.status()
+        try:
+            lrpt = {x["id"] for x in self.sats.status()["sats"] if x["action"] in satrx.ACTIONS and x["kind"] != "geo"}
+            now = time.time()
+            out["next"] = [{"name": p["name"], "aos": p["aos"], "los": p["los"], "max_el": p["max_el"], "freq": p["freq"]}
+                           for p in self.sats.upcoming(now) if p["sat"] in lrpt and p["los"] > now][:4]
+        except Exception:                            # noqa: BLE001
+            out["next"] = []
+        return out
 
     def _sat_status(self):
         st = self.sats.status()

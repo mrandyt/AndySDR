@@ -55,6 +55,9 @@ let BWS = {};         // selectable bandwidths per mode (from the server)
 let MEM = null;       // memory banks
 let DEV = {};         // device info
 let curBank = 0;
+let memPage = 0, memLastBank = -1, memLastPlay = "";
+let memPer = 20;           // stations per page of the Memory list (0 = all)
+try { const v = localStorage.getItem("andysdr_mempp"); if (v !== null && [0, 10, 15, 20, 30, 50].includes(+v)) memPer = +v; } catch (e) {}
 let entry = "";       // keypad entry
 let bankMode = false;
 let decoders = [];
@@ -78,6 +81,7 @@ function connect() {
     const t = dv.getUint8(0);
     if (t === 1) onSpectrum(dv.getFloat64(1, true), dv.getFloat64(9, true), dv.getFloat64(17, true), new Uint8Array(ev.data, 25));
     else if (t === 2) player.push(new Int16Array(ev.data.slice(1)));
+    else if (t === 3 && typeof rx2OnSpec === "function") rx2OnSpec(dv.getFloat64(1, true), dv.getFloat64(9, true), dv.getFloat64(17, true), new Uint8Array(ev.data, 25));
   };
 }
 function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
@@ -118,7 +122,8 @@ function onJSON(m) {
     case "datalink_all": DL.acars = d.acars || []; DL.sondes = {}; (d.sondes || []).forEach((r) => (DL.sondes[r.id] = r)); renderAcars(); renderSondes(); break;
     case "datalink_status": dlStatus(d); break;
     case "signal": S.signal = d; renderSignal(); break;
-    case "schedule": SCH = d; renderSchedule(); break;
+    case "schedule": SCH = d; renderSchedule(); if (typeof rx2OnSchedule === "function") rx2OnSchedule(); break;
+    case "satrx_live": if (typeof rx2OnLive === "function") rx2OnLive(d); break;
     case "images": renderImages(d); break;
     case "recordings": renderRecordings(d); break;
     case "mesh": MESH = d; renderMesh(); break;
@@ -144,7 +149,7 @@ function onJSON(m) {
     case "pager_all": PAG.msgs = d.messages || []; PAG.cfg = d; renderPager(); break;
     case "update": onUpdate(d); break;
     case "update_progress": UPD.progress = d.progress; renderUpdateBar(); break;
-    case "event": toast(d.text, d.level); if (d.level === "error") decLine("! " + d.text); break;
+    case "event": if (typeof rx2OnEvent === "function") rx2OnEvent(d); toast(d.text, d.level); if (d.level === "error") decLine("! " + d.text); break;
     case "import_result":
       $("csvResult").textContent = `Imported ${d.added} channels` + (d.file ? ` from ${d.file}` : "") + (d.talkgroups ? `, ${d.talkgroups} talkgroups` : "") +
         (d.skipped ? `, skipped ${d.skipped} rows` : "") + (d.overflow ? `, ${d.overflow} did not fit – raise "using … bank(s)" (only empty banks are used) or split the file` : "");
@@ -1281,7 +1286,16 @@ function renderMemory() {
   $("csvBank").innerHTML = Array.from({ length: 10 }, (_, b) => `<option value="${b}" ${b === Math.max(1, curBank) ? "selected" : ""}>${b} – ${esc(MEM.banks[b].name)}</option>`).join("");
   const chs = MEM.banks[curBank].channels;
   const keys = Object.keys(chs).sort((a, b) => a - b);
-  $("memTable").querySelector("tbody").innerHTML = keys.length ? keys.map((k) => {
+  // pages: the list follows the station that is playing, otherwise it stays where you left it
+  if (curBank !== memLastBank) { memPage = 0; memLastBank = curBank; }
+  const pk = S && S.channel && S.channel.bank === curBank ? S.channel.ch : null;
+  const pkey = pk == null ? "" : curBank + ":" + pk;
+  if (pkey !== memLastPlay) { memLastPlay = pkey; const i = pk == null ? -1 : keys.indexOf(String(pk)); if (i >= 0 && memPer) memPage = Math.floor(i / memPer); }
+  const pages = memPer ? Math.max(1, Math.ceil(keys.length / memPer)) : 1;
+  memPage = Math.min(Math.max(0, memPage), pages - 1);
+  const shown = memPer ? keys.slice(memPage * memPer, (memPage + 1) * memPer) : keys;
+  renderMemPager(keys.length, pages);
+  $("memTable").querySelector("tbody").innerHTML = shown.length ? shown.map((k) => {
     const c = chs[k];
     return `<tr data-ch="${k}"><td>${curBank}${String(k).padStart(2, "0")}</td>
       <td class="f" data-act="go">${fmtMHz(c.freq, 5)}</td>
@@ -1311,7 +1325,36 @@ function renderMemory() {
   highlightMemRow();
   renderLCD();
 }
+function renderMemPager(total, pages) {
+  const html = total <= 0 ? "" : (() => {
+    const from = memPer ? memPage * memPer + 1 : 1, to = memPer ? Math.min(total, (memPage + 1) * memPer) : total;
+    const nums = [];
+    for (let p = 0; p < pages; p++) if (pages <= 9 || p === 0 || p === pages - 1 || Math.abs(p - memPage) <= 2) nums.push(p); else if (nums[nums.length - 1] !== -1) nums.push(-1);
+    return `<button class="btn sm" data-pg="first" ${memPage <= 0 ? "disabled" : ""} title="First page">⏮</button>
+      <button class="btn sm" data-pg="prev" ${memPage <= 0 ? "disabled" : ""}>‹ Prev</button>
+      ${memPer ? nums.map((p) => (p < 0 ? '<span class="muted">…</span>' : `<button class="btn sm pgnum ${p === memPage ? "cur" : ""}" data-pg="${p}">${p + 1}</button>`)).join("") : ""}
+      <button class="btn sm" data-pg="next" ${memPage >= pages - 1 ? "disabled" : ""}>Next ›</button>
+      <button class="btn sm" data-pg="last" ${memPage >= pages - 1 ? "disabled" : ""} title="Last page">⏭</button>
+      <span class="muted small">Stations ${from}–${to} of ${total}</span><span class="grow"></span>
+      <label class="small">Show <select data-pp>${[[10, "10"], [15, "15"], [20, "20"], [30, "30"], [50, "50"], [0, "all"]].map(([v, l]) => `<option value="${v}" ${v === memPer ? "selected" : ""}>${l}</option>`).join("")}</select> per page</label>`;
+  })();
+  ["memPagerTop", "memPagerBot"].forEach((id) => {
+    const el = $(id); el.innerHTML = html; el.hidden = !html;
+    el.querySelectorAll("[data-pg]").forEach((b) => (b.onclick = () => {
+      const v = b.dataset.pg;
+      memPage = v === "first" ? 0 : v === "last" ? pages - 1 : v === "prev" ? memPage - 1 : v === "next" ? memPage + 1 : +v;
+      renderMemory();
+      if (id === "memPagerBot") $("memTable").scrollIntoView({ block: "start" });
+    }));
+    const sel = el.querySelector("[data-pp]");
+    if (sel) sel.onchange = () => { memPer = +sel.value; memPage = 0; try { localStorage.setItem("andysdr_mempp", String(memPer)); } catch (e) {} memLastPlay = ""; renderMemory(); };
+  });
+}
 function highlightMemRow() {
+  if (S && S.channel !== undefined) {
+    const pk = S.channel && S.channel.bank === curBank ? S.channel.ch : null, pkey = pk == null ? "" : curBank + ":" + pk;
+    if (pkey !== memLastPlay && MEM) { renderMemory(); return; }       // the playing station changed: show its page
+  }
   document.querySelectorAll("#memTable tr[data-ch]").forEach((tr) =>
     tr.classList.toggle("playing", !!(S.channel && S.channel.bank === curBank && S.channel.ch === +tr.dataset.ch)));
 }
@@ -3429,6 +3472,10 @@ const HELP = {
   sonde: ["Weather balloons (radiosondes)", "A radiosonde is the small box a weather balloon carries up to 30 km. It sends its GPS position every second on 400.15–406 MHz. The Met Office launches from about 11:00 and 23:00 UTC at several UK sites. Tune one (use SRCH, or watch the waterfall for a signal about 10 kHz wide) and press ▶ Start sonde decoder: AndySDR switches to narrow FM, 16 kHz wide, and lists every balloon it hears with serial, position, height, speed, climb, heading and satellites, plus the distance and bearing from you when My position is set (ADS-B tab, or a USB GPS unit). Click the position to see it on a map (internet needed). Only Vaisala RS41 sondes are read; other makes (DFM, M10, iMet) are ignored."],
   gps: ["USB GPS unit", "Plug in a USB GPS unit (a GPS 'puck' or dongle that appears as a COM port), tick the box and AndySDR fills in My position by itself – for satellite passes and the ADS-B distance and bearing. Leave Port on Auto-find, or pick the unit from the list (★ marks likely GPS units). The chip shows Fix and the number of satellites once it has a position; the first fix can take a few minutes, and it works best near a window or outdoors. By default it checks once a day (then lets go of the unit); the Check menu can make it every hour, or all the time so it follows you if you move. While this is ticked it replaces any position you typed in."],
   phonelayout: ["Phone layout", "On a phone (or a small tablet held upright or sideways) AndySDR switches to a layout made for thumbs. Four buttons along the bottom: RADIO (the display, big Down and Up buttons that repeat when held, Scan / Search / Skip, and Volume, Squelch and RF gain sliders), MEMORY (your channels as cards – tap the frequency to tune it and jump back to the radio), WEATHER (Pictures, and Passes and schedule) and MORE (every other screen, plus the Phone / Full layout choice). The spectrum options are tucked behind one button so the waterfall gets the room. Tablets and PCs keep the full layout; if a phone is showing the full layout by choice, the Phone layout button brings the phone one back."],
+  rx2: ["2nd Receiver screen", "Everything about the Nooelec (the second receiver) in one place. The big banner says in plain words what it is doing: SWITCHED OFF, READY (waiting for the next pass, with a countdown), RECORDING (a pass is being received right now), LIVE VIEW (a test you started) or PROBLEM (with what to do). Under it: which dongle it is, the next pass, the signal right now, and how the last pass went. 'Check it' opens the dongle for a moment to prove it works; Settings jumps to the gain and device settings in the Scheduler. The same status also shows as a thin strip under the tabs on every screen."],
+  rx2live: ["Live view and signal meter", "While a pass is being recorded this shows the Nooelec's own spectrum (the trace) and waterfall (the scrolling picture) around the satellite frequency. The red box is where the signal should be. The bar and number are how far the signal stands above the background noise: under 1.5 dB nothing, 3-5 weak, 5-8 good, over 8 strong. 'Best so far' keeps the highest reading so you can compare antenna directions - press 'Reset best' between tries. To aim the antenna without waiting for a satellite, choose the aircraft (ACARS) frequency and press Watch live: it runs for 90 seconds, records nothing, and a real pass always takes over. Planes only transmit now and then, so wait for a few bursts at each heading before you compare. A V-dipole is not very directional, so being a few degrees out hardly matters."],
+  rxstrip: ["Receiver status strip", "Shows both receivers on every screen: the main one (for example the RSP2 Pro) and what it is doing - tuned to a frequency, scanning, searching or recording - and the second one (the Nooelec) with its state: switched off, ready with a countdown to the next pass, recording or a problem. Click the second one to open its screen."],
+  mempages: ["Memory pages", "The saved stations are shown a page at a time so a long list is easy to handle. Use Prev / Next or tap a page number; 'Show … per page' changes how many are on a page (it is remembered on this device). The list jumps to the page of the station that is playing."],
   satrx: ["Second receiver (137 MHz Meteor)", "Lets a cheap RTL-SDR dongle – for example a Nooelec NESDR SMArt v5 on its own 137 MHz antenna – record the Meteor-M N2-3 / N2-4 pictures while the main receiver (the RSP2 Pro) stays free for listening, scanning and decoding. Plug the dongle in, tick 'Use a second receiver' and press 'Check it' (it opens the dongle for a moment and says what it found). The dongle is opened only while a pass is being recorded and let go of afterwards. RF gain is its own setting: 'Use this gain' always uses the number you type; 'Learn the best' starts there and tries a little lower and higher on successive passes, keeping what gives the strongest signal (see the Pass report, where passes recorded on it are marked '2nd rx'). Bias-T powers an antenna amplifier through the coax – leave it off unless you have one that needs it. If the dongle is missing, is the same one the main receiver uses, or will not open, Meteor passes simply go to the main receiver as before. It records only the 137 MHz Meteors; ISS, Metop and GOES stay on the main receiver. If both Meteors are overhead together, the second receiver takes one and the main receiver the other."],
   passreport: ["Pass report", "One line for every satellite pass AndySDR records: when, the highest the satellite climbed, the RF gain used, how far its signal stood above the noise (Signal, in dB – bigger is better) and what came out (pictures, or none). Meteor pictures are made a few minutes after the pass ends, so the newest line says 'processing' for a while. Use it to find the RF gain that works best: open a satellite's Options and choose RF gain on passes – 'Use the RF GAIN knob' (default), 'Fixed value', or 'Learn the best'. Learn the best tries a little lower and a little higher than its best gain on successive passes, compares the signal (corrected for distance, so low and high passes can be compared) and keeps the winner, re-checking now and then in case things change; passes below 20° do not count. The Use button copies the best gain found so far into a fixed value. The hardware AGC, if you turn it on, overrides all of this. The same lines are in the diagnostics zip (satellite-passes.jsonl)."],
   satauto: ["Satellite auto-capture", "Tick Record on a satellite and AndySDR predicts every pass over your position for the next 4 days (listed day by day) (set it with My position or 📍), tunes at acquisition of signal, follows the Doppler shift if Follow Doppler is ticked (open a satellite's Options button for that, minimum elevation, days, dates and RF gain), runs the right decoder and stops when the satellite sets – then puts the radio back as it was. ISS SSTV listens on 145.800 MHz FM (limit it to the ARISS event dates with the date boxes); Meteor-M N2-3 and N2-4 are LRPT on 137.900 MHz (switch to 137.100 if the satellite moves); GOES-19/18 are 1694.1 MHz HRIT from geostationary orbit – AndySDR says honestly when the satellite is below your horizon. Tick the days of the week you want (none ticked = every day) – you never type a time, AndySDR starts each capture only when the satellite is actually above your horizon. Minimum elevation hides low, weak passes. Orbit data (TLEs) is downloaded from CelesTrak and refreshed automatically. A capture you add by hand always takes priority. Only satellites you can actually receive from your position are listed (the GOES satellites over the Americas are hidden in the UK). NOAA 15, 18 and 19 (classic 137 MHz APT) were retired in 2025. From the UK the weather pictures you can receive are Meteor-M N2-3 / N2-4 (137 MHz LRPT – a simple turnstile or V-dipole antenna and an LNA are enough) and Metop-B / Metop-C (1701.3 MHz AHRPT – needs a dish, an L-band LNA and the 6 or 10 MS/s sample rate)."],

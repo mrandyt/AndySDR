@@ -157,3 +157,15 @@ body.phone .top-status .tchip { min-width: 0; padding-left: 6px; padding-right: 
 /* second receiver card on a phone: one control per line, thumb-sized */
 body.phone .satrx select, body.phone .satrx .inp, body.phone .satrx .btn { min-height: 44px; }
 body.phone .satrx .row { flex-direction: column; align-items: stretch; gap: 8px; }
+
+/* 2nd receiver screen and status strip on the phone */
+body.phone .rxstrip { padding: 8px; gap: 6px; }
+body.phone .rxs-chip { flex: 1 1 100%; padding: 8px 10px; }
+body.phone .rx2-banner { padding: 14px; gap: 10px; }
+body.phone .rx2-bmain b { font-size: 18px; }
+body.phone .rx2-bbtn .btn { min-height: 44px; }
+body.phone .rx2-tiles { grid-template-columns: 1fr 1fr; }
+body.phone #rx2Spec { height: 110px; } body.phone #rx2Wf { height: 140px; }
+body.phone .rx2-ctl select, body.phone .rx2-ctl .btn { min-height: 44px; }
+body.phone .mempager .btn { min-height: 40px; }
+body.phone .mempager .pgnum { min-width: 40px; }
