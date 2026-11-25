@@ -449,6 +449,13 @@ class Radio:
             return
         r = self.classifier.decide(res)
         if r:
+            key = (r.get("kind"), bool(r.get("stable")), r.get("decoder"), r.get("sub"))
+            if key != getattr(self, "_auto_logged", None):       # one line per change, so a diagnostics file shows why Auto chose what it did
+                self._auto_logged = key
+                log.info("auto-identify: %s%s -> %s/%s  (%.4f MHz, snr %s dB, bw %s kHz, duty %s, cv %s, baud %s, line %s, dev %s, levels %s)",
+                         r.get("kind"), "" if r.get("stable") else " (not yet stable)", r.get("decoder") or "-", r.get("sub") or "-",
+                         self.freq / 1e6, r.get("snr"), r.get("bw"), r.get("duty"), r.get("cv"),
+                         r.get("baud", "-"), r.get("line", "-"), r.get("dev", "-"), r.get("levels", "-"))
             self._auto_apply(r)
 
     def _set_signal(self, r):
@@ -470,6 +477,16 @@ class Radio:
                 return
             if active == dec and (dec != "dsd" or self.decoders.sub == sub):
                 return
+            if active == "dsd":
+                # A digital decoder that is really locked (a steady run of clean frames) is not swapped or restarted
+                # because one second of the classifier looks different (DMR <-> generic 4FSK, TETRA ...).  Tuning to
+                # another channel resets auto-identify, so a new signal still gets a fresh decision.
+                if self.decoders.dsd_recent_sync(30):
+                    return
+                # a specific type (DMR, NXDN ...) is not downgraded to the generic "try everything" Auto in the first seconds
+                if (dec == "dsd" and sub == "auto" and self.decoders.sub != "auto"
+                        and time.time() - getattr(self.decoders, "dsd_t0", 0.0) < 20):
+                    return
             mode_before = self.mode
             if r.get("mode") and r["mode"] != self.mode and r["mode"] in MODES:
                 self.mode = r["mode"]

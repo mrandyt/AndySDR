@@ -158,7 +158,7 @@ class SignalClassifier:
         dfull = np.where(m, d, 0.0)[100:]
         d = d[m][100:] if m.sum() > 4000 else d[100:]
 
-        info = {"snr": round(snr, 1), "bw": round(bw / 1000, 1)}
+        info = {"snr": round(snr, 1), "bw": round(bw / 1000, 1), "duty": round(duty, 2), "cv": round(env_cv, 2)}
 
         def R(kind, label, decoder="", sub="auto", dmode=None, conf=0.7, **extra):
             r = {"kind": kind, "label": label, "decoder": decoder, "sub": sub, "mode": dmode, "conf": conf}

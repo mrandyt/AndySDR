@@ -16,7 +16,7 @@ class S(dict):
 def mgr(freq=167_925_000):
     m = D.DecoderManager.__new__(D.DecoderManager)
     m.settings = S(); m.freq_fn = lambda: freq; m.emit = lambda *a: None; m.active = "dsd"; m.sub = "auto"
-    m.dsd_try = 0; m.dsd_sync_t = 0.0; m.dsd_flags = ['-ft']
+    m.dsd_try = 0; m.dsd_sync_t = 0.0; m.dsd_lock_t = 0.0; m.dsd_flags = ['-ft']
     m.dsd_good = D.deque(maxlen=60); m.dsd_saved = False; m.on_dsd_line = None
     return m
 
@@ -49,25 +49,29 @@ f._dsd_filter("18:11:10 Sync: NXDN48  RTCH Data           UDCH (CRC ERR)")
 f._dsd_filter("18:11:10 Sync: +DMR  [slot1]  slot2  | CACH/Burst FEC ERR")
 f._dsd_filter("Sync: no sync")
 check("lines marked ERR and 'no sync' are not a lock", f.dsd_sync_t == 0.0 and len(f.dsd_good) == 0)
-for _ in range(3): f._dsd_filter("18:11:16 Sync: NXDN48  RDCH V1+F2  RAN 01 PF X/4")
-check("three clean frames are a lock but not yet worth remembering", f.dsd_sync_t > 0 and not f.dsd_saved and "dsd_memory" not in f.settings)
-f._dsd_filter("18:11:17 Sync: NXDN48  RDCH V1+F2  RAN 01 PF X/4")
-check("four clean frames in a few seconds are remembered", f.dsd_saved and f.settings["dsd_memory"] == {"167925": ["-fi"]}, f.settings)
+f._dsd_filter("18:11:15 Sync: NXDN48  RDCH V1+F2  RAN 01 PF X/4")
+check("one stray clean sync is not a lock", f.dsd_sync_t > 0 and f.dsd_lock_t == 0.0 and not f._dsd_holding())
+for _ in range(2): f._dsd_filter("18:11:16 Sync: NXDN48  RDCH V1+F2  RAN 01 PF X/4")
+check("three clean frames are a real lock but not yet worth remembering", f._dsd_holding() and f.dsd_lock_t > 0 and not f.dsd_saved and "dsd_memory" not in f.settings)
+for _ in range(3): f._dsd_filter("18:11:17 Sync: NXDN48  RDCH V1+F2  RAN 01 PF X/4")
+check("six clean frames in a few seconds are remembered", f.dsd_saved and f.settings["dsd_memory"] == {"167925": ["-fi"]}, f.settings)
 f2 = mgr(); f2.dsd_flags = ["-ft"]; f2.settings = f.settings
 f2.dsd_good.extend([time.time() - 30] * 10)
 f2._dsd_filter("18:11:17 Sync: +DMR  [slot1]  slot2  | Color Code=01 | IDLE")
 check("old frames do not add up to a lock", not f2.dsd_saved and f.settings["dsd_memory"] == {"167925": ["-fi"]})
 f3 = mgr(); f3.dsd_flags = ["-ft"]; f3.settings = f.settings
-for _ in range(5): f3._dsd_filter("18:12:52 Sync: +DMR   slot1  [slot2] | Color Code=01 | IDLE")
+for _ in range(8): f3._dsd_filter("18:12:52 Sync: +DMR   slot1  [slot2] | Color Code=01 | IDLE")
 check("a later sustained lock on another frame type replaces it", f.settings["dsd_memory"]["167925"] == ["-ft"])
 
 # recent lock
-r = mgr(); r.dsd_sync_t = time.time() - 5
+r = mgr(); r.dsd_lock_t = time.time() - 5
 check("a lock 5 s ago counts as recent", r.dsd_recent_sync(30))
-r.dsd_sync_t = time.time() - 60
+r.dsd_lock_t = time.time() - 60
 check("a lock a minute ago does not", not r.dsd_recent_sync(30))
-r.dsd_sync_t = 0.0
+r.dsd_lock_t = 0.0
 check("never locked is not recent", not r.dsd_recent_sync(30))
+r.dsd_sync_t = time.time()
+check("a single stray sync on noise is not a recent lock", not r.dsd_recent_sync(30))
 
 # the engine must not stop a freshly locked DSD decoder because the classifier briefly says "FM voice"
 class Dec:
@@ -82,6 +86,57 @@ e = eng(True); E.Radio._auto_apply(e, dict(voice))
 check("a voice reading right after a lock leaves the decoder running", e.decoders.stopped == 0 and e.auto_owned)
 e = eng(False); E.Radio._auto_apply(e, dict(voice))
 check("with no recent lock, plain voice still stops it (as before)", e.decoders.stopped == 1 and not e.auto_owned)
+
+# Auto must not be fooled by one false sync, and must not swap a decoder that is really locked
+class Tcp: clients = [object()]
+def cyc(**kw):
+    c = mgr(); c.sub = "auto"; c.dsd_gen = 1; c.dsd_t0 = time.time() - 10; c.dsd_restarts = 0
+    c.tcp = Tcp(); c.launched = []; c.logged = []
+    c._launch_dsd = lambda sub, flags=None: (c.launched.append(flags), setattr(c, "dsd_t0", time.time()), setattr(c, "active", ""))
+    c.log = lambda m: c.logged.append(m)
+    for k, v in kw.items(): setattr(c, k, v)
+    return c
+
+def run_cycle(c, seconds=1.6):
+    import threading
+    t = threading.Thread(target=c._dsd_cycle, args=(1,), daemon=True); t.start(); t.join(seconds); c.active = ""; t.join(1.0)
+
+c = cyc(); c._dsd_filter("10:06:46 Sync: +DMR   slot1  [slot2]")          # ONE false sync on noise ...
+run_cycle(c)
+check("one stray sync does not stop Auto trying the next frame type", len(c.launched) >= 1, c.launched)
+c = cyc()
+for _ in range(8): c._dsd_filter("10:08:01 Sync: +DMR  [slot1]  slot2  | Color Code=01 | IDLE")
+run_cycle(c)
+check("a steady DMR lock keeps its frame type (no rotating away)", not c.launched, c.launched)
+c = cyc(); c.dsd_lock_t = time.time() - 40; c.dsd_t0 = time.time() - 60       # locked 40 s ago, quiet since (between calls)
+run_cycle(c)
+check("a quiet spell after a real lock does not rotate away either", not c.launched, c.launched)
+c = cyc(); c.dsd_lock_t = time.time() - 400; c.dsd_t0 = time.time() - 500
+run_cycle(c)
+check("a very old lock no longer holds it", len(c.launched) >= 1)
+
+def eng2(recent, sub="auto", age=60.0):
+    d = types.SimpleNamespace(active="dsd", sub=sub, dsd_t0=time.time() - age, started=[], stopped=0, sstv=None, pre=[])
+    d.dsd_recent_sync = lambda n: recent
+    d.start = lambda dec, s: (d.started.append((dec, s)), True)[1]
+    d.stop = lambda: None
+    d.feed = lambda x: None
+    return types.SimpleNamespace(decoders=d, auto_owned=True, auto_failed=set(), auto_mode_prev=None, mode="DIG",
+                                 _set_signal=lambda r: None, _push_state=lambda *a: None, _emit=lambda *a: None,
+                                 rx=types.SimpleNamespace(set_mode=lambda m: None), pre=[], s={})
+dmr = {"kind": "DMR", "label": "DMR", "stable": True, "decoder": "dsd", "sub": "dmr", "mode": "DIG"}
+gen = {"kind": "P25 / DMR", "label": "P25 / DMR", "stable": True, "decoder": "dsd", "sub": "auto", "mode": "DIG"}
+tet = {"kind": "TETRA", "label": "TETRA", "stable": True, "decoder": "tetra", "sub": "", "mode": "DIG25"}
+e = eng2(True); E.Radio._auto_apply(e, dict(dmr))
+check("a locked DSD is not restarted into another sub-mode", not e.decoders.started)
+e = eng2(True); E.Radio._auto_apply(e, dict(tet))
+check("a locked DSD is not swapped for another decoder by one odd second", not e.decoders.started)
+e = eng2(False, sub="dmr", age=5); E.Radio._auto_apply(e, dict(gen))
+check("a specific type is not downgraded to generic Auto in the first seconds", not e.decoders.started)
+e = eng2(False, sub="dmr", age=40); E.Radio._auto_apply(e, dict(gen))
+check("... but with nothing locked for a good while, generic Auto rotates through the frame types", e.decoders.started == [("dsd", "auto")], e.decoders.started)
+e = eng2(False, sub="auto", age=5); E.Radio._auto_apply(e, dict(dmr))
+check("generic Auto still moves to a specific DMR reading when nothing is locked", e.decoders.started == [("dsd", "dmr")], e.decoders.started)
 
 # optional gate: no noise to the decoder while the squelch has been closed for a while
 g = mgr(); g.settings["dsd_gate"] = False

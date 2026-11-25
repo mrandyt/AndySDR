@@ -822,6 +822,7 @@ class DecoderManager:
             argv += extra.split()
         self.dsd_t0 = time.time()
         self.dsd_sync_t = 0.0
+        self.dsd_lock_t = 0.0
         self.dsd_saved = False
         self.dsd_flags = list(flags)
         self.dsd_good = deque(maxlen=60)
@@ -846,12 +847,20 @@ class DecoderManager:
             return True
         return now - getattr(self, "dsd_open_t", 0.0) < self.DSD_GATE_HOLD_S
 
-    DSD_LOCK_FRAMES = 4         # this many clean frames ...
+    DSD_LOCK_FRAMES = 6         # this many clean frames ...
     DSD_LOCK_WINDOW_S = 8.0     # ... within this time make a lock worth remembering
+    DSD_HOLD_FRAMES = 3         # ... and this many within DSD_HOLD_WINDOW_S are a real lock (a single stray "sync" on noise is not)
+    DSD_HOLD_WINDOW_S = 6.0
+    DSD_STAY_S = 120.0          # after a real lock Auto stays on that frame type this long without hearing it again
 
     def _dsd_sustained(self, now=None):
         now = now or time.time()
         return sum(1 for x in getattr(self, "dsd_good", ()) if now - x <= self.DSD_LOCK_WINDOW_S) >= self.DSD_LOCK_FRAMES
+
+    def _dsd_holding(self, now=None):
+        """True while DSD-FME is giving a steady run of clean frames - a real signal, not one false sync on noise."""
+        now = now or time.time()
+        return sum(1 for x in getattr(self, "dsd_good", ()) if now - x <= self.DSD_HOLD_WINDOW_S) >= self.DSD_HOLD_FRAMES
 
     def _dsd_remember(self):
         """Auto found the frame type that locks on this frequency: keep it, so the next call starts straight on it."""
@@ -884,20 +893,27 @@ class DecoderManager:
         return None
 
     def dsd_recent_sync(self, seconds=30.0):
-        """True if DSD-FME has been locked onto something within the last few seconds."""
-        return bool(self.active == "dsd" and getattr(self, "dsd_sync_t", 0.0)
-                    and time.time() - self.dsd_sync_t < seconds)
+        """True if DSD-FME has really been locked onto something (a steady run of clean frames) within the last few
+        seconds.  One stray sync on noise does not count, so it cannot hold a wrong frame type in place."""
+        return bool(self.active == "dsd" and getattr(self, "dsd_lock_t", 0.0)
+                    and time.time() - self.dsd_lock_t < seconds)
 
     def _dsd_cycle(self, gen):
-        """Auto mode: if DSD-FME has not locked onto anything after a few seconds, try the next frame type."""
+        """Auto mode: if DSD-FME has not locked onto anything after a few seconds, try the next frame type.
+        A real lock (a steady run of clean frames) keeps the current frame type; one stray sync on noise does not."""
         while self.active == "dsd" and self.dsd_gen == gen and self.sub == "auto":
             time.sleep(0.5)
-            if self.dsd_sync_t:
+            now = time.time()
+            if self._dsd_holding(now):
+                self.dsd_restarts = 0
                 continue
-            if time.time() - self.dsd_t0 < self.DSD_TRY_S:
+            lock_t = getattr(self, "dsd_lock_t", 0.0)
+            if lock_t and now - lock_t < self.DSD_STAY_S:       # it locked a moment ago: quiet spell between calls
+                continue
+            if now - self.dsd_t0 < self.DSD_TRY_S:
                 continue
             if not (self.tcp and self.tcp.clients):          # still starting up
-                if time.time() - self.dsd_t0 < 8:
+                if now - self.dsd_t0 < 8:
                     continue
             self.dsd_restarts = getattr(self, "dsd_restarts", 0) + 1
             if self.dsd_restarts > 8:                       # give up rotating; stay on the last choice
@@ -921,6 +937,8 @@ class DecoderManager:
             good = getattr(self, "dsd_good", None)
             if good is not None:
                 good.append(now)
+                if self._dsd_holding(now):
+                    self.dsd_lock_t = now
                 if not getattr(self, "dsd_saved", True) and self._dsd_sustained(now):
                     self.dsd_saved = True
                     self._dsd_remember()
