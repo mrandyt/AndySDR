@@ -1025,10 +1025,30 @@ class DecoderManager:
         flip = bool(getattr(self, "pass_northbound", False)) and bool(self.settings.get("auto_north", True))
 
         def run():
+            try:
+                from . import passlog
+                q = passlog.iq_summary(path)
+                if q:
+                    c = q.get("centre_khz")
+                    self.log(f"Recording check: noise {q['rms']} counts, signal {q['excess_db']:+.1f} dB over the noise at mid-pass"
+                             + ("" if c is None else f", centred {c:+.0f} kHz from the tuned frequency"))
+            except Exception:                                # noqa: BLE001
+                pass
+            lines = []
             p = _popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             for raw in iter(p.stdout.readline, b""):
-                pass
+                lines.append(raw.decode("utf-8", "replace").rstrip())
+                del lines[:-400]
             p.wait()
+            try:                                             # what SatDump said, kept with the pictures for diagnosing a pass with none
+                os.makedirs(out, exist_ok=True)
+                with open(os.path.join(out, "satdump.log"), "w", encoding="utf-8") as fh:
+                    fh.write("\n".join(lines))
+                keep = [ln for ln in lines if any(w in ln.lower() for w in ("viterbi", "deframer", "sync", "lock", "ber", "snr", "error"))]
+                for ln in keep[-4:]:
+                    self.log("SatDump: " + ln[-160:])
+            except Exception:                                # noqa: BLE001
+                pass
             pngs = glob.glob(os.path.join(out, "**", "*.png"), recursive=True)
             self.log(f"SatDump finished – {len(pngs)} images")
             shown = 0

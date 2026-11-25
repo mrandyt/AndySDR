@@ -109,5 +109,34 @@ check("follows a change in conditions", b and abs(b[0] - 44) <= step, (b, tried[
 check("no scored passes: use the knob", passlog.suggest_gain([{"gain": 50}], 33.0, 0, 50) == 33.0)
 check("narrow gain range still works", 0 <= passlog.suggest_gain([{"gain": 20, "score": 5}], 20.0, 0.0, 49.6) <= 49.6)
 
+def _iq_summary_test():
+    """passlog.iq_summary finds a signal that stands up in the middle of a recording, and where it sits in the channel."""
+    import tempfile, wave
+    import numpy as np
+    from andysdr import passlog
+    fs = 240000
+    secs = 100
+    rng = np.random.default_rng(1)
+    x = (rng.normal(size=secs * fs) + 1j * rng.normal(size=secs * fs)) * 300
+    t = np.arange(secs * fs) / fs
+    lo, hi = int(30 * fs), int(75 * fs)
+    sig = np.zeros(secs * fs, complex)
+    nz = rng.normal(size=hi - lo) + 1j * rng.normal(size=hi - lo)
+    # a band-limited blob centred +25 kHz, about 100 kHz wide
+    from numpy.fft import fft, ifft, fftfreq
+    F = fft(nz); fr = fftfreq(len(nz), 1 / fs)
+    F[np.abs(fr) > 50000] = 0
+    b = ifft(F) * 600
+    sig[lo:hi] = b * np.exp(2j * np.pi * 25000 * t[lo:hi])
+    y = x + sig
+    inter = np.empty(len(y) * 2, np.int16)
+    inter[0::2], inter[1::2] = np.clip(y.real, -32000, 32000), np.clip(y.imag, -32000, 32000)
+    path = os.path.join(tempfile.mkdtemp(), "t.wav")
+    w = wave.open(path, "wb"); w.setnchannels(2); w.setsampwidth(2); w.setframerate(fs); w.writeframes(inter.tobytes()); w.close()
+    r = passlog.iq_summary(path)
+    ok = r is not None and r["excess_db"] > 1.0 and r["centre_khz"] is not None and 10 < r["centre_khz"] < 40
+    print(("PASS " if ok else "FAIL ") + f"recording check sees the signal and its centre ({r})")
+    return ok
+ok = _iq_summary_test() and ok
 print("ALL OK" if ok else "FAILED")
 sys.exit(0 if ok else 1)

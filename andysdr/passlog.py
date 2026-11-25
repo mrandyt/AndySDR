@@ -223,3 +223,42 @@ def suggest_gain(rows, knob, lo, hi):
             last = {k: max((i for i, r in enumerate(scored) if round(float(r["gain"]) / step) == k), default=-1) for k in cands}
             return float(min(cands, key=lambda k: last[k]) * step)
     return round(statistics.mean(gains[best]), 1)
+
+def iq_summary(path, fs=240000):
+    """A quick look at a finished pass recording (16-bit stereo WAV, 240 kS/s): how strong the noise is, and where the
+    signal sits in the channel (centre in kHz from the tuned frequency, and how many dB it stands above the noise).
+    The middle of the pass is compared with its quiet end.  Returns None when the file cannot be read."""
+    try:
+        raw = np.memmap(path, dtype="<i2", mode="r", offset=44)
+        n = len(raw) // 2
+        if n < fs * 60:
+            return None
+
+        def get(t0, t1):
+            a = np.asarray(raw[2 * int(t0 * fs):2 * int(t1 * fs)], np.float32)
+            return a[0::2] + 1j * a[1::2]
+
+        N = 2048
+        win = np.hanning(N)
+
+        def psd(x):
+            k = len(x) // N
+            X = np.abs(np.fft.fftshift(np.fft.fft(x[:k * N].reshape(k, N) * win, axis=1), axes=1)) ** 2
+            return X.mean(0)
+
+        secs = n / fs
+        mid = psd(get(secs * 0.4, secs * 0.4 + 30))
+        ref = psd(get(secs - 25, secs - 5))              # the start is not used: the tuner is still settling there
+        f = np.fft.fftshift(np.fft.fftfreq(N, 1 / fs)) / 1e3
+        k = np.ones(9) / 9
+        ex = np.convolve(mid / ref, k, mode="same")          # how far the middle stands above the ends, per bin
+        band = np.abs(f) <= 70
+        e = np.clip(ex[band] - 1.0, 0, None)
+        centre = float((f[band] * e).sum() / e.sum()) if e.sum() > 0 else None
+        a = np.asarray(raw[:2 * fs * 10], np.float32)
+        return {"rms": round(float(np.sqrt(np.mean(a * a) / 2)), 1),
+                "excess_db": round(float(10 * np.log10(mid[band].sum() / ref[band].sum())), 1),
+                "centre_khz": None if centre is None else round(centre, 1)}
+    except Exception:                                    # noqa: BLE001
+        log.debug("iq_summary", exc_info=True)
+        return None
