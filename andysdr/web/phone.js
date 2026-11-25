@@ -71,6 +71,33 @@
       </div>`;
     lcd.insertAdjacentElement("afterend", ctl);
 
+    // mode / width / band / digital / tools buttons: tucked into one folding section so the spectrum is not a long scroll away
+    const qj = document.querySelector(".radio .q-jump"), quick = document.querySelector(".radio .quick");
+    if (qj && quick && qj.parentNode === quick.parentNode) {
+      const d = document.createElement("details");
+      d.className = "ph-quick";
+      let open = false; try { open = localStorage.getItem("andysdr_phq") === "1"; } catch (e) {}
+      d.open = open;
+      d.innerHTML = "<summary><span>Mode, band and digital tools</span><i>&#9662;</i></summary>";
+      qj.parentNode.insertBefore(d, qj);
+      d.appendChild(qj); d.appendChild(quick);
+      d.addEventListener("toggle", () => { try { localStorage.setItem("andysdr_phq", d.open ? "1" : "0"); } catch (e) {} });
+    }
+
+    // memory page: the channels come first; renaming, clearing and importing fold away
+    const mem = $("tab-mem");
+    if (mem && $("bankName")) {
+      const t = document.createElement("details");
+      t.className = "ph-tools";
+      t.innerHTML = "<summary><span>Bank tools, rename and import</span><i>&#9662;</i></summary>";
+      const holder = document.createElement("div");
+      holder.className = "ph-tools-body";
+      [$("bankName"), $("bankRename"), $("bankClear"), $("bankSource"), mem.querySelector(".import-box")].forEach((e) => { if (e) holder.appendChild(e); });
+      t.appendChild(holder);
+      const pager = $("memPagerTop");
+      if (pager) pager.parentNode.insertBefore(t, pager);
+    }
+
     // title / back bar for the pages other than the radio
     const bar = document.createElement("div");
     bar.id = "phBar";
@@ -249,6 +276,7 @@
     body.classList.toggle("phone", on && built);
     body.classList.toggle("phone-land", on && built && land);
     body.classList.toggle("phone-off", !on && getPref() === "off" && Math.min(window.screen.width || 9999, window.screen.height || 9999) <= 700);
+    if (!(on && built)) document.querySelectorAll("details.ph-quick, details.ph-tools").forEach((d) => { d.open = true; });   // the full layout never hides them
     if (on && built) {
       if (!body.dataset.pp) go("radio");              // only the first time: a resize (keyboard, rotation) must not change the page
     } else {

@@ -49,7 +49,9 @@ const UK_PRESETS = [
   ["Pagers", 153, 154, 12500, "DIG"],
 ];
 
-let ws = null, token = sessionStorage.getItem("andysdr_token") || "", isLocal = true;
+// the phone app keeps the password token between launches (it is the user's own phone); a browser forgets it when the tab closes
+const tokStore = (() => { try { return /AndySDRRemote/.test(navigator.userAgent) ? localStorage : sessionStorage; } catch (e) { return sessionStorage; } })();
+let ws = null, token = tokStore.getItem("andysdr_token") || "", isLocal = true;
 let S = {};           // radio state
 let BWS = {};         // selectable bandwidths per mode (from the server)
 let MEM = null;       // memory banks
@@ -100,7 +102,7 @@ function onJSON(m) {
       setTimeout(() => $("loginPass").focus(), 50);
       break;
     case "auth_failed":
-      token = ""; sessionStorage.removeItem("andysdr_token");
+      token = ""; tokStore.removeItem("andysdr_token"); sessionStorage.removeItem("andysdr_token");
       $("loginErr").textContent = "Wrong password";
       break;
     case "hello": onHello(d); break;
@@ -161,7 +163,9 @@ function onJSON(m) {
 
 function onHello(h) {
   $("loginModal").hidden = true;
-  if (h.token) { token = h.token; sessionStorage.setItem("andysdr_token", token); }
+  // the server only listens to a screen that has logged in, so ask for the sound now (asking when the link opened was ignored on a password-protected radio)
+  if (typeof player !== "undefined" && player.on && $("myAudio").checked) send({ cmd: "audio", on: true });
+  if (h.token) { token = h.token; tokStore.setItem("andysdr_token", token); }
   if (h.token && window.AndyBridge) { try { window.AndyBridge.setToken(h.token); } catch (e) { /* not the Android app */ } }   // lets the Android app's alert service log in
   isLocal = h.local;
   document.querySelectorAll(".local-only").forEach((e) => (e.style.display = isLocal ? "" : "none"));
@@ -478,6 +482,7 @@ const player = {
     this.node = this.ctx.createScriptProcessor(2048, 0, 1);
     this.node.onaudioprocess = (ev) => this.pull(ev.outputBuffer.getChannelData(0));
     this.node.connect(this.gain).connect(this.ctx.destination);
+    this.ctx.onstatechange = () => this.wake();          // the system stopped the sound (another app, a call): start it again
     this.on = true;
     this.wake();
   },
@@ -515,7 +520,25 @@ $("pwrBtn").addEventListener("click", () => {
   if (player.on) player.stop(); else { player.start(); player.setVolume(knobs.vol.value / 100); }
   $("pwrLed").classList.toggle("on", player.on);
   send({ cmd: "audio", on: player.on && $("myAudio").checked });
+  if (PHONE_APP) { try { localStorage.setItem("andysdr_audio_off", player.on ? "0" : "1"); } catch (e) {} }   // the app remembers a deliberate Audio off
 });
+// The Android app is allowed to start sound without a tap, so it switches the sound on by itself every time it opens
+// (unless Audio was switched off by hand last time) - before this, every launch started silent until Audio was pressed.
+const PHONE_APP = /AndySDRRemote/.test(navigator.userAgent);
+function phoneAudioAuto() {
+  let off = false; try { off = localStorage.getItem("andysdr_audio_off") === "1"; } catch (e) {}
+  if (!PHONE_APP || off || player.on) return;
+  player.start(); player.setVolume(knobs.vol.value / 100);
+  $("pwrLed").classList.add("on");
+  send({ cmd: "audio", on: $("myAudio").checked });
+}
+phoneAudioAuto();
+// the Android app calls this each time it comes back to the front
+window.andyResume = () => {
+  player.wake();
+  if (!ws || ws.readyState > 1) connect();
+  else if (player.on && $("myAudio").checked) send({ cmd: "audio", on: true });
+};
 $("myAudio").addEventListener("change", (e) => send({ cmd: "audio", on: e.target.checked && player.on }));
 
 /* ======================================================= spectrum + waterfall */

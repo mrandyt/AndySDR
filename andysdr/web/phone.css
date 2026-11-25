@@ -169,3 +169,48 @@ body.phone #rx2Spec { height: 110px; } body.phone #rx2Wf { height: 140px; }
 body.phone .rx2-ctl select, body.phone .rx2-ctl .btn { min-height: 44px; }
 body.phone .mempager .btn { min-height: 40px; }
 body.phone .mempager .pgnum { min-width: 40px; }
+
+
+/* ---- tidier phone screens (1.22.3) ---- */
+/* the four header tiles were cut short ("Simula..") and the display already shows the same things */
+body.phone:not(.phone-land) .top-status { display: none; }
+
+/* receiver strip: two slim chips side by side */
+body.phone .rxstrip { padding: 6px 8px; gap: 6px; flex-wrap: nowrap; }
+body.phone .rxs-chip { flex: 1 1 0; padding: 6px 9px; gap: 8px; border-radius: 12px; }
+body.phone .rxs-chip small { display: none; }
+body.phone .rxs-chip b { font-size: 13px; }
+body.phone .rxs-chip span { font-size: 11.5px; }
+body.phone .rxs-dot { width: 9px; height: 9px; }
+
+/* folding sections */
+details.ph-quick > summary, details.ph-tools > summary { list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  min-height: 48px; padding: 0 16px; cursor: pointer; font-size: 15px; -webkit-tap-highlight-color: transparent; }
+details.ph-quick > summary::-webkit-details-marker, details.ph-tools > summary::-webkit-details-marker { display: none; }
+details.ph-quick > summary i, details.ph-tools > summary i { font-style: normal; font-size: 18px; color: var(--muted); transition: transform .15s; }
+details[open].ph-quick > summary i, details[open].ph-tools > summary i { transform: rotate(180deg); }
+body:not(.phone) details.ph-quick > summary, body:not(.phone) details.ph-tools > summary { display: none; }
+body.phone details.ph-quick { order: 2; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); overflow: hidden; }
+body.phone details.ph-quick[open] > summary { border-bottom: 1px solid var(--line); }
+body.phone details.ph-quick > .q-jump, body.phone details.ph-quick > .quick { margin: 10px; }
+
+/* memory page: bank buttons in one swipeable row, tools folded */
+body.phone #bankBtns { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 8px; padding: 2px 0 6px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+body.phone #bankBtns::-webkit-scrollbar { display: none; }
+body.phone #bankBtns > * { flex: none; }
+body.phone #tab-mem > .row.wrapline:first-child { flex-wrap: nowrap; min-height: 0; }
+body.phone #tab-mem > .row.wrapline:first-child > .grow { display: none; }
+body.phone details.ph-tools { margin: 4px 0 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); overflow: hidden; }
+body.phone details.ph-tools[open] > summary { border-bottom: 1px solid var(--line); }
+body.phone .ph-tools-body { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+body.phone .ph-tools-body .inp, body.phone .ph-tools-body .btn { width: 100%; min-height: 44px; }
+body.phone .ph-tools-body .import-box { flex-direction: column; align-items: stretch; gap: 8px; padding: 0; border: 0; background: none; }
+
+/* memory channel cards: about a third shorter, so more stations fit on the screen */
+body.phone #memTable tr[data-ch] { grid-template-columns: auto auto minmax(0, 1fr) auto; grid-template-areas: "freq freq name ch" "mode mode dec dec" "lo dly act act"; gap: 6px 10px; padding: 10px 12px; margin: 0 0 8px; }
+body.phone #memTable td:nth-child(2) { font-size: 21px; min-height: 36px; }
+body.phone #memTable td:nth-child(4) { min-height: 36px; font-size: 14px; opacity: .9; }
+body.phone #memTable td:nth-child(1) { align-self: start; }
+body.phone #memTable select { min-height: 40px; }
+body.phone #memTable td:nth-child(7), body.phone #memTable td:nth-child(8) { min-height: 40px; }
+body.phone #memTable td:nth-child(9) .btn { min-height: 40px; min-width: 38px; padding: 0 8px; }
