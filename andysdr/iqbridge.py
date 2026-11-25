@@ -39,6 +39,7 @@ class IqBridge:
         self.dropped = 0
         self._resamp = None
         self.cmds = []                    # (cmd, value) received from the client – informational
+        self.tap = None                   # optional callback(complex iq at the client's rate, wanted signal at DC) – used by AERO's carrier finder
 
     # ---------------------------------------------------------------- server
     def start(self):
@@ -128,6 +129,11 @@ class IqBridge:
                 self._resamp = (fs, out)
             g = int(np.gcd(int(fs), int(out)))
             iq = signal.resample_poly(iq, int(out) // g, int(fs) // g).astype(np.complex64)
+        if self.tap is not None and len(iq):
+            try:
+                self.tap(iq)
+            except Exception:  # noqa: BLE001 - a broken observer must never stop the data
+                pass
         if self.agc_target and len(iq):
             rms = float(np.sqrt(np.mean(np.abs(iq) ** 2))) + 1e-9
             # follow the noise floor slowly; a burst of signal may only nudge it up a little

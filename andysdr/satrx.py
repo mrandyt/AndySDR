@@ -110,6 +110,11 @@ class SatRx:
 
     def _enumerate(self, force=False):
         found, when = self._found
+        if self.job is not None and found:
+            # We hold a dongle open (a live view or a pass).  Windows will not read an open dongle's serial number a second
+            # time, so a fresh scan would lose our own dongle (it shows up as rtlsdr:0) and a pass that came due during a
+            # live view would be silently handed to the main radio.  Keep the list from before we opened it.
+            return found
         if force or time.time() - when > ENUM_EVERY:
             try:
                 found = list(devices.list_rtl_native())

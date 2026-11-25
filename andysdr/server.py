@@ -619,6 +619,8 @@ class Server:
                 r.record(bool(m["on"]))
             elif cmd == "decoder":
                 r.set_decoder(m.get("id", ""), m.get("sub", "auto"))
+            elif cmd == "aero_centre":
+                r.aero_centre()
             elif cmd == "device":
                 r.set_device(m["key"])
             elif cmd == "gps_set":

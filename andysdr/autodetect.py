@@ -28,6 +28,11 @@ CTCSS = [67.0, 69.3, 71.9, 74.4, 77.0, 79.7, 82.5, 85.4, 88.5, 91.5, 94.8, 97.4,
          186.2, 192.8, 203.5, 210.7, 218.1, 225.7, 233.6, 241.8, 250.3]
 DTMF_LO, DTMF_HI = [697, 770, 852, 941], [1209, 1336, 1477, 1633]
 
+SETTLE_WINDOW = 8        # classifications (about 3 s) looked back over...
+SETTLE_MIN = 6           # ...once at least this many are in
+SETTLE_MAJORITY = 5      # a guess seen this often in the window is a real answer; fewer, with 3+ different guesses = unsettled
+UNSETTLED = "Unidentified signal"
+UNSETTLED_LABEL = "Unidentified signal – try a decoder by hand"
 _LP_CH = signal.firwin(129, 8500, fs=FS)          # 12.5/25 kHz channel for FSK analysis
 _LP_DISC = signal.firwin(63, 6000, fs=FS)
 
@@ -110,9 +115,16 @@ class SignalClassifier:
         if res is None:
             self.history.clear()
             return None
-        self.history = (self.history + [res["kind"]])[-3:]
+        self.history = (self.history + [res["kind"]])[-SETTLE_WINDOW:]
         # report a kind once it has been seen twice running (one second is enough for strong data)
-        stable = self.history.count(res["kind"]) >= 2 or res.get("conf", 0) > 0.88
+        stable = self.history[-3:].count(res["kind"]) >= 2 or res.get("conf", 0) > 0.88
+        # A signal that does not look like any one thing: three or more different guesses in the last few seconds and none
+        # of them in the majority.  Say so, once, instead of starting and stopping a different decoder every second.
+        if res.get("conf", 0) <= 0.88 and len(self.history) >= SETTLE_MIN:
+            top = max(self.history.count(k) for k in set(self.history))
+            if top < SETTLE_MAJORITY and len(set(self.history)) >= 3:
+                res = dict(res, kind=UNSETTLED, label=UNSETTLED_LABEL, decoder="", sub="auto", mode=None, conf=0.3)
+                stable = True
         res["stable"] = stable
         self.last = res
         return res
@@ -194,8 +206,9 @@ class SignalClassifier:
             dd = np.diff(dfull) ** 2
             lines = _line_strength(dd, [512, 1200, 1600, 2400, 3200, 4800])
             best = max(lines, key=lines.get)
-            for r in sorted(lines):          # a 1200 Bd signal also shows a 2400 Hz harmonic
-                if r < best and best % r == 0 and lines[r] > 12 and lines[r] > 0.1 * lines[best]:
+            for r in sorted(lines):          # a 1200 Bd signal also shows a 2400 Hz harmonic (exactly one octave up, no more:
+                # a DMR signal has a weak 1200 Hz line from its frame structure, which must not turn 4800 Bd into 1200 = "pager")
+                if r < best and best == 2 * r and lines[r] > 12 and lines[r] > 0.1 * lines[best]:
                     best = r
                     break
             strength = lines[best]

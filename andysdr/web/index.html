@@ -529,6 +529,15 @@
       <a class="btn" id="acarsExport" href="#" download>Export CSV</a>
       <button class="btn danger" id="acarsClear">Clear list</button>
     </div>
+    <div class="row wrapline aero-row" data-help="aero">
+      <button class="btn primary" id="aeroStart" title="Starts reading Inmarsat AERO (aircraft messages relayed by the 1545 MHz satellite) on the frequency you are tuned to. Needs an L-band antenna.">▶ Start AERO</button>
+      <select class="inp" id="aeroMode" title="Data rate of the channel. AUTO tries 1200, 600 and 10500 bit/s in turn until one locks.">
+        <option value="auto">AUTO rate</option><option value="p1200">1200 bit/s</option><option value="p600">600 bit/s</option><option value="p10500">10500 bit/s</option>
+      </select>
+      <span class="muted small">Inmarsat L-band:</span><span id="aeroFreqs"></span>
+      <button class="btn" id="aeroCentre" title="Moves the tuning onto the carrier AndySDR measured, to within a few Hz. Use it after clicking close to a narrow carrier on the waterfall.">⌖ Centre on carrier</button>
+      <span class="led" id="aeroLed"></span><span class="small" id="aeroStat"></span>
+    </div>
     <div class="tablewrap pagwrap">
       <table class="grid" id="acarsTable">
         <thead><tr><th>Time</th><th>Frequency</th><th>Aircraft</th><th>Flight</th><th>Label</th><th>Message</th></tr></thead>

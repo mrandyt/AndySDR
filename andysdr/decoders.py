@@ -32,6 +32,7 @@ from scipy import signal
 
 from .config import app_dir, data_dir
 from .iqbridge import IqBridge
+from . import aero as aero_mod
 from .ft8 import Ft8Decoder, match_freq
 from .morse import MorseDecoder
 from .acars import AcarsDecoder
@@ -82,6 +83,8 @@ DECODERS = {
                "help": "1694.1 MHz GOES-East/West images and EMWIN. Needs a dish + L-band LNA; the receiver is shared with SatDump over a local rtl_tcp link."},
     "metop":  {"name": "Metop AHRPT weather satellite (SatDump)", "exe": "satdump",
                "help": "1701.3 MHz Metop-B / Metop-C direct broadcast (AVHRR pictures and more). Needs a dish + L-band LNA and the 6 or 10 MS/s sample rate; the receiver is shared with SatDump over a local rtl_tcp link."},
+    "aero":   {"name": "Inmarsat AERO aircraft satellite messages (SatDump)", "exe": "satdump",
+               "help": "1545 MHz L-band (Alphasat 25E from the UK). Reads the aircraft ACARS text the Inmarsat satellite sends to aircraft (600, 1200 and 10500 bit/s) and lists it in AIRCRAFT TEXT. Needs an L-band patch or helix antenna with an LNA (bias-T); the receiver is shared with SatDump over a local rtl_tcp link. Voice is not decoded."},
     "acars":  {"name": "ACARS aircraft text messages (built in)", "exe": None,
                "help": "AM, 131.xxx MHz (UK: 131.525, 131.725, 131.825). Reads the airline text messages: registration, flight, label and message. See the AIRCRAFT TEXT tab."},
     "vdl2":   {"name": "VDL Mode 2 aircraft data link (built in)", "exe": None,
@@ -292,6 +295,8 @@ class DecoderManager:
         self.acars_status = {}
         self.sonde_status = {}
         self.vdl2_status = {}
+        self.aero = None           # AeroRunner (Inmarsat AERO) while that decoder runs
+        self.aero_status = {}
         self.morse = None
         self.morse_text = ""
         self.morse_status = {}
@@ -360,6 +365,10 @@ class DecoderManager:
     def _vdl2_status(self, st):
         self.vdl2_status = st
         self.emit("datalink_status", {"vdl2": st})
+
+    def _aero_status(self, st):
+        self.aero_status = st
+        self.emit("datalink_status", {"aero": st})
 
     def _sonde_rec(self, r):
         f = self.freq_fn() if self.freq_fn else 0
@@ -523,6 +532,17 @@ class DecoderManager:
                 _Reader(self.proc.stdout, self.log, lambda l: "(D)" not in l).start()
                 self._watch_images(out)
                 self.log(f"SatDump ({label}) started on {mhz} MHz – images appear in Weather images as they complete")
+            elif dec_id == "aero":
+                exe = find_exe("satdump", ov)
+                if not exe:
+                    raise FileNotFoundError("satdump.exe not found – see Help > Decoders")
+                aero_mod.purge_old(self.images_dir)
+                out = os.path.join(self.images_dir, "aero_" + time.strftime("%Y%m%d_%H%M%S"))
+                self.aero = aero_mod.AeroRunner(exe, out, sub if sub in aero_mod.MODES else "auto", on_message=self._acars_msg,
+                                                on_status=self._aero_status, on_log=self.log, popen=_popen)
+                self.aero.start()
+                self.log("AERO decoder running – tune a narrow carrier at 1545-1547 MHz (click it on the waterfall) and watch "
+                         "LOCK in the AIRCRAFT TEXT tab. Needs an L-band antenna with an LNA; on an RSP2 use Antenna B with bias-T.")
             elif dec_id == "ism":
                 exe = find_exe("rtl_433", ov)
                 if not exe:
@@ -1013,6 +1033,9 @@ class DecoderManager:
             self.meshsdr.stop()
         if self.active == "ism" and self.ism:
             self.ism.set_status(False, 0, "")
+        if self.aero:
+            self.aero.stop()
+            self.aero = None
         if self.bridge:
             self.bridge.stop()
             self.bridge = None
@@ -1101,6 +1124,8 @@ class DecoderManager:
             self.meshsdr.feed(iq, fs, offset)
         elif self.active in ("goes", "metop", "ism") and self.bridge:
             self.bridge.feed(iq, fs, offset)
+        elif self.active == "aero" and self.aero:
+            self.aero.feed(iq, fs, offset)
 
     def _watch_images(self, out):
         """Report new PNGs a long-running SatDump process writes."""

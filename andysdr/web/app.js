@@ -339,6 +339,7 @@ function renderState() {
   document.querySelectorAll("[data-k=rec]").forEach((b) => b.classList.toggle("on", S.recording));
   document.querySelectorAll("#decBtns .btn").forEach((b) => b.classList.toggle("on", b.dataset.id === S.decoder));
   highlightMemRow();
+  renderAero();
 }
 
 /* ======================================================= knobs */
@@ -1532,6 +1533,8 @@ $("pagStart").onclick = () => send({ cmd: "decoder", id: "pager" });
 const DL = { acars: [], sondes: {}, unA: 0, unS: 0, status: {}, dirA: "", dirS: "" };
 const ACARS_FREQS = [131525000, 131725000, 131825000, 131550000, 130025000];
 const VDL2_FREQS = [136975000, 136725000, 136775000, 136825000, 136875000, 136925000];
+// Inmarsat AERO channels listeners have reported on Alphasat (25 deg E). Inmarsat moves channels: check the waterfall for a narrow carrier.
+const AERO_CH = [[1546100000, "p1200", "1200 bit/s"], [1546115000, "p600", "600 bit/s"], [1546130000, "p10500", "10500 bit/s"]];
 const ACARS_MAX_ROWS = 300;
 function dlHello(d) {
   DL.acars = d.acars || []; DL.sondes = {}; (d.sondes || []).forEach((r) => (DL.sondes[r.id] = r));
@@ -1546,6 +1549,7 @@ function dlBadges() {
 function dlStatus(d) {
   if (d.acars) DL.status.acars = d.acars;
   if (d.vdl2) DL.status.vdl2 = d.vdl2;
+  if (d.aero) { DL.status.aero = d.aero; renderAero(); }
   if (d.sonde) DL.status.sonde = d.sonde;
   if ($("tab-acars").classList.contains("active")) acarsCount();
   if ($("tab-sonde").classList.contains("active")) sondeCount();
@@ -1557,7 +1561,7 @@ function acarsMatch(m) {
 }
 function acarsRow(m, isNew) {
   const f = m.freq ? `<td class="f" data-f="${m.freq}" title="Tune here">${fmtMHz(m.freq, 3)}</td>` : "<td>—</td>";
-  return `<tr class="${isNew ? "new" : ""}" data-id="${m.id}" title="Click for details about this aircraft and message"><td class="t">${esc(m.t)}</td>${f}<td><b>${esc(m.reg || "—")}</b>${m.via ? `<span class='muted via' title='Heard on the VDL2 digital link${m.icao ? ", aircraft address " + m.icao : ""}'>VDL2</span>` : ""}</td><td>${esc(m.flight || "")}</td>` +
+  return `<tr class="${isNew ? "new" : ""}" data-id="${m.id}" title="Click for details about this aircraft and message"><td class="t">${esc(m.t)}</td>${f}<td><b>${esc(m.reg || "—")}</b>${m.via ? `<span class='muted via' title='Heard on the ${m.via === "AERO" ? "Inmarsat AERO satellite link" : "VDL2 digital link"}${m.icao ? ", aircraft address " + m.icao : ""}'>${esc(m.via)}</span>` : ""}</td><td>${esc(m.flight || "")}</td>` +
     `<td class="lbl" title="${esc(m.label_name || "")}">${esc(m.label)}${m.down ? "" : " <span class='muted' title='Sent from a ground station to the aircraft'>→a/c</span>"}</td>` +
     `<td class="msg">${m.text ? esc(m.text) : '<span class="muted">(no text)</span>'}${m.more ? ' <span class="muted">…more</span>' : ""}</td></tr>`;
 }
@@ -1651,7 +1655,7 @@ function acarsInfoHtml(m, d) {
   // the message itself
   const lbl = (d && d.label) || { code: m.label, name: m.label_name, what: "" };
   h += `<div class="ai-sec"><h3>The message</h3><div class="ai-grid">
-    ${row("Heard", esc(`${m.date || ""} ${m.t}`) + (m.freq ? ` on ${fmtMHz(m.freq, 3)} MHz` : "") + (m.via ? " (VDL2 digital link)" : " (ACARS)"))}
+    ${row("Heard", esc(`${m.date || ""} ${m.t}`) + (m.freq ? ` on ${fmtMHz(m.freq, 3)} MHz` : "") + (m.via === "AERO" ? " (Inmarsat AERO satellite link)" : m.via ? " (VDL2 digital link)" : " (ACARS)"))}
     ${row("Sent", d ? esc(d.direction) : (m.down ? "from the aircraft" : "from the ground to the aircraft"))}
     ${row("Type", `<b>${esc(lbl.code || "–")}</b> ${esc(lbl.name || "")}`)}
     ${row("What it is", esc(lbl.what || ""))}
@@ -1695,6 +1699,33 @@ $("acarsFreqs").addEventListener("click", (e) => { const b = e.target.closest("b
 $("acarsStart").onclick = () => send({ cmd: "decoder", id: "acars" });
 $("vdl2Freqs").addEventListener("click", (e) => { const b = e.target.closest("button[data-f]"); if (b) { send({ cmd: "tune", freq: +b.dataset.f, mode: "DIG25" }); setTimeout(() => send({ cmd: "decoder", id: "vdl2" }), 150); } });
 $("vdl2Start").onclick = () => send({ cmd: "decoder", id: "vdl2" });
+$("aeroFreqs").innerHTML = AERO_CH.map((c) => `<button class="btn sm" data-f="${c[0]}" data-m="${c[1]}" title="Reported on Alphasat (25°E): ${c[2]}. Channels move – check the waterfall for a narrow carrier.">${fmtMHz(c[0], 3)}</button>`).join("");
+$("aeroFreqs").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-f]"); if (!b) return;
+  $("aeroMode").value = b.dataset.m;
+  send({ cmd: "tune", freq: +b.dataset.f, mode: "DIG25" });
+  setTimeout(() => send({ cmd: "decoder", id: "aero", sub: b.dataset.m }), 150);
+});
+$("aeroStart").onclick = () => (S.decoder === "aero" ? send({ cmd: "decoder", id: "" }) : send({ cmd: "decoder", id: "aero", sub: $("aeroMode").value }));
+$("aeroMode").onchange = () => { if (S.decoder === "aero") send({ cmd: "decoder", id: "aero", sub: $("aeroMode").value }); };
+$("aeroCentre").onclick = () => send({ cmd: "aero_centre" });
+function renderAero() {
+  const st = DL.status.aero || {}, on = S.decoder === "aero" && st.running, led = $("aeroLed"), el = $("aeroStat");
+  $("aeroStart").textContent = S.decoder === "aero" ? "■ Stop AERO" : "▶ Start AERO";
+  $("aeroCentre").disabled = !on || st.off_hz == null;
+  led.className = "led" + (on && st.state === "locked" ? " on" : on && st.state === "carrier" ? " amber on" : "");
+  if (!on) { el.textContent = S.decoder === "aero" ? " Starting SatDump…" : ""; return; }
+  const rate = st.bps ? `${st.bps} bit/s` : "", off = st.off_hz != null ? `${st.off_hz > 0 ? "+" : ""}${Math.round(st.off_hz)} Hz` : "";
+  const q = (v, good, lbl) => (v == null ? "" : ` · ${lbl} ${v}`);
+  if (st.state === "starting") el.textContent = " Starting SatDump…";
+  else if (st.state === "locked")
+    el.textContent = ` LOCKED · ${rate}${q(st.ber, 0.22, "bit-error rate")}${st.ber != null ? (st.ber < 0.22 ? " (good)" : " (poor)") : ""}${q(st.snr, 0, "SNR")}${st.snr != null ? " dB" : ""} · ${st.messages} message${st.messages === 1 ? "" : "s"}` +
+      (st.off_hz != null && Math.abs(st.off_hz) > 100 ? ` · carrier ${off} from the cursor – press ⌖` : "");
+  else if (st.state === "carrier")
+    el.textContent = ` Carrier found ${off} from the cursor (${st.off_snr} dB above the noise) – press ⌖ Centre on carrier · not locked yet at ${rate}${st.auto ? " (AUTO is trying the rates)" : ""}`;
+  else el.textContent = ` Searching ${rate}${st.auto ? " (AUTO)" : ""} – click a narrow carrier on the waterfall near 1545–1547 MHz, then wait about a minute`;
+  el.style.color = st.state === "locked" ? "var(--ok)" : "";
+}
 $("sondeStart").onclick = () => send({ cmd: "decoder", id: "sonde" });
 $("acarsClear").onclick = () => { if (confirm("Clear the aircraft text list? (Daily log files are kept.)")) send({ cmd: "datalink_clear", which: "acars" }); };
 $("sondeClear").onclick = () => { if (confirm("Clear the balloon list? (Daily log files are kept.)")) send({ cmd: "datalink_clear", which: "sondes" }); };
@@ -2269,6 +2300,7 @@ const Q_BANDS = [
   ["VDL2", 136975000, "DIG25", 25000, [136.7, 137], "Digital aircraft data link (VDL2, 25 kHz wide). Jumps to 136.975 MHz, the busiest UK channel; others are 136.725 to 136.925 MHz. Press the VDL2 decoder key."],
   ["SONDE", 403000000, "NFM", 12500, [400.15, 406], "Weather balloons (radiosondes, 400.15–406 MHz). Use SRCH or step ▲ to find one, then press the SONDE decoder key."],
   ["PAGER", 153000000, "DIG", 12500, [153, 154], "UK pager band (153.0–153.5 MHz busiest). Jumps to the bottom of it – then use SRCH or ▲ to find the active channel."],
+  ["L-BAND", 1546100000, "DIG25", 25000, [1525, 1559], "Inmarsat L-band downlink (1525–1559 MHz). Jumps to 1546.100 MHz, an AERO channel reported on Alphasat. Needs an L-band patch antenna with an LNA – press the AERO decoder key."],
   ["SATS", 137900000, "DIG25", 25000, [137, 138], "Weather satellites (Meteor-M LRPT on 137.9 MHz). Start the LRPT decoder when a satellite is overhead."],
 ];
 // digital voice bands: label, lo MHz, hi MHz, mode, step Hz, decoder, sub, note
@@ -2287,11 +2319,11 @@ const Q_DIGI = [
 const Q_DECS = [
   ["DMR", "dsd", "dmr"], ["P25", "dsd", "p25p1"], ["NXDN", "dsd", "nxdn48"], ["dPMR", "dsd", "dpmr"], ["M17", "dsd", "m17"],
   ["TETRA", "tetra", ""], ["TETRAPOL", "tetrapol", ""], ["PAGER", "pager", ""], ["APRS", "data", ""], ["WEFAX", "wefax", ""], ["SSTV", "sstv", ""],
-  ["ACARS", "acars", ""], ["VDL2", "vdl2", ""], ["SONDE", "sonde", ""], ["LRPT", "lrpt", ""], ["METOP", "metop", ""], ["ADS-B", "adsb", ""], ["FT8", "ft8", "ft8"], ["FT4", "ft8", "ft4"], ["MORSE", "morse", ""],
+  ["ACARS", "acars", ""], ["VDL2", "vdl2", ""], ["AERO", "aero", ""], ["SONDE", "sonde", ""], ["LRPT", "lrpt", ""], ["METOP", "metop", ""], ["ADS-B", "adsb", ""], ["FT8", "ft8", "ft8"], ["FT4", "ft8", "ft4"], ["MORSE", "morse", ""],
 ];
 const Q_DEC_TIPS = { dmr: "DMR digital voice", p25p1: "P25 Phase 1 digital voice", nxdn48: "NXDN 4800 digital voice", dpmr: "dPMR digital voice",
   m17: "M17 digital voice", tetra: "TETRA network and call signalling (25 kHz, DIG25)", tetrapol: "TETRAPOL control-channel signalling (12.5 kHz, DIG) – used in France and parts of Europe, not the UK; no speech", pager: "POCSAG / FLEX pagers – messages appear in PAGER MESSAGES",
-  acars: "ACARS aircraft text messages (AM, 131 MHz) – listed in AIRCRAFT TEXT", vdl2: "VDL2 digital aircraft data link (136 MHz) – ACARS inside it is listed in AIRCRAFT TEXT", sonde: "Radiosonde weather balloons (RS41, 400–406 MHz) – listed in SONDES",
+  aero: "Inmarsat AERO aircraft messages via satellite (1545 MHz, needs an L-band antenna with LNA) – listed in AIRCRAFT TEXT", acars: "ACARS aircraft text messages (AM, 131 MHz) – listed in AIRCRAFT TEXT", vdl2: "VDL2 digital aircraft data link (136 MHz) – ACARS inside it is listed in AIRCRAFT TEXT", sonde: "Radiosonde weather balloons (RS41, 400–406 MHz) – listed in SONDES",
   data: "APRS, DTMF, ZVEI, EAS", wefax: "Weather fax charts (USB mode)", sstv: "SSTV pictures", lrpt: "Meteor-M satellite pictures",
   adsb: "Aircraft tracking on 1090 MHz – opens the ADS-B tab data", goes: "GOES-East/West HRIT images on 1694.1 MHz (needs a dish and LNA)", metop: "Metop-B/C AHRPT images on 1701.3 MHz (needs a dish, an LNA and the 6 or 10 MS/s sample rate)",
   ft8: "FT8 weak-signal digital (USB, 15 s slots) – messages appear in the FT8 tab", ft4: "FT4 (USB, 7.5 s slots)", morse: "Morse code (CW) decoder – opens a box with a ticker tape and the most popular Morse frequencies" };
@@ -3606,6 +3638,7 @@ const HELP = {
   ft8tab: ["FT8 / FT4", "Weak-signal amateur digital modes. Pick a band and press ▶ FT8 (or ▶ FT4): AndySDR tunes USB to the dial frequency and decodes every 15 s UTC slot (FT4: 7.5 s). It also starts by itself when you tune or scan onto an FT8/FT4 channel from the band plan and something is on the air. The PC clock must be accurate. CQ only hides everything except stations calling CQ. From/Grid are read from the message."],
   wfsize: ["Spectrum / waterfall size", "Each box has its own handle. Drag the small bar between the spectrum and the waterfall to make the spectrum taller or shorter, and the small bar under the waterfall to size the waterfall (double-click either bar to reset both). The Waterfall menu picks a fixed waterfall height – Small, Medium, Large or Huge – and Auto fills the space that is left. Once you size a box the panel grows with it and the page scrolls. Reset size puts both back to normal. Your choice is remembered."],
   acars: ["Aircraft text (ACARS)", "ACARS is the airlines' text messaging with aircraft: position and weather reports, flight times (out, off, on, in), maintenance data and short messages. In the UK it is on AM channels around 131 MHz – 131.525, 131.725 and 131.825 are the busiest. Press ▶ Start ACARS (or the ACARS key) and tune one; AndySDR switches to AM and lists what it reads: aircraft registration, flight number, the two-letter label and the message. Click any message to open its details: the aircraft (type, owner and a photo), the flight's route from and to, the airports the message mentions and what that kind of message is – looked up online (only the registration, flight number and airport codes are sent). Click a frequency button to tune it. A block with a damaged character is repaired when it can be, otherwise it is dropped, so a weak signal gives fewer messages rather than wrong ones. Link tests and acknowledgements have no text – tick Hide link tests to hide them. Messages are saved to a CSV file each day, and Export CSV saves the list. ▶ Start VDL2 does the same job for the newer digital link on 136 MHz (UK: 136.975 MHz is the busiest, then 136.725 to 136.925): it reads the 25 kHz wide data signal and lists the ACARS messages inside it, marked VDL2 next to the aircraft. Pick a VDL2 frequency button, wait for a burst – the line at the top counts bursts and frames. VDL2 needs a reasonably strong signal (a short airband or wideband VHF antenna and a clear view); the receiver is set to the 25 kHz digital mode automatically."],
+  aero: ["Inmarsat AERO (aircraft messages by satellite)", "Aircraft far from land (and many airliners everywhere) send their ACARS text through Inmarsat satellites on 1545 MHz. From the UK the satellite is Alphasat at 25°E, low in the south-east sky (see Where to point an L-band antenna). AndySDR reads the continuous signal the satellite sends down to the aircraft - the ground station's side of the conversation - using SatDump's Inmarsat decoder, and lists the messages here marked AERO. You need an L-band antenna: an active patch (RHCP, 1525-1660 MHz) with its LNA powered through bias-T. On the RSP2 use Antenna B and switch the bias-T on; a discone or any DC-grounded antenna must NOT be on bias-T. Steps: 1) point the patch at the satellite and tilt it as the calculator says; 2) press a channel button (or click a narrow carrier on the waterfall near 1545-1547 MHz - the channels move, so look for a thin vertical line, about 1 kHz wide for 600 and 1200 bit/s and 10 kHz wide for 10500); 3) press ▶ Start AERO. AUTO RATE tries 1200, 600 and 10500 bit/s for about a minute each until the decoder locks; if you know the rate, pick it. 4) If the status says 'Carrier found ... Hz from the cursor', press ⌖ Centre on carrier: AndySDR measures where the carrier is to within a few Hz and moves the tuning onto it. The LED is green when the decoder is locked (LOCKED), amber when a carrier is there but nothing has locked yet. While locked, watch the bit-error rate: below 0.22 is good. To fine-tune the antenna, turn and tilt the patch slowly a few degrees at a time, wait ten seconds after each move, and keep the position with the lowest error rate and highest SNR (rotating the patch also finds the best polarisation). Voice calls are not decoded. Only the forward (satellite to aircraft) channel is received. Receiving the messages is for your own interest: do not pass on what you read, and see the Ofcom guidance on the Wireless Telegraphy Act before you leave it running."],
   sonde: ["Weather balloons (radiosondes)", "A radiosonde is the small box a weather balloon carries up to 30 km. It sends its GPS position every second on 400.15–406 MHz. The Met Office launches from about 11:00 and 23:00 UTC at several UK sites. Tune one (use SRCH, or watch the waterfall for a signal about 10 kHz wide) and press ▶ Start sonde decoder: AndySDR switches to narrow FM, 16 kHz wide, and lists every balloon it hears with serial, position, height, speed, climb, heading and satellites, plus the distance and bearing from you when My position is set (ADS-B tab, or a USB GPS unit). Click the position to see it on a map (internet needed). Only Vaisala RS41 sondes are read; other makes (DFM, M10, iMet) are ignored."],
   gps: ["USB GPS unit", "Plug in a USB GPS unit (a GPS 'puck' or dongle that appears as a COM port), tick the box and AndySDR fills in My position by itself – for satellite passes and the ADS-B distance and bearing. Leave Port on Auto-find, or pick the unit from the list (★ marks likely GPS units). The chip shows Fix and the number of satellites once it has a position; the first fix can take a few minutes, and it works best near a window or outdoors. By default it checks once a day (then lets go of the unit); the Check menu can make it every hour, or all the time so it follows you if you move. While this is ticked it replaces any position you typed in."],
   phonelayout: ["Phone layout", "On a phone (or a small tablet held upright or sideways) AndySDR switches to a layout made for thumbs. Four buttons along the bottom: RADIO (the display, big Down and Up buttons that repeat when held, Scan / Search / Skip, and Volume, Squelch and RF gain sliders), MEMORY (your channels as cards – tap the frequency to tune it and jump back to the radio), WEATHER (Pictures, and Passes and schedule) and MORE (every other screen, plus the Phone / Full layout choice). The spectrum options are tucked behind one button so the waterfall gets the room. Tablets and PCs keep the full layout; if a phone is showing the full layout by choice, the Phone layout button brings the phone one back."],

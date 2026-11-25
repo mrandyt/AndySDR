@@ -10,7 +10,7 @@ from collections import deque
 
 import numpy as np
 
-from . import capturemeta, devices, ft8
+from . import aero, capturemeta, devices, ft8
 from .adsb import ADSB_FREQ, Adsb
 from .meshsdr import MeshSdr
 from .ism import IsmSensors
@@ -18,7 +18,7 @@ from .datalink import DatalinkStore
 from .dmrdb import DmrDb
 from .repeaters import Repeaters
 from .lastheard import LastHeard
-from .autodetect import SignalClassifier
+from .autodetect import SignalClassifier, UNSETTLED
 from .config import DEFAULTS as SETTINGS_DEFAULTS, data_dir
 from .decoders import DecoderManager
 from .pager import PagerStore
@@ -329,6 +329,8 @@ class Radio:
                 return False
         if self.decoders.active in ("goes", "metop") and abs(f - self.freq) > 1000000:
             self.decoders.stop()              # moved off the GOES channel
+        if self.decoders.active == "aero" and abs(f - self.freq) > 1000000:
+            self.decoders.stop()              # moved off the Inmarsat L-band channels
         if self.decoders.active == "meshsdr" and abs(f - self.freq) > 100000:
             self.decoders.stop()              # tuned away from the MeshCore channel
         if self.decoders.active == "ism" and abs(f - self.freq) > 1000000:
@@ -380,7 +382,7 @@ class Radio:
         self.call(do)
 
     def _auto_feed(self, out):
-        if self.decoders.active in ("adsb", "ft8", "goes", "metop", "meshsdr", "ism"):
+        if self.decoders.active in ("adsb", "ft8", "goes", "metop", "meshsdr", "ism", "aero"):
             return
         # band plan says FT8 / FT4 here and something is on the air: start that decoder
         if (self.s.get("auto_identify", True) and self.decoders.active in (None, "") and not self.job
@@ -448,6 +450,11 @@ class Radio:
         if gen != self.auto_gen or not self.s.get("auto_identify", True) or self.job:
             return
         r = self.classifier.decide(res)
+        if r and r.get("kind") == UNSETTLED and self.decoders.active == "dsd" and self.decoders.dsd_recent_sync(30):
+            # the classifier cannot name it, but DSD-FME is really locked onto a digital voice signal (a steady run of
+            # clean frames): the decoder's lock is the better evidence, so say that instead of "Unidentified"
+            r = dict(r, kind="Digital voice", label="Digital voice – decoder locked", decoder="dsd",
+                     sub=self.decoders.sub or "auto", conf=0.9)
         if r:
             key = (r.get("kind"), bool(r.get("stable")), r.get("decoder"), r.get("sub"))
             if key != getattr(self, "_auto_logged", None):       # one line per change, so a diagnostics file shows why Auto chose what it did
@@ -633,6 +640,28 @@ class Radio:
 
     def offset(self):
         return self.freq - (self.dev.center if self.dev else self.freq)
+
+    def aero_centre(self):
+        """AERO: move the VFO onto the carrier the carrier finder measured (fine tuning, a few Hz)."""
+        def do():
+            a = self.decoders.aero
+            if not a or self.decoders.active != "aero":
+                self._emit("event", {"level": "warn", "text": "Start the AERO decoder first"})
+                return
+            m = a.measurement()
+            if not m:
+                self._emit("event", {"level": "warn", "text": "AERO: no carrier found yet – tune close to a narrow carrier and wait a few seconds"})
+                return
+            off = m[0]
+            if abs(off) < 5:
+                self._emit("event", {"level": "info", "text": "AERO: already centred on the carrier"})
+                return
+            self._stop_scan()
+            self.channel = None
+            self._tune(int(round(self.freq + off)))
+            self._push_state(True)
+            self._emit("event", {"level": "info", "text": f"AERO: moved {off:+.0f} Hz onto the carrier ({(self.freq) / 1e6:.6f} MHz)"})
+        self.call(do)
 
     # ------------------------------------------------------------------ public controls
     def set_frequency(self, f, mode=None):
@@ -935,6 +964,13 @@ class Radio:
                 self._stop_scan()
                 self.channel = None
                 self._tune(1694100000 if dec_id == "goes" else 1701300000, "DIG25", force=True)
+                self.decoders.start(dec_id, sub)
+            elif dec_id == "aero":
+                self._stop_scan()
+                self.channel = None
+                lo, hi = aero.BAND_MHZ
+                f = self.freq if lo * 1e6 <= self.freq <= hi * 1e6 else int(aero.CHANNELS[0]["mhz"] * 1e6)
+                self._tune(f, "DIG25", force=True)            # IQ decoder: the receiver is re-centred, the VFO stays on the channel
                 self.decoders.start(dec_id, sub)
             else:
                 if dec_id == "acars" and self.mode != "AM":
@@ -1574,7 +1610,7 @@ class Radio:
                 last_pri = time.time()
                 self._priority_check(spec_db)
 
-            if self.decoders.active in ("adsb", "goes", "metop", "meshsdr", "ism"):
+            if self.decoders.active in ("adsb", "goes", "metop", "meshsdr", "ism", "aero"):
                 self.decoders.feed_iq(iq, fs, self.offset())    # these decoders work on the raw samples; no audio
             elif produce:
                 try:

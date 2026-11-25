@@ -211,5 +211,23 @@ m3, sch3 = make(None)
 sch3.tick(when)
 check("no second receiver at all: unchanged behaviour", len(m3.started) == 1 and sch3.running and not sch3.running2)
 
+# ---- a live view must never make a pass go to the main radio (14:59 on 25 Nov: the Nooelec was in live view when the pass began)
+good = FakeDongle("rtlsdr:TEST")
+blank = FakeDongle("rtlsdr:0")                                # what a dongle that is already open looks like on a second scan
+rx4 = SatRx(FakeRadio())
+devices.list_rtl_native = lambda: [blank] if rx4.job is not None else [good]
+rx4.configure(enabled=True, device="rtlsdr:TEST", gain=20.0, gain_mode="fixed")
+check("live-view test: usable before the view", rx4.usable())
+ok, msg = rx4.begin_preview()
+check("live view starts", ok and rx4.busy(), msg)
+rx4._found = (rx4._found[0], 0.0)                             # the list is due for a fresh look while the view is running
+check("a live view does not hide the dongle from the next scan", rx4.usable())
+check("so the second receiver is still offered the pass", rx4.choose() is good, rx4.choose())
+job2 = dict(job, id="sat:meteor_m24:2", gain=20.0, gain_mode="fixed")
+check("a pass that comes due during a live view takes over from it", rx4.begin_job(job2) is True and rx4.busy() and not rx4.job.get("preview"))
+rx4.end_job()
+check("after the pass the dongle is found again by a normal scan", rx4.usable() and rx4.choose() is good)
+devices.list_rtl_native = lambda: [good]
+
 print("FAILED" if fails else "ALL OK", fails)
 sys.exit(1 if fails else 0)
