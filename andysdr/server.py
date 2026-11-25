@@ -555,6 +555,21 @@ class Server:
     def _reply(self, c, kind, data):
         c.push(_ws_frame(json.dumps({"type": kind, "data": data}).encode(), 1), droppable=False)
 
+    @staticmethod
+    def _geo_look(r, extra_lon=None):
+        """Where to point a fixed antenna at each geostationary satellite, from the saved position."""
+        from .lookangle import geo_table
+        obs = r.scheduler.sats.observer()
+        if not obs:
+            return {"error": "Enter your position first (My position, above)."}
+        try:
+            lon = None if extra_lon in (None, "") else float(extra_lon)
+            if lon is not None and not -180.0 <= lon <= 180.0:
+                raise ValueError
+        except (TypeError, ValueError):
+            return {"error": "That longitude was not understood - use degrees, east positive (west negative)."}
+        return {"observer": [obs[0], obs[1]], "rows": geo_table(obs[0], obs[1], obs[2], lon)}
+
     async def _command(self, c, m):
         r = self.radio
         cmd = m.get("cmd")
@@ -935,6 +950,8 @@ class Server:
                 r.scheduler._emit()
             elif cmd == "sat_refresh":
                 r.scheduler.sats.refresh_tles(force=True)
+            elif cmd == "geo_look":
+                self._reply(c, "geo_look", self._geo_look(r, m.get("lon")))
             elif cmd == "schedule_run":
                 r.scheduler.run_now(str(m["id"]))
             elif cmd == "schedule_stop":

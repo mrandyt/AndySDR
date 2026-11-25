@@ -127,6 +127,7 @@ function onJSON(m) {
     case "signal": S.signal = d; renderSignal(); break;
     case "schedule": SCH = d; renderSchedule(); if (typeof rx2OnSchedule === "function") rx2OnSchedule(); break;
     case "satrx_live": if (typeof rx2OnLive === "function") rx2OnLive(d); break;
+    case "geo_look": renderGeo(d); break;
     case "images": renderImages(d); break;
     case "recordings": renderRecordings(d); break;
     case "mesh": MESH = d; renderMesh(); break;
@@ -3116,6 +3117,8 @@ function renderSats() {
   const st = SCH && SCH.sats; if (!st) return;
   const busy = (id) => document.activeElement === $(id);
   if (!busy("satLat") && !busy("satLon")) { $("satLat").value = st.observer ? st.observer[0] : ""; $("satLon").value = st.observer ? st.observer[1] : ""; }
+  const obsKey = JSON.stringify(st.observer || null);
+  if (obsKey !== renderSats.obsKey) { renderSats.obsKey = obsKey; if ($("geoBox").open) geoAsk(); }
   $("satMsg").textContent = !st.have_sgp4 ? "Orbit maths library missing – reinstall AndySDR." : !st.observer ? "Enter your position (or use my location) to see passes." : st.busy ? "Downloading orbit data …" : st.error || "";
   renderSatRx();
   if ([...document.querySelectorAll("#satTable input")].some((e) => e === document.activeElement)) return;
@@ -3260,6 +3263,32 @@ function renderSatRx() {
     b.onclick = () => send({ cmd: b.dataset.sact === "check" ? "satrx_check" : "satrx_refresh" });
   });
 }
+/* ---- where to point a fixed (geostationary) antenna */
+function geoAsk() {
+  const v = $("geoLon").value.trim().replace(",", ".");
+  send({ cmd: "geo_look", lon: v === "" ? null : v });
+}
+function renderGeo(d) {
+  const tb = $("geoTable").querySelector("tbody");
+  if (!d || d.error) {
+    tb.innerHTML = `<tr><td colspan="5" class="muted">${esc((d && d.error) || "No answer")}</td></tr>`;
+    $("geoSum").textContent = ""; $("geoMsg").textContent = ""; return;
+  }
+  const rows = d.rows || [];
+  const inm = rows.find((r) => r.id === "alphasat" && r.visible);
+  $("geoSum").textContent = inm ? `· Inmarsat (Alphasat): ${Math.round(inm.az)}° ${inm.compass}, ${Math.round(inm.el)}° up` : "";
+  tb.innerHTML = rows.map((r) => r.visible
+    ? `<tr><td>${esc(r.name)}<div class="muted small">${r.lon >= 0 ? r.lon + "° E" : -r.lon + "° W"}</div></td>
+        <td><b>${Math.round(r.az)}°</b> ${esc(r.compass)}</td><td><b>${Math.round(r.el)}°</b></td>
+        <td>${Math.round(r.tilt)}° up from flat</td><td>${esc(r.band)}${r.note ? `<div class="muted small">${esc(r.note)}</div>` : ""}</td></tr>`
+    : `<tr class="muted"><td>${esc(r.name)}<div class="small">${r.lon >= 0 ? r.lon + "° E" : -r.lon + "° W"}</div></td>
+        <td colspan="3">Below your horizon (${Math.round(r.el)}°) - cannot be received from here</td><td>${esc(r.band)}</td></tr>`).join("");
+  $("geoMsg").textContent = "Bearings are from TRUE north (a compass reads magnetic north, a degree or two different in the UK). Height is measured up from a flat horizon: aim the face of the patch at that bearing and height, with a clear view - trees and buildings in that direction weaken the signal most. Satellite slots are fixed to about 0.1°, but operators move satellites, so check one is still in use.";
+}
+$("geoGo").onclick = geoAsk;
+$("geoLon").onkeydown = (e) => { if (e.key === "Enter") geoAsk(); };
+$("geoBox").addEventListener("toggle", () => { if ($("geoBox").open) geoAsk(); });
+
 $("satPosSet").onclick = () => send({ cmd: "sat_observer", lat: $("satLat").value.trim().replace(",", "."), lon: $("satLon").value.trim().replace(",", ".") });
 $("satPosGps").onclick = () => {
   if (!navigator.geolocation) { toast("This browser has no location service", "warn"); return; }
@@ -3585,6 +3614,7 @@ const HELP = {
   rxstrip: ["Receiver status strip", "Shows both receivers on every screen: the main one (for example the RSP2 Pro) and what it is doing - tuned to a frequency, scanning, searching or recording - and the second one (the Nooelec) with its state: switched off, ready with a countdown to the next pass, recording or a problem. Click the second one to open its screen."],
   mempages: ["Memory pages", "The saved stations are shown a page at a time so a long list is easy to handle. Use Prev / Next or tap a page number; 'Show … per page' changes how many are on a page (it is remembered on this device). The list jumps to the page of the station that is playing."],
   satrx: ["Second receiver (137 MHz Meteor)", "Lets a cheap RTL-SDR dongle – for example a Nooelec NESDR SMArt v5 on its own 137 MHz antenna – record the Meteor-M N2-3 / N2-4 pictures while the main receiver (the RSP2 Pro) stays free for listening, scanning and decoding. Plug the dongle in, tick 'Use a second receiver' and press 'Check it' (it opens the dongle for a moment and says what it found). The dongle is opened only while a pass is being recorded and let go of afterwards. RF gain is its own setting: 'Use this gain' always uses the number you type; 'Learn the best' starts there and tries a little lower and higher on successive passes, keeping what gives the strongest signal (see the Pass report, where passes recorded on it are marked '2nd rx'). Bias-T powers an antenna amplifier through the coax – leave it off unless you have one that needs it. If the dongle is missing, is the same one the main receiver uses, or will not open, Meteor passes simply go to the main receiver as before. It records only the 137 MHz Meteors; ISS, Metop and GOES stay on the main receiver. If both Meteors are overhead together, the second receiver takes one and the main receiver the other."],
+  geolook: ["Where to point an L-band antenna", "For satellites that stay in one place in the sky (Inmarsat, Elektro-L, Meteosat, GOES) this works out where to aim a fixed antenna from My position. Aim = the compass bearing (from TRUE north - a compass reads magnetic north, within a degree or two in the UK). Height = how many degrees above a flat horizon. Tilt = how far to lean a flat patch antenna back from lying flat so its face looks at the satellite. Satellites below your horizon are marked as such. Type any longitude in the box (degrees east, west is negative) to work out one that is not listed. A clear view towards the satellite matters most - trees and buildings in that direction weaken the signal. Iridium satellites move across the whole sky, so for those point the patch straight up. Operators do move satellites between slots, so treat the list as a starting point."],
   passreport: ["Pass report", "One line for every satellite pass AndySDR records: when, the highest the satellite climbed, the RF gain used, how far its signal stood above the noise (Signal, in dB – bigger is better) and what came out (pictures, or none). Meteor pictures are made a few minutes after the pass ends, so the newest line says 'processing' for a while. Use it to find the RF gain that works best: open a satellite's Options and choose RF gain on passes – 'Use the RF GAIN knob' (default), 'Fixed value', or 'Learn the best'. Learn the best tries a little lower and a little higher than its best gain on successive passes, compares the signal (corrected for distance, so low and high passes can be compared) and keeps the winner, re-checking now and then in case things change; passes below 20° do not count. The Use button copies the best gain found so far into a fixed value. The hardware AGC, if you turn it on, overrides all of this. The same lines are in the diagnostics zip (satellite-passes.jsonl)."],
   satauto: ["Satellite auto-capture", "Tick Record on a satellite and AndySDR predicts every pass over your position for the next 4 days (listed day by day) (set it with My position or 📍), tunes at acquisition of signal, follows the Doppler shift if Follow Doppler is ticked (open a satellite's Options button for that, minimum elevation, days, dates and RF gain), runs the right decoder and stops when the satellite sets – then puts the radio back as it was. ISS SSTV listens on 145.800 MHz FM (limit it to the ARISS event dates with the date boxes); Meteor-M N2-3 and N2-4 are LRPT on 137.900 MHz (switch to 137.100 if the satellite moves); GOES-19/18 are 1694.1 MHz HRIT from geostationary orbit – AndySDR says honestly when the satellite is below your horizon. Tick the days of the week you want (none ticked = every day) – you never type a time, AndySDR starts each capture only when the satellite is actually above your horizon. Minimum elevation hides low, weak passes. Orbit data (TLEs) is downloaded from CelesTrak and refreshed automatically. A capture you add by hand always takes priority. Only satellites you can actually receive from your position are listed (the GOES satellites over the Americas are hidden in the UK). NOAA 15, 18 and 19 (classic 137 MHz APT) were retired in 2025. From the UK the weather pictures you can receive are Meteor-M N2-3 / N2-4 (137 MHz LRPT – a simple turnstile or V-dipole antenna and an LNA are enough) and Metop-B / Metop-C (1701.3 MHz AHRPT – needs a dish, an L-band LNA and the 6 or 10 MS/s sample rate)."],
   sched: ["Scheduler", "Captures that run by themselves at set times – ideal for weather fax charts, ISS SSTV events and Meteor-M satellite passes. Pick a station from Quick pick (or type a frequency), choose what to do (WEFAX, SSTV, LRPT, record…), the start time on this PC's clock and how long, and either tick days of the week or pick a single date. At the start time AndySDR stops scanning, tunes, runs the decoder; at the end it saves the pictures and puts the radio back exactly as it was. Only one capture can run at a time: if two overlap, the one with the higher Priority takes over the radio (satellite passes count as High) and an interrupted capture carries on afterwards if time is left; overlaps are flagged with ⚠ and listed above the table. ▶ Now runs one straight away. AndySDR must be running (it can run as a server in the background)."],

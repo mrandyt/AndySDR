@@ -786,6 +786,17 @@
       <details class="satpos" id="satRxBox" data-help="satrx"><summary>📡 Second receiver for 137 MHz Meteor pictures <span class="muted small" id="satRxSum"></span></summary>
         <div id="satRx" class="satrx small"></div>
       </details>
+      <details class="satpos" id="geoBox" data-help="geolook"><summary>🧭 Where to point an L-band antenna (fixed satellites) <span class="muted small" id="geoSum"></span></summary>
+        <div class="row wrapline">
+          <span class="muted small">For Inmarsat, Elektro-L, Meteosat and other satellites that stay in one place in the sky: the bearing and height to aim at, worked out from My position.</span>
+          <span class="grow"></span>
+          <label>or any longitude <input class="inp" id="geoLon" placeholder="e.g. 25 or -15.5" style="width:10.5em" inputmode="decimal" title="Degrees east (west is negative)"></label>
+          <button class="btn sm" id="geoGo">Work out</button>
+        </div>
+        <div class="tablewrap"><table class="grid" id="geoTable">
+          <thead><tr><th>Satellite</th><th>Aim (true bearing)</th><th>Height above horizon</th><th>Tilt a flat patch</th><th>Used for</th></tr></thead><tbody></tbody></table></div>
+        <div class="muted small" id="geoMsg"></div>
+      </details>
       <div id="satTable" class="satlist"></div>
       <div class="row wrapline"><b>Pass schedule – recording starts and stops by itself on each pass</b><span class="grow"></span><button class="btn sm" id="satMore" hidden>Show all passes</button></div>
       <div class="tablewrap"><table class="grid" id="satPasses">
