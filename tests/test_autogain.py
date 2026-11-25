@@ -16,7 +16,8 @@ class Dev:
 
 def radio(auto=True, gain=90.0, agc=False):
     r = types.SimpleNamespace(dev=Dev(), s={"rf_gain": gain, "agc": agc, "auto_gain": auto}, scan={"state": "manual"},
-                              freq=167_925_000, level_db=-80.0, ag_cur=None, ag_freq=None, ag_over=0, ag_t=0.0, ag_log_t=0.0, job_gain=None)
+                              freq=167_925_000, level_db=-80.0, ag_cur=None, ag_freq=None, ag_over=0, ag_t=0.0, ag_log_t=0.0, job_gain=None,
+                              ag_quiet_t=None, ag_raised_t=0.0, ag_hold_t=0.0, ag_ovl_seen=0, ag_ovl_t=0.0)
     r._knob = lambda: E.Radio._knob(r)
     return r
 tick = lambda r, t: E.Radio._autogain_tick(r, t)
@@ -68,5 +69,50 @@ check("while scanning it stays out of the way", r3.dev.sets == [])
 r4 = radio(); r4.dev = None
 tick(r4, 1.0)
 check("with no receiver it does nothing and does not fail", True)
+
+# --- climbing back after the strong signal has gone
+r5 = radio(gain=90.0); t = 1000.0
+r5.level_db = -30.0
+for _ in range(40): t += 0.05; tick(r5, t)
+eased = r5.dev.sets[-1]
+check("strong signal: eased", eased < 90.0, r5.dev.sets)
+r5.level_db = -80.0
+n = len(r5.dev.sets)
+for _ in range(int(4 / 0.05)): t += 0.05; tick(r5, t)
+check("a few quiet seconds are not enough to climb back", len(r5.dev.sets) == n, r5.dev.sets[n:])
+for _ in range(int(4 / 0.05)): t += 0.05; tick(r5, t)
+check("after 6 quiet seconds it climbs one step", r5.dev.sets[n:] == [eased + 6.0], r5.dev.sets[n:])
+for _ in range(int(60 / 0.05)): t += 0.05; tick(r5, t)
+check("and carries on up to the knob, never past it", r5.dev.sets[-1] == 90.0 and max(r5.dev.sets) <= 90.0, r5.dev.sets)
+# hunting guard: pushed down again soon after a climb -> hold
+r6 = radio(gain=90.0); t = 2000.0
+r6.level_db = -30.0
+for _ in range(40): t += 0.05; tick(r6, t)
+r6.level_db = -80.0
+for _ in range(int(7.5 / 0.05)): t += 0.05; tick(r6, t)           # one climb
+r6.level_db = -30.0
+for _ in range(60): t += 0.05; tick(r6, t)                        # strong again at once
+low = r6.dev.sets[-1]
+r6.level_db = -80.0
+n = len(r6.dev.sets)
+for _ in range(int(30 / 0.05)): t += 0.05; tick(r6, t)
+check("pushed down again soon after a climb: it waits a minute before climbing again", len(r6.dev.sets) == n, r6.dev.sets[n:])
+for _ in range(int(40 / 0.05)): t += 0.05; tick(r6, t)
+check("... then climbs again", r6.dev.sets[-1] > low, r6.dev.sets)
+
+# --- the receiver's own overload report eases the gain even when the channel itself is quiet
+r7 = radio(gain=100.0); r7.dev.overloads = 0; t = 3000.0
+r7.level_db = -90.0
+for _ in range(20): t += 0.05; tick(r7, t)
+check("no overload, quiet channel: nothing", r7.dev.sets == [])
+r7.dev.overloads = 2
+t += 0.05; tick(r7, t)
+check("an overload report eases the gain at once", r7.dev.sets == [94.0], r7.dev.sets)
+for _ in range(int(2 / 0.05)):
+    t += 0.05; r7.dev.overloads += 1; tick(r7, t)
+check("repeated overloads keep easing, but not below half the range from the knob", min(r7.dev.sets) >= 50.0 and len(r7.dev.sets) >= 2, r7.dev.sets)
+n = len(r7.dev.sets)
+for _ in range(int(5 / 0.05)): t += 0.05; tick(r7, t)
+check("it does not climb back while overloads are recent", len(r7.dev.sets) == n, r7.dev.sets[n:])
 print("ALL PASS" if not fails else "FAILED: " + "; ".join(fails))
 sys.exit(1 if fails else 0)

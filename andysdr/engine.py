@@ -38,6 +38,10 @@ AG_BLOCKS = 6            # ... if it stays that strong for this many 50 ms block
 AG_SETTLE_S = 1.0        # ... and then waits this long for the radio to settle before the next step
 AG_STEP_FRAC = 0.06      # each step lowers the gain by this fraction of the receiver's gain range
 AG_MAX_DROP = 0.35       # ... but never by more than this fraction of the range in total
+AG_QUIET_DB = 10.0       # auto RF gain: the channel is "quiet" when it is this far below the strong-signal level ...
+AG_RECOVER_S = 6.0       # ... for this long: the gain then climbs back one step (so a weak caller after a strong one is still heard)
+AG_OVL_DROP = 0.5        # when the receiver itself reports ADC overload, the gain may be eased down this fraction of the range
+AG_HOLD_S = 60.0         # ... but not for this long after a strong signal pushed it down again soon after a climb
 MUTE_WHEN_DECODING = ("dsd", "tetra", "tetrapol", "pager", "data")
 REPLAY_MAX_S = 120                    # the replay buffer remembers up to two minutes of what you heard
 
@@ -96,6 +100,11 @@ class Radio:
         self.ag_over = 0
         self.ag_t = 0.0
         self.ag_log_t = 0.0
+        self.ag_quiet_t = None    # auto RF gain: since when the channel has been quiet (None = not quiet)
+        self.ag_raised_t = 0.0    # ... when the gain last climbed back
+        self.ag_hold_t = 0.0      # ... no climbing back before this time
+        self.ag_ovl_seen = 0      # ... ADC overload events counted by the receiver so far
+        self.ag_ovl_t = 0.0       # ... when the receiver last reported an overload
         self.pass_images = 0      # pictures that came out while the pass was running
         self.job_gain = None      # RF gain chosen for the satellite pass being recorded (None = the knob's value)
         self.pass_meter = None    # measures the signal during a satellite pass
@@ -697,11 +706,31 @@ class Radio:
                 dev.set_gain(ceiling)
             self.ag_cur = ceiling
         self.ag_over = self.ag_over + 1 if self.level_db > AG_HIGH_DB else 0
-        if self.ag_over < AG_BLOCKS or now - self.ag_t < AG_SETTLE_S:
-            return
+        ovl = int(getattr(dev, "overloads", 0) or 0)
+        overloaded = ovl > self.ag_ovl_seen               # the receiver's own ADC overload report: strong signals somewhere in the band
+        self.ag_ovl_seen = ovl
+        if overloaded:
+            self.ag_ovl_t = now
         lo, hi = dev.gain_range()
         span = max(1.0, float(hi) - float(lo))
-        floor = max(float(lo), ceiling - AG_MAX_DROP * span)
+        # Climb back: once the strong signal has gone (the channel is quiet for a while) the gain returns one step at a time
+        # towards the knob, so a weaker caller on the same frequency is not lost to a gain set for the strong one before it.
+        if self.ag_cur < ceiling and self.level_db < AG_HIGH_DB - AG_QUIET_DB and now - self.ag_ovl_t >= AG_RECOVER_S:
+            if self.ag_quiet_t is None:
+                self.ag_quiet_t = now
+            if now - self.ag_quiet_t >= AG_RECOVER_S and now >= self.ag_hold_t and now - self.ag_t >= AG_SETTLE_S:
+                self.ag_cur = min(ceiling, self.ag_cur + max(1.0, AG_STEP_FRAC * span))
+                self.ag_t = self.ag_raised_t = now
+                self.ag_quiet_t = now
+                dev.set_gain(self.ag_cur)
+                return
+        else:
+            self.ag_quiet_t = None
+        if (self.ag_over < AG_BLOCKS and not overloaded) or now - self.ag_t < AG_SETTLE_S:
+            return
+        if now - self.ag_raised_t < 20.0:                # it was pushed down again soon after climbing: stop trying for a while
+            self.ag_hold_t = now + AG_HOLD_S
+        floor = max(float(lo), ceiling - (AG_OVL_DROP if overloaded else AG_MAX_DROP) * span)
         if self.ag_cur <= floor:
             return
         self.ag_cur = max(floor, self.ag_cur - max(1.0, AG_STEP_FRAC * span))
@@ -710,7 +739,8 @@ class Radio:
         dev.set_gain(self.ag_cur)
         if now - self.ag_log_t > 5:
             self.ag_log_t = now
-            log.info("auto RF gain: strong signal (%.0f dB) - gain eased to %.1f (knob %.1f)", self.level_db, self.ag_cur, ceiling)
+            log.info("auto RF gain: %s - gain eased to %.1f (knob %.1f)",
+                     "receiver overload" if overloaded else "strong signal (%.0f dB)" % self.level_db, self.ag_cur, ceiling)
 
     def set_agc(self, on):
         def do():
