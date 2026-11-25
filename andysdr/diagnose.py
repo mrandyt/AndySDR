@@ -51,12 +51,12 @@ def check_receiver(radio):
         out.append(item("rx", "warn", "A receiver was found but is not open – the simulator is running",
                         "Found: " + ", ".join(str(getattr(d, "label", "?")) for d in real) + ".",
                         "Another program (SDRuno, SDR++, SDRangel ...) may be using it – close it, then pick the receiver again "
-                        "in the Receiver tab (or unplug it and plug it back in)."))
+                        "in Settings › Receivers (or unplug it and plug it back in)."))
     else:
         out.append(item("rx", "bad", "No receiver found – the simulator is running (test signals only)",
                         "AndySDR looked for SDRplay RSPs, RTL-SDR dongles (Nooelec) and SoapySDR devices.",
                         "Plug the receiver in (a USB 2.0 / 3.0 port on the PC itself, not a hub if you can), close other SDR programs "
-                        "and press Refresh devices in the Receiver tab. RSP receivers need the SDRplay API; RTL dongles need the "
+                        "and press Find receivers in Settings › Receivers. RSP receivers need the SDRplay API; RTL dongles need the "
                         "WinUSB driver (Zadig)."))
     return out
 
@@ -221,7 +221,7 @@ def check_network(settings, server_addresses, run=_run, windows=None):
     if weak:
         out.append(item("password", "warn", "The remote password is short or easy to guess",
                         "Anyone on your Wi-Fi who guesses it can control the radio.",
-                        "Set a longer one in Remote & Settings (the generated ANDY-… password is fine)."))
+                        "Set a longer one in Settings › Remote access (the generated ANDY-… password is fine)."))
     else:
         out.append(item("password", "ok", "A remote password is set"))
     if windows:
@@ -437,6 +437,18 @@ def build_zip(rep, settings_data, folder=None, extra=None):
         for name, text in (extra or {}).items():
             if text:
                 z.writestr(name, text)
+        try:                                          # what SatDump itself said about the newest passes (why a pass made no pictures)
+            found = []
+            for d in os.listdir(os.path.join(folder, "images")):
+                f = os.path.join(folder, "images", d, "satdump.log")
+                if os.path.isfile(f):
+                    found.append((os.path.getmtime(f), d, f))
+            for _t, d, f in sorted(found)[-3:]:
+                data = _tail(f)
+                if data:
+                    z.writestr("satdump/" + d + ".log", data)
+        except OSError:
+            pass
         logs = os.path.join(folder, "logs")
         try:
             names = sorted(os.listdir(logs))

@@ -143,10 +143,10 @@
     if (!list) return;
     // grouped, with a line saying what each screen is for; anything not named here still shows up (under Other)
     const GROUPS = [
-      ["Radios", [["rx", "Main radio: device, gain, sample rate"], ["rx2", "The dongle for weather satellites, aiming meter"], ["sch", "Satellite passes and timed recordings"]]],
+      ["Radios", [["rx2", "The dongle for weather satellites, aiming meter"], ["sch", "Satellite passes and timed recordings"]]],
       ["Find and listen", [["act", "What has been heard, search a band"], ["bp", "Who uses which frequency"], ["rep", "Nearest UK repeaters"], ["rec", "Your sound recordings"]]],
       ["Decoders", [["dec", "DMR, P25, TETRA, NXDN and more"], ["pag", "Pager messages"], ["acars", "Aircraft text messages"], ["adsb", "Aircraft on a map"], ["sonde", "Weather balloons"], ["ism", "433 / 868 MHz sensors"], ["ft8", "FT8 / FT4 amateur radio"], ["mesh", "MeshCore chat"]]],
-      ["Settings", [["net", "Password, remote access, updates"]]],
+      ["Settings", [["set", "Receivers, audio, decoders, password, alerts, updates"]]],
     ];
     const btns = {};
     tabButtons().forEach((b) => { btns[b.dataset.tab] = b; });
@@ -281,7 +281,7 @@
     const on = (id, el) => { const e = $(id); if (e) e.classList.toggle("on", !!(el && el.classList.contains("on"))); };
     on("phScan", $("fScan")); on("phSrch", $("fSrch"));
     on("phAudio", $("pwrLed")); on("phAgc", $("gainAgc"));
-    if ($("phAudio")) $("phAudio").textContent = $("pwrLed") && $("pwrLed").classList.contains("on") ? "Audio on" : "Audio off";
+    if ($("phAudio")) { const live = !!($("pwrBtn") && !$("pwrBtn").classList.contains("is-muted")); $("phAudio").classList.toggle("on", live); $("phAudio").classList.toggle("is-muted", !live); $("phAudio").textContent = live ? "Audio on" : "Muted"; }
     if ($("phAgc") && $("gainAgc")) $("phAgc").textContent = $("gainAgc").textContent.trim() || "AGC";
     if (page === "more") refreshBadges();
   }

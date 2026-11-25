@@ -863,7 +863,7 @@ class Adsb:
             ok1 = self.sbs.start()
             ok2 = self.raw.start()
             if not (ok1 and ok2):
-                self.emit("event", {"level": "warn", "text": "ADS-B feed: a port is already in use – see Receiver tab"})
+                self.emit("event", {"level": "warn", "text": "ADS-B feed: a port is already in use – see Settings › Sharing & logging"})
         else:
             self.sbs.stop()
             self.raw.stop()

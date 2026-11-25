@@ -945,28 +945,12 @@ html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spec
 [data-theme] .radio-right { order: 3; }
 [data-theme] .quick { order: 4; background: none; border: 0; padding: 0; box-shadow: none; }
 
-/* Modern: the controls card scrolls on its own so the spectrum stays in view; long labels wrap instead of being cut off */
-@media (min-width: 1101px) {
-  [data-theme] .wrap > .radio { position: sticky; top: 84px; max-height: calc(100vh - 108px); overflow-y: auto; scrollbar-width: thin; }
-}
-/* (replaced below by a fixed-height work area – sticky panels slid over the tables when scrolling) */
 [data-theme] .q-row { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
 [data-theme] .key.q { white-space: normal; line-height: 1.2; overflow: visible; text-overflow: clip; }
 
 /* Modern: Morse decoder in the theme colour instead of amber */
 [data-theme] .ticker span { color: var(--accent); text-shadow: none; }
 [data-theme] .ticker { border-color: var(--line); background: var(--lcd); }
-
-/* Modern, wide screens: the radio card and the spectrum fill one screen-high work area (each scrolls/shrinks inside it);
-   the tabs and tables sit below it and scroll normally – nothing is sticky, so nothing can slide over the tables. */
-@media (min-width: 1101px) {
-  [data-theme] .wrap { grid-template-rows: minmax(520px, calc(100vh - 124px)) auto; }
-  [data-theme] .wrap > .radio { position: static; top: auto; height: 100%; max-height: none; align-self: stretch; overflow-y: auto; scrollbar-width: thin; }
-  [data-theme] .wrap > .scope { position: static; top: auto; height: 100%; align-self: stretch; display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto; }
-  [data-theme] .scope > * { flex: 0 0 auto; }
-  [data-theme] #spec { height: calc(clamp(140px, 26vh, 300px) + var(--bp-strip, 30px)); }
-  [data-theme] #wf { flex: 1 1 0; height: 0; min-height: 220px; }
-}
 
 /* User-adjustable spectrum / waterfall size (drag the bar between them, or use the Waterfall menu) */
 .splitter { height: 14px; margin: -2px 0; cursor: row-resize; display: flex; align-items: center; justify-content: center; touch-action: none; user-select: none; flex: 0 0 auto; }
@@ -1130,10 +1114,6 @@ body.customise #qJump .key::after { content: none; }
 
 /* tables that scroll sideways inside their own box keep their heading row at the top of that box (a sticky heading offset by the top bar would sit on top of the first rows) */
 #tab-sch .tablewrap th, #tab-rep .tablewrap th { top: 0; }
-/* side-by-side styles: the spectrum panel used to stay pinned while you scrolled and sat on top of the tables below it (memory list, scheduler ...) - now it scrolls away with the page */
-@media (min-width: 1101px) {
-  [data-theme] .wrap > .scope { position: static; height: auto; min-height: 420px; max-height: none; }
-}
 
 
 .chk-act { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; }
@@ -1254,3 +1234,180 @@ body.phone .rx2-gain .btn { min-height: 44px; min-width: 44px; }
 .ai-raw { font-family: var(--mono, monospace); white-space: pre-wrap; word-break: break-all; background: var(--panel2);
           border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 0; font-size: 13px; }
 #acarsTable tbody tr { cursor: pointer; }
+
+/* =====================================================================
+   1.23 tidy-up
+   - the page scrolls once: no boxes that scroll inside other boxes
+   - a shorter controls card: status strip, keypad and knobs take less room
+   - one SETTINGS page (the full-screen sheet opened from the top bar)
+   ===================================================================== */
+
+/* ---- page: controls card and spectrum side by side, each its natural height ---- */
+@media (min-width: 1101px) {
+  [data-theme] .wrap { grid-template-rows: auto auto; }
+  [data-theme] .wrap > .radio { position: static; top: auto; height: auto; max-height: none; overflow: visible; align-self: stretch; }
+  [data-theme] .wrap > .scope { position: static; top: auto; height: auto; min-height: 0; max-height: none; overflow: visible; align-self: stretch; display: flex; flex-direction: column; }
+  [data-theme] .scope > * { flex: 0 0 auto; }
+  [data-theme] #spec { height: calc(clamp(200px, 32vh, 360px) + var(--bp-strip, 30px)); }
+  [data-theme] #wf { flex: 1 1 0; height: 0; min-height: 280px; }
+}
+[data-theme] .scope-bar { flex-wrap: wrap; gap: 8px 20px; }
+
+/* ---- the controls card ---- */
+body:not(.phone)[data-theme] .top-status .tchip.minor { display: none; }
+body:not(.phone)[data-theme] .radio-top { padding: 14px 20px 0; }
+body:not(.phone)[data-theme] .top-status { display: flex; flex-wrap: wrap; gap: 8px; }
+body:not(.phone)[data-theme] .tchip { flex-direction: row; align-items: baseline; gap: 8px; padding: 6px 12px; border-radius: 999px; }
+body:not(.phone)[data-theme] .radio-body { gap: 14px; padding: 14px 20px 20px; }
+
+/* the display: less tall, the frequency stays big */
+body:not(.phone)[data-theme] .lcd { min-height: 0; padding: 14px 20px; gap: 8px; }
+body:not(.phone)[data-theme] .lcd-main { flex: 0 0 auto; padding: 2px 0; }
+body:not(.phone)[data-theme] .lcd-freq { height: min(11.5cqw, 92px); }
+body:not(.phone)[data-theme] .lcd-freq .seg { height: min(10.5cqw, 86px); }
+
+/* order in the card: display, dials + audio, keys, then the tune / digital / tools pages */
+body:not(.phone)[data-theme] .lcd { order: 1; }
+body:not(.phone)[data-theme] .radio-left { order: 2; display: grid; grid-template-columns: minmax(0, 1fr) 104px; gap: 12px; align-items: stretch; }
+body:not(.phone)[data-theme] .radio-right { order: 3; display: grid; grid-template-columns: minmax(0, 1fr) 58px; gap: 10px; align-items: stretch; }
+body:not(.phone)[data-theme] .q-jump { order: 4; margin: 2px 0 0; }
+body:not(.phone)[data-theme] .quick { order: 5; }
+
+body:not(.phone)[data-theme] .radio-left .knobs { grid-column: 1; padding: 12px 8px; }
+body:not(.phone)[data-theme] .radio-left .knob { width: 64px; height: 64px; }
+body:not(.phone)[data-theme] .radio-left .knob-wrap { width: 92px; gap: 5px; }
+body:not(.phone)[data-theme] .radio-left .key-power { grid-column: 2; grid-row: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 8px; white-space: normal; line-height: 1.25; text-align: center; font-size: 13px; }
+body:not(.phone)[data-theme] .radio-left .leds { display: none; }   /* the display already lights SCAN / REC / DEC */
+
+/* keypad: the seven keys you use, then MORE for the rest */
+body:not(.phone)[data-theme] .fkeys { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+body:not(.phone)[data-theme] .fkeys .key { min-height: 40px; padding: 8px 4px; font-size: 13px; }
+body:not(.phone) .fkeys:not(.open) .key-extra { display: none; }
+body:not(.phone)[data-theme] .fkeys .key-more { border-style: dashed; color: var(--muted); background: transparent; }
+body.phone .key-more { display: none; }
+body:not(.phone)[data-theme] .arrows { display: flex; flex-direction: column-reverse; gap: 8px; }
+body:not(.phone)[data-theme] .arrows .key { flex: 1; min-height: 40px; padding: 4px; }
+
+/* quick pages: tighter */
+body:not(.phone)[data-theme] .q-group { padding: 10px 12px; gap: 6px; }
+body:not(.phone)[data-theme] .quick { gap: 10px; }
+body:not(.phone)[data-theme] .q-row { grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 6px; }
+
+/* tab bar: smaller tabs so it fits on one or two lines */
+[data-theme] .tabbar { padding: 6px 10px 0; gap: 2px; }
+[data-theme] .tab { padding: 10px 13px; font-size: 12.5px; letter-spacing: .4px; }
+body:not(.phone) .tab-set { display: none; }          /* SETTINGS opens from the top bar on a PC; the phone menu lists it */
+
+/* ---- top bar button ---- */
+.set-btn { white-space: nowrap; flex: none; background: transparent; color: var(--text); border: 1px solid var(--line); border-radius: 999px; padding: 8px 18px; font-weight: 700; cursor: pointer; letter-spacing: 0; }
+.set-btn:hover { border-color: var(--accent); color: var(--accent); }
+body.set-open .set-btn { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+body.set-open { overflow: hidden; }
+
+/* small pieces elsewhere */
+.dec-hint { align-items: center; }
+.setlink { color: var(--accent); font-weight: 600; text-decoration: none; }
+.setlink:hover { text-decoration: underline; }
+.sat-poshint { flex-direction: row; align-items: center; gap: 14px; border: 1px solid var(--accent); }
+.sat-poshint[hidden] { display: none; }
+
+/* ---- the SETTINGS page ---- */
+body:not(.phone) #tab-set.active { display: flex; flex-direction: column; gap: 0; padding: 0; position: fixed; left: 0; right: 0; bottom: 0; top: var(--topbar-h, 64px); z-index: 15; background: var(--page); overflow-y: auto; }
+.set-top { display: flex; align-items: center; gap: 16px; padding: 14px 28px; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 3; }
+.set-top h2 { margin: 0; font-size: 20px; white-space: nowrap; }
+.set-top #setSearch { width: min(460px, 100%); }
+.set-body { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 28px; padding: 24px 28px 56px; width: 100%; max-width: 1500px; margin: 0 auto; align-items: start; }
+.set-nav { position: sticky; top: 92px; display: flex; flex-direction: column; gap: 4px; }
+.set-nav-btn { display: flex; align-items: center; gap: 12px; text-align: left; padding: 10px 12px; border-radius: 12px; border: 1px solid transparent; background: none; color: var(--text); cursor: pointer; font: inherit; }
+.set-nav-btn:hover { background: var(--panel2); }
+.set-nav-btn.on { background: var(--panel); border-color: var(--accent); }
+.set-nav-btn .sn-i { font-size: 20px; width: 28px; text-align: center; flex: none; }
+.set-nav-btn .sn-t b { display: block; font-size: 14px; }
+.set-nav-btn .sn-t small { display: block; font-size: 11.5px; color: var(--muted); line-height: 1.3; }
+.searching .set-nav-btn.on { background: none; border-color: transparent; }
+.set-cat { display: none; }
+.set-cat.on { display: block; }
+.searching .set-cat { display: block; margin-bottom: 26px; }
+.searching .set-cat.set-empty { display: none; }
+.set-h { margin: 0 0 4px; font-size: 22px; }
+.set-sub { margin: 0 0 18px; color: var(--muted); }
+.set-grid { display: block; column-width: 400px; column-gap: 16px; }          /* cards flow down the columns: no gaps under short cards */
+.set-grid > .card { break-inside: avoid; margin: 0 0 16px; }
+.set-grid > .card.wide { column-span: all; }
+.set-grid > .card.set-miss { display: none; }
+#tab-set .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; gap: 12px; }
+#tab-set .card .card { background: var(--panel2); border-radius: 12px; }
+#tab-set .card h3 { font-size: 15px; letter-spacing: .2px; color: var(--text); }
+#tab-set .card label { color: var(--text); }
+.set-checks { display: flex; flex-direction: column; gap: 10px; }
+.set-form { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+.set-pick { display: flex; align-items: center; gap: 10px; color: var(--text); }
+.set-none { padding: 30px 4px; font-size: 15px; }
+.set-flash { box-shadow: 0 0 0 3px var(--accent); transition: box-shadow .4s; }
+.set-lh { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.set-lh #lhDb { font-size: 12.5px; }
+#tab-set #decFetch { align-self: flex-start; }
+.setrx > .row { margin-bottom: 10px; }
+@media (max-width: 900px) {
+  .set-body { grid-template-columns: minmax(0, 1fr); gap: 14px; padding: 14px 14px 40px; }
+  .set-nav { position: static; flex-direction: row; overflow-x: auto; gap: 8px; padding-bottom: 6px; }
+  .set-nav-btn { flex: none; padding: 8px 12px; }
+  .set-nav-btn .sn-t small { display: none; }
+  .set-top { padding: 10px 14px; flex-wrap: wrap; gap: 10px; }
+  .set-grid { grid-template-columns: minmax(0, 1fr); }
+}
+body.phone #setClose, body.phone .set-top h2 { display: none; }
+body.phone .set-top { position: static; background: none; border: 0; padding: 10px 12px 0; }
+body.phone .set-top #setSearch { width: 100%; }
+/* phone: settings controls never wider than the screen */
+body.phone #tab-set select, body.phone #tab-set .inp, body.phone #tab-set textarea { max-width: 100%; min-width: 0 !important; }
+body.phone #tab-set .row, body.phone #tab-set .set-form, body.phone #tab-set .set-pick { flex-wrap: wrap; }
+body.phone #tab-set .set-pick select { flex: 1; }
+body.phone #tab-set .card { padding: 14px; }
+
+/* =====================================================================
+   Colour code for buttons that mean the same thing
+     red    = recording / stop          (REC, decoder OFF)
+     orange = lock out / ignore         (L/O, SKIP 10 MIN, LOCK OUT, UNSKIP)
+     green  = scanning / searching      (SCAN, SRCH)
+   Tinted = ready, solid = switched on. Add k-rec / k-lock / k-go to any button to use it.
+   ===================================================================== */
+:root {
+  --c-rec: #ff5d5d;  --c-rec-bg: rgba(255,93,93,.15);  --c-rec-ink: #1c0606;
+  --c-lock: #ffa047; --c-lock-bg: rgba(255,160,71,.15); --c-lock-ink: #231200;
+  --c-go: #3ddc84;   --c-go-bg: rgba(61,220,132,.15);   --c-go-ink: #04200f;
+}
+[data-theme="modernlight"], [data-theme="bluelight"], [data-theme="softlight"] {
+  --c-rec: #d32f2f;  --c-rec-bg: rgba(211,47,47,.11);  --c-rec-ink: #fff;
+  --c-lock: #c96a0a; --c-lock-bg: rgba(201,106,10,.12); --c-lock-ink: #fff;
+  --c-go: #1b8a4b;   --c-go-bg: rgba(27,138,75,.11);    --c-go-ink: #fff;
+}
+.key.k-rec, .key.k-lock, .key.k-go { border-width: 1px; border-style: solid; font-weight: 700; }
+[data-theme] .key.k-rec  { background: var(--c-rec-bg);  border-color: var(--c-rec);  color: var(--c-rec); }
+[data-theme] .key.k-lock { background: var(--c-lock-bg); border-color: var(--c-lock); color: var(--c-lock); }
+[data-theme] .key.k-go   { background: var(--c-go-bg);   border-color: var(--c-go);   color: var(--c-go); }
+[data-theme] .key.k-rec:hover  { background: var(--c-rec-bg);  border-color: var(--c-rec);  filter: brightness(1.15); }
+[data-theme] .key.k-lock:hover { background: var(--c-lock-bg); border-color: var(--c-lock); filter: brightness(1.15); }
+[data-theme] .key.k-go:hover   { background: var(--c-go-bg);   border-color: var(--c-go);   filter: brightness(1.15); }
+[data-theme] .key.k-rec.on,  [data-theme] .key.k-rec:active,  [data-theme] .key.k-rec.pressed  { background: var(--c-rec);  border-color: var(--c-rec);  color: var(--c-rec-ink); outline: 0; }
+[data-theme] .key.k-lock.on, [data-theme] .key.k-lock:active, [data-theme] .key.k-lock.pressed { background: var(--c-lock); border-color: var(--c-lock); color: var(--c-lock-ink); outline: 0; }
+[data-theme] .key.k-go.on,   [data-theme] .key.k-go:active,   [data-theme] .key.k-go.pressed   { background: var(--c-go);   border-color: var(--c-go);   color: var(--c-go-ink); outline: 0; }
+@keyframes rec-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,93,93,.55); } 50% { box-shadow: 0 0 0 6px rgba(255,93,93,0); } }
+[data-theme] .key.k-rec.on { animation: rec-pulse 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { [data-theme] .key.k-rec.on { animation: none; } }
+/* AUDIO key: calm when sound is playing, a slow red glow + "MUTED" when there is none */
+@keyframes mute-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,93,93,0), inset 0 0 0 0 rgba(255,93,93,0); border-color: rgba(255,93,93,.45); }
+  50%      { box-shadow: 0 0 16px 2px rgba(255,93,93,.55), inset 0 0 14px 0 rgba(255,93,93,.22); border-color: var(--c-rec); }
+}
+[data-theme] .key.key-power.is-muted { background: var(--c-rec-bg); color: var(--c-rec); border-color: var(--c-rec); font-weight: 800; letter-spacing: .08em; animation: mute-glow 3.2s ease-in-out infinite; }
+[data-theme] .key.key-power.is-muted .led { background: var(--c-rec); box-shadow: 0 0 8px var(--c-rec); }
+[data-theme] .key.key-power:not(.is-muted) { color: var(--c-go); border-color: var(--c-go); background: var(--c-go-bg); }
+[data-theme] .key.key-power:not(.is-muted) .led.on { background: var(--c-go); box-shadow: 0 0 8px var(--c-go); }
+.ph-btn.is-muted { color: var(--c-rec); border-color: var(--c-rec); background: var(--c-rec-bg); font-weight: 700; animation: mute-glow 3.2s ease-in-out infinite; }
+.ph-btn#phAudio.on { color: var(--c-go); border-color: var(--c-go); }
+@media (prefers-reduced-motion: reduce) { [data-theme] .key.key-power.is-muted, .ph-btn.is-muted { animation: none; box-shadow: 0 0 10px rgba(255,93,93,.4); } }
+/* the same hues on the display's indicator flags (the display is black in every colour style) */
+[data-theme] .lcd-flags span#fRec.on  { color: #ff5d5d; border-color: #ff5d5d; }
+[data-theme] .lcd-flags span#fLo.on   { color: #ffa047; border-color: #ffa047; }
+[data-theme] .lcd-flags span#fScan.on, [data-theme] .lcd-flags span#fSrch.on { color: #3ddc84; border-color: #3ddc84; }

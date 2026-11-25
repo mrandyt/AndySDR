@@ -909,7 +909,7 @@ class Radio:
             return
         if self.s["agc"] or getattr(self.dev, "agc", False):
             m.result = {"state": "blocked", "text": "Power check not run: Hardware AGC is on, and it turns the gain down when an LNA lifts the signal, "
-                                                    "so the change would be hidden. Untick Hardware AGC (Receiver tab), set a fixed RF gain, then run it again."}
+                                                    "so the change would be hidden. Untick Hardware AGC (Settings › Receivers), set a fixed RF gain, then run it again."}
             self._emit("event", {"level": "warn", "text": "Bias-T check: untick Hardware AGC first (it hides the change)."})
             self._emit("bias", self.bias_snapshot())
             return
@@ -950,7 +950,7 @@ class Radio:
         ant = getattr(d, "antenna", "") or "Antenna A"
         if ant != "Antenna B":
             self._emit("event", {"level": "warn", "text": f"Bias-T is ON but {ant} is selected - the RSP only powers an antenna or LNA "
-                                                          "through Antenna B. Choose Antenna B in the Receiver tab."})
+                                                          "through Antenna B. Choose Antenna B in Settings › Receivers."})
 
     def set_decoder(self, dec_id, sub="auto"):
         def do():

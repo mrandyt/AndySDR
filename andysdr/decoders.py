@@ -524,7 +524,7 @@ class DecoderManager:
                 fs = int(self.rate_fn())
                 self.bridge.out_rate = fs
                 if dec_id == "metop" and fs < 5000000:
-                    self.log("Metop AHRPT is about 4.5 MHz wide: choose 6 or 10 MS/s under Sample rate (Receiver tab) – "
+                    self.log("Metop AHRPT is about 4.5 MHz wide: choose 6 or 10 MS/s under Sample rate (Settings › Receivers) – "
                              f"the current {fs / 1e6:g} MS/s is too narrow to decode it.", "warn")
                 args = [exe, "live", pipe, out, "--source", "rtltcp", "--ip_address", "127.0.0.1",
                         "--port", str(port), "--samplerate", str(fs), "--frequency", f"{mhz}e6", "--gain", "30"]
@@ -546,7 +546,7 @@ class DecoderManager:
             elif dec_id == "ism":
                 exe = find_exe("rtl_433", ov)
                 if not exe:
-                    raise FileNotFoundError("rtl_433.exe not found – press Download missing decoders in the DECODERS tab")
+                    raise FileNotFoundError("rtl_433.exe not found – press Download missing decoders in Settings › Decoders")
                 if self.ism is None:
                     raise RuntimeError("ISM sensor table not available")
                 f = int(self.freq_fn() if self.freq_fn else 433920000) or 433920000

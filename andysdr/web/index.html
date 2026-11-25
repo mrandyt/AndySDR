@@ -22,23 +22,8 @@
     <span id="listeners" class="muted"></span>
   </div>
   <div class="topbar-right">
-    <label class="theme-pick" data-help="theme">Style
-      <select id="themeSel">
-        <option value="modern">Modern – dark</option>
-        <option value="modernlight">Modern – light</option>
-        <option value="bluedark">Blue – dark</option>
-        <option value="bluelight">Blue – light</option>
-        <option value="softdark">Soft – dark</option>
-        <option value="softlight">Soft – light</option>
-      </select>
-    </label>
-    <label class="theme-pick" data-help="layout" hidden>Layout
-      <select id="layoutSel">
-        <option value="auto">Auto</option>
-        <option value="control">Control room</option>
-        <option value="classic">Classic</option>
-      </select>
-    </label>
+    
+    <button id="setBtn" class="set-btn" data-help="settings" title="Every setting in one place">⚙ SETTINGS</button>
     <button id="helpBtn" class="help-btn" data-help="help">? HELP</button>
   </div>
 </header>
@@ -52,8 +37,8 @@
       <span class="tchip clock"><small>LOCAL</small><b id="tLocal">--:--:--</b></span>
       <span class="tchip clock"><small>UTC</small><b id="tUtc">--:--:--</b></span>
       <span class="tchip"><small>RX</small><b id="tRx">–</b></span>
-      <span class="tchip"><small>SPAN</small><b id="tSpan">–</b></span>
-      <span class="tchip"><small>FILTER</small><b id="tBw">–</b></span>
+      <span class="tchip minor"><small>SPAN</small><b id="tSpan">–</b></span>
+      <span class="tchip minor"><small>FILTER</small><b id="tBw">–</b></span>
       <span class="tchip"><small>STATE</small><b id="tState">MANUAL</b></span>
       <span class="tchip"><small>DECODER</small><b id="tDec">OFF</b></span>
       <span class="tchip"><small>LINKS</small><b id="tLinks">0</b></span>
@@ -81,7 +66,7 @@
           <button class="btn sm" id="gainAgc" title="Hardware auto gain on / off (turn it off for manual RF gain)">AGC</button>
         </div>
       </div>
-      <button class="key key-power" id="pwrBtn" data-help="power"><span class="led" id="pwrLed"></span>AUDIO ON/OFF</button>
+      <button class="key key-power is-muted" id="pwrBtn" data-help="power"><span class="led" id="pwrLed"></span><span id="pwrTxt">MUTED</span></button>
       <div class="leds" data-help="leds">
         <div class="ledbox"><span class="led green" id="ledRx"></span>RX</div>
         <div class="ledbox"><span class="led amber" id="ledScan"></span>SCAN</div>
@@ -177,18 +162,19 @@
     <div class="radio-right">
       <div class="fkeys">
         <button class="key key-skip" data-k="skip" data-help="k_skip">SKIP ▸ next channel</button>
-        <button class="key key-hot" data-k="scan" data-help="k_scan">SCAN</button>
+        <button class="key k-go" data-k="scan" data-help="k_scan">SCAN</button>
         <button class="key" data-k="man" data-help="k_man">MAN</button>
-        <button class="key" data-k="srch" data-help="k_srch">SRCH</button>
-        <button class="key" data-k="pgm" data-help="k_pgm">PGM</button>
-        <button class="key" data-k="lo" data-help="k_lo">L/O</button>
+        <button class="key k-go" data-k="srch" data-help="k_srch">SRCH</button>
+        <button class="key key-extra" data-k="pgm" data-help="k_pgm">PGM</button>
+        <button class="key k-lock" data-k="lo" data-help="k_lo">L/O</button>
         <button class="key" data-k="pri" data-help="k_pri">PRI</button>
-        <button class="key" data-k="mode" data-help="k_mode">MODE</button>
-        <button class="key" data-k="step" data-help="k_step">STEP</button>
-        <button class="key" data-k="bank" data-help="k_bank">BANK</button>
-        <button class="key" data-k="dly" data-help="k_dly">DLY</button>
-        <button class="key" data-k="rec" data-help="k_rec">REC</button>
-        <button class="key" data-k="dec" data-help="k_dec">DEC</button>
+        <button class="key key-extra" data-k="mode" data-help="k_mode">MODE</button>
+        <button class="key key-extra" data-k="step" data-help="k_step">STEP</button>
+        <button class="key key-extra" data-k="bank" data-help="k_bank">BANK</button>
+        <button class="key key-extra" data-k="dly" data-help="k_dly">DLY</button>
+        <button class="key k-rec" data-k="rec" data-help="k_rec">REC</button>
+        <button class="key key-extra" data-k="dec" data-help="k_dec">DEC</button>
+        <button class="key key-more" id="keysMore" title="Show the less used keys">MORE ▾</button>
       </div>
       <div class="arrows">
         <button class="key" data-k="down" data-help="k_arrows">▼</button>
@@ -208,16 +194,8 @@
     <label class="mini"><input type="checkbox" id="scopeAuto" checked> Auto</label>
     <label class="mini">Range <input type="range" id="scopeLo" min="-140" max="-40" value="-115"></label>
     <label class="mini">Top <input type="range" id="scopeHi" min="-80" max="0" value="-25"></label>
-    <label class="mini keep" data-help="bandplan">Band plan <select id="bpSize">
-      <option value="0">Off</option><option value="1">Small</option><option value="2" selected>Medium</option><option value="3">Large</option><option value="4">Extra large</option>
-    </select></label>
-    <label class="mini keep" data-help="repmarks"><input type="checkbox" id="repMarks" checked> Repeaters <select id="repMarksKm" title="Only show repeaters this close to your position (set it in the Scheduler tab or the REPEATERS tab)">
-      <option value="0">all</option><option value="25">≤25 km</option><option value="50">≤50 km</option><option value="100" selected>≤100 km</option><option value="200">≤200 km</option>
-    </select></label>
-    <label class="mini keep" data-help="wfsize">Waterfall <select id="wfSize">
-      <option value="0" selected>Auto (fill)</option><option value="200">Small</option><option value="340">Medium</option><option value="520">Large</option><option value="760">Huge</option>
-    </select></label>
-    <button class="btn mini keep" id="sizeReset" title="Put the spectrum and waterfall back to their normal sizes">Reset size</button>
+    
+    
   </div>
   <div class="vfo-bar" data-help="vfo">
     <span class="vfo-chip"><b>VFO</b> <span id="vfoFreq">---.----- MHz</span></span>
@@ -252,9 +230,8 @@
     <button class="tab" data-tab="bp">UK BAND PLAN</button>
     <button class="tab" data-tab="rep">REPEATERS</button>
     <button class="tab" data-tab="sch">SCHEDULER</button>
-    <button class="tab" data-tab="rx">RECEIVER 1</button>
     <button class="tab" data-tab="rx2">RECEIVER 2 <span class="tab-badge" id="rx2Badge" hidden></span></button>
-    <button class="tab" data-tab="net">REMOTE &amp; SETTINGS</button>
+    <button class="tab tab-set" data-tab="set">⚙ SETTINGS</button>
   </nav>
   <div class="rxstrip" id="rxStrip" data-help="rxstrip"></div>
 
@@ -329,15 +306,9 @@
       </select></label>
       <button class="btn" id="decOff">Decoder OFF</button>
       <button class="btn" id="decClear">Clear log</button>
-      <button class="btn" id="decFetch" title="Downloads DSD-FME, multimon-ng and SatDump (free programs) from GitHub if they are not already installed">⬇ Download missing decoders</button>
+      
     </div>
-    <div class="row wrapline auto-box" data-help="autoid">
-      <label><input type="checkbox" id="autoId2" checked> <b>Auto-identify signals</b></label>
-      <span class="muted small">AndySDR listens to whatever you are tuned to and works out what it is – DMR, P25, NXDN, dPMR, pagers, APRS, DTMF, SSTV, WEFAX, TETRA or plain voice – then switches mode and starts the right decoder by itself. Choosing a decoder yourself always takes priority.</span>
-      <label class="small" title="Silences the raw data noise while DMR / P25 / TETRA / pager decoding is running. The decoder still plays the decoded voice."><input type="checkbox" id="muteDig" checked> Mute coded noise while decoding</label>
-      <label class="small" title="While the squelch is closed there is only noise, and a digital decoder can mistake it for a signal and speak a few frames of garbage. With this ticked the decoder is given silence whenever the squelch has been closed for 1.5 s. Set SQUELCH just above the noise so real calls stay open."><input type="checkbox" id="dsdGate"> Stop false decoding on noise (needs squelch set)</label>
-      <span class="grow"></span><span id="sigNow" class="sig-chip" hidden></span>
-    </div>
+    <div class="row wrapline dec-hint"><span id="sigNow" class="sig-chip" hidden></span><span class="muted small">Auto-identify, noise muting and the decoder programs are in <a href="#" class="setlink" data-settings="decoders">⚙ Settings › Decoders</a>.</span></div>
     <pre class="console decwin" id="decLog"></pre>
     <div class="card lhcard" data-help="lastheard">
       <div class="row wrapline">
@@ -354,17 +325,8 @@
           <tbody></tbody>
         </table>
       </div>
-      <div class="row wrapline small">
-        <span id="lhDb" class="muted"></span>
-        <span class="grow"></span>
-        <label title="AndySDR downloads the free RadioID.net list of DMR users (callsign, name, town) by itself and refreshes it every 4 weeks. It needs the internet only for that download."><input type="checkbox" id="lhAuto" checked> Keep the callsign list up to date by itself</label>
-        <button class="btn sm" id="lhUpdate">Update callsign list now</button>
-      </div>
+      
     </div>
-    <details class="decdetails" id="decDetails">
-      <summary id="decSummary">Decoder programs</summary>
-      <div class="declist" id="decStatus"></div>
-    </details>
   </div>
 
 
@@ -657,7 +619,7 @@
       <a class="btn" id="ismExport" href="#" download title="Save the sensor table as a spreadsheet (CSV)">Export CSV</a>
       <button class="btn danger" id="ismClear">Clear</button>
     </div>
-    <p class="small muted" id="ismMissing" hidden>rtl_433 is not installed yet – open the DECODERS tab and press <b>⬇ Download missing decoders</b> (needs the internet once).</p>
+    <p class="small muted" id="ismMissing" hidden>rtl_433 is not installed yet – open <b>⚙ Settings › Decoders</b> and press <b>⬇ Download missing decoders</b> (needs the internet once).</p>
     <div class="tablewrap" data-help="ismtable">
       <table class="grid" id="ismTable">
         <thead><tr><th>Last heard</th><th>Device</th><th>ID</th><th>Ch</th><th>Readings</th><th>Signal</th><th>Messages</th><th>MHz</th></tr></thead>
@@ -772,29 +734,10 @@
     <div class="card sat-card" data-help="satauto">
       <div class="row wrapline"><b>🛰 Satellite auto-capture</b>
         <span class="muted small">Switch a satellite on and AndySDR works out every pass over your location, tunes in and starts the decoder by itself.</span></div>
+      <div class="card sat-poshint" id="satPosHint" hidden><span>📍 AndySDR needs your position to work out passes.</span><button class="btn primary sm" data-settings="location" data-focus="satLat">Set my position</button></div>
       <div class="muted small" data-help="satauto">ℹ Only satellites that rise above your horizon are listed. NOAA 15, 18 and 19 (137 MHz APT) were retired in 2025. From the UK you can receive <b>Meteor-M N2-3 / N2-4</b> (137 MHz LRPT, simple antenna + LNA), <b>Metop-B / Metop-C</b> (1701.3 MHz AHRPT, dish + L-band LNA) and <b>ISS SSTV</b> during events.</div>
-      <details class="satpos" id="satPosBox"><summary>📍 My position &amp; GPS</summary>
-      <div class="row wrapline">
-        <label>My position <input class="inp" id="satLat" placeholder="lat e.g. 51.5074" style="width:9em" inputmode="decimal">
-          <input class="inp" id="satLon" placeholder="lon e.g. -0.1278" style="width:9em" inputmode="decimal"></label>
-        <button class="btn sm" id="satPosSet">Set</button>
-        <button class="btn sm" id="satPosGps" title="Use this device's location (the browser asks permission)">📍 Use my location</button>
-        <button class="btn sm" id="satRefresh" title="Download fresh orbit data (TLEs) from CelesTrak">⟳ Update orbits</button>
-        <span class="muted small" id="satMsg"></span>
-      </div>
-      <div class="row wrapline gps-row" data-help="gps">
-        <label><input type="checkbox" id="gpsOn"> 📡 Use a USB GPS unit for my position</label>
-        <label>Port <select id="gpsPort"><option value="auto">Auto-find</option></select></label>
-        <label>Speed <select id="gpsBaud"><option value="0">Auto</option><option value="4800">4800</option><option value="9600">9600</option><option value="38400">38400</option><option value="115200">115200</option></select></label>
-        <label>Check <select id="gpsHours"><option value="24">once a day</option><option value="6">every 6 hours</option><option value="1">every hour</option><option value="0">all the time (follows movement)</option></select></label>
-        <button class="btn sm" id="gpsScan" title="Look for GPS units plugged in now">⟳ Find units</button>
-        <span class="sig-chip ana" id="gpsChip">GPS off</span>
-        <span class="muted small" id="gpsMsg"></span>
-      </div>
-      </details>
-      <details class="satpos" id="satRxBox" data-help="satrx"><summary>📡 Second receiver for 137 MHz Meteor pictures <span class="muted small" id="satRxSum"></span></summary>
-        <div id="satRx" class="satrx small"></div>
-      </details>
+      
+      
       <details class="satpos" id="geoBox" data-help="geolook"><summary>🧭 Where to point an L-band antenna (fixed satellites) <span class="muted small" id="geoSum"></span></summary>
         <div class="row wrapline">
           <span class="muted small">For Inmarsat, Elektro-L, Meteosat and other satellites that stay in one place in the sky: the bearing and height to aim at, worked out from My position.</span>
@@ -817,8 +760,25 @@
     <p class="muted small">Tips: Met Office Northwood fax charts are sent throughout the day – look up the current broadcast schedule and add a capture for the charts you want. ISS SSTV events are announced by ARISS a week or two ahead. Meteor-M passes over the UK happen several times a day; a satellite-pass app gives the times. Pictures appear in WEATHER IMAGES.</p>
   </div>
 
-  <!-- RECEIVER -->
-  <div class="tabpage" id="tab-rx">
+  
+
+  <div class="tabpage" id="tab-set">
+    <div class="set-top">
+      <h2>⚙ Settings</h2>
+      <input type="search" id="setSearch" class="inp" placeholder="Find a setting – try gain, password, GPS, update…" autocomplete="off" spellcheck="false">
+      <span class="grow"></span>
+      <button class="btn primary" id="setClose" title="Back to the radio (Esc)">✕ Close</button>
+    </div>
+    <div class="set-body">
+      <nav class="set-nav" id="setNav" aria-label="Settings groups"></nav>
+      <div class="set-main" id="setMain">
+    <section class="set-cat" data-cat="receivers" data-icon="📻" data-title="Receivers" data-sub="Your radios: which one is used, sample rate, antenna and gain.">
+      <h2 class="set-h">📻 Receivers</h2><p class="set-sub">Your radios: which one is used, sample rate, antenna and gain.</p>
+      <div class="set-grid">
+        <div class="card wide" data-find="receiver sdr rsp2 sdrplay nooelec rtl-sdr device sample rate antenna ppm agc bias-t gain rtl_tcp">
+          <h3>Main receiver (Receiver 1)</h3>
+          <p class="small muted">Which radio AndySDR listens with, and how it is set up. Press <b>Use this receiver</b> after choosing one.</p>
+          <div class="setrx">
     <div class="row wrapline" data-help="receiver">
       <label>Receiver <select id="devSel" style="min-width:18em"></select></label>
       <button class="btn primary" id="devOpen">Use this receiver</button>
@@ -854,22 +814,138 @@
     </div>
     <div class="muted small" id="soapyInfo"></div>
   </div>
-
-  <!-- REMOTE & SETTINGS -->
-  <div class="tabpage" id="tab-net">
-    <div class="cols">
-      <div class="card wide" data-help="checksys">
-        <h3>🩺 Check my system</h3>
-        <div class="row wrapline">
-          <button class="btn primary" id="chkRun">Check my system</button>
-          <span class="muted small" id="chkSummary">Looks at the receiver, SDRplay driver, decoders, firewall, password and more, and tells you what to fix.</span>
-          <span class="grow"></span>
-          <a class="btn" id="chkZipLink" href="#" download hidden title="A zip with the check, recent logs and settings (password removed) to send to someone who is helping you">Save diagnostics (zip)</a>
-          <button class="btn" id="chkZipLocal" hidden title="Saves a zip with the check, recent logs and settings (password removed) to your Downloads folder">Save diagnostics (zip)</button>
         </div>
-        <div id="chkList" class="chklist"></div>
+        <div class="card wide" id="satRxBox" data-help="satrx" data-find="second receiver nooelec rtl-sdr dongle meteor 137 lrpt weather satellite gain"><h3>📡 Second receiver for 137 MHz Meteor pictures <span class="muted small" id="satRxSum"></span></h3>
+        <div id="satRx" class="satrx small"></div>
       </div>
-      <div class="card" data-help="remote">
+      </div>
+    </section>
+    <section class="set-cat" data-cat="audio" data-icon="🔊" data-title="Audio &amp; squelch" data-sub="Sound output and noise handling.">
+      <h2 class="set-h">🔊 Audio &amp; squelch</h2><p class="set-sub">Sound output and noise handling.</p>
+      <div class="set-grid">
+        <div class="card" data-find="audio sound speaker volume mute squelch noise de-emphasis fm play on this computer false decoding">
+          <h3>Sound</h3>
+          <p class="small muted">Volume, squelch and RF gain are the three knobs on the radio. These are the other sound options.</p>
+          <div class="set-checks"><label><input type="checkbox" id="myAudio" checked> Play audio on this computer</label>
+          <label class="small" title="Silences the raw data noise while DMR / P25 / TETRA / pager decoding is running. The decoder still plays the decoded voice."><input type="checkbox" id="muteDig" checked> Mute coded noise while decoding</label>
+          <label class="small" title="While the squelch is closed there is only noise, and a digital decoder can mistake it for a signal and speak a few frames of garbage. With this ticked the decoder is given silence whenever the squelch has been closed for 1.5 s. Set SQUELCH just above the noise so real calls stay open."><input type="checkbox" id="dsdGate"> Stop false decoding on noise (needs squelch set)</label></div>
+          <label>FM de-emphasis <select id="setDeemph"><option value="50">50 µs (UK / Europe)</option><option value="75">75 µs (USA)</option></select></label>
+        </div>
+      </div>
+    </section>
+    <section class="set-cat" data-cat="scanner" data-icon="🔍" data-title="Scanner" data-sub="Speed and timing of scanning.">
+      <h2 class="set-h">🔍 Scanner</h2><p class="set-sub">Speed and timing of scanning.</p>
+      <div class="set-grid">
+        <div class="card" data-find="scan scanner resume delay dwell hold time speed channel">
+          <h3>Scanning speed</h3>
+          <p class="small muted">How the scanner behaves on the memory channels. Changes are saved as you make them.</p>
+          <label>Wait after a transmission ends <input class="inp" type="number" min="0" step="0.5" id="setDelay" style="width:5em"> s</label>
+          <label>Time on each memory channel <input class="inp" type="number" min="0.05" step="0.05" id="setDwell" style="width:5em"> s</label>
+        </div>
+      </div>
+    </section>
+    <section class="set-cat" data-cat="decoders" data-icon="📡" data-title="Decoders" data-sub="Automatic signal recognition, decoder programs and callsign names.">
+      <h2 class="set-h">📡 Decoders</h2><p class="set-sub">Automatic signal recognition, decoder programs and callsign names.</p>
+      <div class="set-grid">
+        <div class="card" data-find="auto identify detect decoder switch mode automatically">
+          <h3>Automatic recognition</h3>
+          <label><input type="checkbox" id="autoId2" checked> <b>Auto-identify signals</b></label>
+          <span class="small muted">AndySDR listens to whatever you are tuned to and works out what it is – DMR, P25, NXDN, dPMR, pagers, APRS, DTMF, SSTV, WEFAX, TETRA or plain voice – then switches mode and starts the right decoder by itself. Choosing a decoder yourself always takes priority.</span>
+        </div>
+        <div class="card" data-find="decoder programs download missing dsd-fme multimon satdump install" id="setDecProg">
+          <h3>Decoder programs</h3>
+          <p class="small muted">DSD-FME, multimon-ng, SatDump and the others AndySDR uses.</p>
+          <button class="btn primary" id="decFetch" title="Downloads DSD-FME, multimon-ng and SatDump (free programs) from GitHub if they are not already installed">⬇ Download missing decoders</button>
+          <details class="decdetails" id="decDetails">
+      <summary id="decSummary">Decoder programs</summary>
+      <div class="declist" id="decStatus"></div>
+    </details>
+        </div>
+        <div class="card" data-find="callsign radioid dmr last heard names database update">
+          <h3>DMR callsign list</h3>
+          <p class="small muted">Shows names and towns next to DMR radio IDs in Last heard.</p>
+          <div class="set-lh">
+        <span id="lhDb" class="muted"></span>
+        <span class="grow"></span>
+        <label title="AndySDR downloads the free RadioID.net list of DMR users (callsign, name, town) by itself and refreshes it every 4 weeks. It needs the internet only for that download."><input type="checkbox" id="lhAuto" checked> Keep the callsign list up to date by itself</label>
+        <button class="btn sm" id="lhUpdate">Update callsign list now</button>
+      </div>
+        </div>
+      </div>
+    </section>
+    <section class="set-cat" data-cat="display" data-icon="🎨" data-title="Display" data-sub="Colours, spectrum, waterfall and buttons.">
+      <h2 class="set-h">🎨 Display</h2><p class="set-sub">Colours, spectrum, waterfall and buttons.</p>
+      <div class="set-grid">
+        <div class="card" data-find="colour color theme style dark light blue soft look">
+          <h3>Colours</h3>
+          <p class="small muted">Pick the look you like. It is remembered on this device.</p>
+          <label class="set-pick" data-help="theme">Style
+      <select id="themeSel">
+        <option value="modern">Modern – dark</option>
+        <option value="modernlight">Modern – light</option>
+        <option value="bluedark">Blue – dark</option>
+        <option value="bluelight">Blue – light</option>
+        <option value="softdark">Soft – dark</option>
+        <option value="softlight">Soft – light</option>
+      </select>
+    </label>
+          <label class="theme-pick" data-help="layout" hidden>Layout
+      <select id="layoutSel">
+        <option value="auto">Auto</option>
+        <option value="control">Control room</option>
+        <option value="classic">Classic</option>
+      </select>
+    </label>
+        </div>
+        <div class="card" data-find="spectrum waterfall band plan repeaters size height display zoom">
+          <h3>Spectrum & waterfall</h3>
+          <p class="small muted">What is drawn on the spectrum and how big the two displays are. You can also drag the bar between them.</p>
+          <div class="set-form"><label class="set-pick" data-help="bandplan">Band plan <select id="bpSize">
+      <option value="0">Off</option><option value="1">Small</option><option value="2" selected>Medium</option><option value="3">Large</option><option value="4">Extra large</option>
+    </select></label>
+          <label class="set-pick" data-help="repmarks"><input type="checkbox" id="repMarks" checked> Repeaters <select id="repMarksKm" title="Only show repeaters this close to your position (set it in Settings › Location &amp; GPS or the REPEATERS tab)">
+      <option value="0">all</option><option value="25">≤25 km</option><option value="50">≤50 km</option><option value="100" selected>≤100 km</option><option value="200">≤200 km</option>
+    </select></label>
+          <label class="set-pick" data-help="wfsize">Waterfall <select id="wfSize">
+      <option value="0" selected>Auto (fill)</option><option value="200">Small</option><option value="340">Medium</option><option value="520">Large</option><option value="760">Huge</option>
+    </select></label>
+          <button class="btn" id="sizeReset" title="Put the spectrum and waterfall back to their normal sizes">Reset size</button></div>
+        </div>
+        <div class="card" data-find="buttons customise hide show clutter simple">
+          <h3>Front-panel buttons</h3>
+          <p class="small muted">Hide the buttons you never use so the radio looks simpler.</p>
+          <div class="row wrapline"><button class="btn" id="setCust">⚙ Customise buttons</button> <button class="btn" id="setRestore">Show every button again</button></div>
+        </div>
+      </div>
+    </section>
+    <section class="set-cat" data-cat="location" data-icon="📍" data-title="Location &amp; GPS" data-sub="Where you are, for satellite passes and repeaters.">
+      <h2 class="set-h">📍 Location &amp; GPS</h2><p class="set-sub">Where you are, for satellite passes and repeaters.</p>
+      <div class="set-grid">
+<div class="card wide" id="satPosBox" data-find="position latitude longitude gps location where am i orbit satellite"><h3>📍 My position &amp; GPS</h3><p class="small muted">Used to work out satellite passes, the nearest repeaters and where to point an antenna.</p>
+      <div class="row wrapline">
+        <label>My position <input class="inp" id="satLat" placeholder="lat e.g. 51.5074" style="width:9em" inputmode="decimal">
+          <input class="inp" id="satLon" placeholder="lon e.g. -0.1278" style="width:9em" inputmode="decimal"></label>
+        <button class="btn sm" id="satPosSet">Set</button>
+        <button class="btn sm" id="satPosGps" title="Use this device's location (the browser asks permission)">📍 Use my location</button>
+        <button class="btn sm" id="satRefresh" title="Download fresh orbit data (TLEs) from CelesTrak">⟳ Update orbits</button>
+        <span class="muted small" id="satMsg"></span>
+      </div>
+      <div class="row wrapline gps-row" data-help="gps">
+        <label><input type="checkbox" id="gpsOn"> 📡 Use a USB GPS unit for my position</label>
+        <label>Port <select id="gpsPort"><option value="auto">Auto-find</option></select></label>
+        <label>Speed <select id="gpsBaud"><option value="0">Auto</option><option value="4800">4800</option><option value="9600">9600</option><option value="38400">38400</option><option value="115200">115200</option></select></label>
+        <label>Check <select id="gpsHours"><option value="24">once a day</option><option value="6">every 6 hours</option><option value="1">every hour</option><option value="0">all the time (follows movement)</option></select></label>
+        <button class="btn sm" id="gpsScan" title="Look for GPS units plugged in now">⟳ Find units</button>
+        <span class="sig-chip ana" id="gpsChip">GPS off</span>
+        <span class="muted small" id="gpsMsg"></span>
+      </div>
+      </div>
+      </div>
+    </section>
+    <section class="set-cat" data-cat="remote" data-icon="🖥" data-title="Remote access" data-sub="Use AndySDR from another PC, tablet or phone, and the password.">
+      <h2 class="set-h">🖥 Remote access</h2><p class="set-sub">Use AndySDR from another PC, tablet or phone, and the password.</p>
+      <div class="set-grid">
+        <div class="card" data-help="remote" data-find="remote network password browser phone tablet android lan access web server">
         <h3>Remote control from another PC</h3>
         <p>On any computer, tablet or phone on your network, open a web browser at:</p>
         <div id="netAddrs" class="addr"></div>
@@ -879,9 +955,48 @@
           <button class="btn" id="setPass">Change password</button>
         </div>
         <label class="local-only"><input type="checkbox" id="reqLocal"> Ask for the password on this PC too</label>
-        <label><input type="checkbox" id="myAudio" checked> Play audio on this computer</label>
       </div>
-      <div class="card" data-help="updates">
+      </div>
+    </section>
+    <section class="set-cat" data-cat="alerts" data-icon="🔔" data-title="Alerts &amp; watch list" data-sub="Notifications for the AndySDR Remote app.">
+      <h2 class="set-h">🔔 Alerts &amp; watch list</h2><p class="set-sub">Notifications for the AndySDR Remote app.</p>
+      <div class="set-grid">
+        <div class="card" data-help="alerts" data-find="alerts notifications android app pager emergency squawk priority capture">
+        <h3>Alerts for the AndySDR Remote app</h3>
+        <label><input type="checkbox" id="alPager"> A page for a capcode you have starred (PAGER MESSAGES tab)</label>
+        <label><input type="checkbox" id="alEmerg"> An aircraft squawking 7500 / 7600 / 7700</label>
+        <label><input type="checkbox" id="alPri"> Activity on the priority channel</label>
+        <label><input type="checkbox" id="alCap"> A scheduled capture (satellite pass, WEFAX, SSTV…) starting</label>
+        <label><input type="checkbox" id="alWatch"> Someone on your <b>watch list</b> is heard (DMR · P25 · NXDN · M17)</label>
+        <div class="row wrapline"><button class="btn" id="alTest">Send a test alert</button></div>
+      </div>
+        <div class="card" data-help="watchlist" data-find="watch list callsign talkgroup dmr beep notify">
+        <h3>🔔 Watch list</h3>
+        <p class="small muted">One per line: a callsign (<code>M7FEP</code>, or <code>G4*</code> for every callsign starting G4), a radio ID or talkgroup number (<code>2356184</code>), or <code>TG235</code> for a talkgroup only. When one is heard AndySDR pops up a notice and beeps here, and the phone app notifies you too.</p>
+        <textarea class="inp" id="watchList" rows="5" spellcheck="false" placeholder="M7FEP&#10;TG235&#10;2356184" style="width:100%;max-width:24em"></textarea>
+        <div class="row wrapline"><button class="btn" id="watchSave">Save watch list</button>
+          <label class="small"><input type="checkbox" id="watchBeep" checked> Beep on this screen</label>
+          <span class="muted small" id="watchInfo"></span></div>
+        <p class="small muted">The Android app shows these as notifications, even with the screen off, once you switch on <b>Alerts</b> on its connect screen. Nothing leaves your network.</p>
+      </div>
+      </div>
+    </section>
+    <section class="set-cat" data-cat="sharing" data-icon="🔗" data-title="Sharing &amp; logging" data-sub="Send aircraft data to other programs and keep logs.">
+      <h2 class="set-h">🔗 Sharing &amp; logging</h2><p class="set-sub">Send aircraft data to other programs and keep logs.</p>
+      <div class="set-grid">
+        <div class="card" data-help="adsbshare" data-find="ads-b share feed sbs virtual radar tar1090 flightaware log csv lookup aircraft">
+        <h3>Share aircraft (ADS-B) with other programs</h3>
+        <label><input type="checkbox" id="adsbShare"> Send the ADS-B feed over the network</label>
+        <p class="small muted" id="adsbShareInfo">SBS/BaseStation text on port 30003 and raw AVR on port 30002 – for Virtual Radar Server, tar1090, PlanePlotter, FlightAware/FR24 feeders and similar. Windows may ask to allow AndySDR through the firewall. Keep it on your home network.</p>
+        <label><input type="checkbox" id="adsbLog" checked> Log aircraft positions to a CSV file each day</label>
+        <label title="Sends only the aircraft hex code to hexdb.io (registry) and planespotters.net (photo)"><input type="checkbox" id="adsbLookup" checked> Look up registration, type, owner and photo online</label>
+      </div>
+      </div>
+    </section>
+    <section class="set-cat" data-cat="system" data-icon="🩺" data-title="Updates &amp; system" data-sub="Updates, a health check, shortcuts and help.">
+      <h2 class="set-h">🩺 Updates &amp; system</h2><p class="set-sub">Updates, a health check, shortcuts and help.</p>
+      <div class="set-grid">
+        <div class="card" data-help="updates" data-find="update version download github release install">
         <h3>Updates</h3>
         <p>AndySDR <b id="updCur" class="mono"></b> <span id="updLine" class="muted small"></span></p>
         <div class="row wrapline">
@@ -892,37 +1007,29 @@
         <label><input type="checkbox" id="updDl"> Download new versions in the background, then ask before installing</label>
         <p class="small muted">Updates come from this program's GitHub releases. Nothing is installed without your OK.</p>
       </div>
-      <div class="card" data-help="alerts">
-        <h3>Alerts for the AndySDR Remote app</h3>
-        <label><input type="checkbox" id="alPager"> A page for a capcode you have starred (PAGER MESSAGES tab)</label>
-        <label><input type="checkbox" id="alEmerg"> An aircraft squawking 7500 / 7600 / 7700</label>
-        <label><input type="checkbox" id="alPri"> Activity on the priority channel</label>
-        <label><input type="checkbox" id="alCap"> A scheduled capture (satellite pass, WEFAX, SSTV…) starting</label>
-        <label><input type="checkbox" id="alWatch"> Someone on your <b>watch list</b> is heard (DMR · P25 · NXDN · M17)</label>
-        <div class="row wrapline"><button class="btn" id="alTest">Send a test alert</button></div>
-        <h3 data-help="watchlist">🔔 Watch list</h3>
-        <p class="small muted">One per line: a callsign (<code>M7FEP</code>, or <code>G4*</code> for every callsign starting G4), a radio ID or talkgroup number (<code>2356184</code>), or <code>TG235</code> for a talkgroup only. When one is heard AndySDR pops up a notice and beeps here, and the phone app notifies you too.</p>
-        <textarea class="inp" id="watchList" rows="5" spellcheck="false" placeholder="M7FEP&#10;TG235&#10;2356184" style="width:100%;max-width:24em"></textarea>
-        <div class="row wrapline"><button class="btn" id="watchSave">Save watch list</button>
-          <label class="small"><input type="checkbox" id="watchBeep" checked> Beep on this screen</label>
-          <span class="muted small" id="watchInfo"></span></div>
-        <p class="small muted">The Android app shows these as notifications, even with the screen off, once you switch on <b>Alerts</b> on its connect screen. Nothing leaves your network.</p>
+        <div class="card wide" data-help="checksys" data-find="check my system diagnostics zip driver firewall problems fix logs">
+        <h3>🩺 Check my system</h3>
+        <div class="row wrapline">
+          <button class="btn primary" id="chkRun">Check my system</button>
+          <span class="muted small" id="chkSummary">Looks at the receiver, SDRplay driver, decoders, firewall, password and more, and tells you what to fix.</span>
+          <span class="grow"></span>
+          <a class="btn" id="chkZipLink" href="#" download hidden title="A zip with the check, recent logs and settings (password removed) to send to someone who is helping you">Save diagnostics (zip)</a>
+          <button class="btn" id="chkZipLocal" hidden title="Saves a zip with the check, recent logs and settings (password removed) to your Downloads folder">Save diagnostics (zip)</button>
+        </div>
+        <div id="chkList" class="chklist"></div>
       </div>
-      <div class="card" data-help="adsbshare">
-        <h3>Share aircraft (ADS-B) with other programs</h3>
-        <label><input type="checkbox" id="adsbShare"> Send the ADS-B feed over the network</label>
-        <p class="small muted" id="adsbShareInfo">SBS/BaseStation text on port 30003 and raw AVR on port 30002 – for Virtual Radar Server, tar1090, PlanePlotter, FlightAware/FR24 feeders and similar. Windows may ask to allow AndySDR through the firewall. Keep it on your home network.</p>
-        <label><input type="checkbox" id="adsbLog" checked> Log aircraft positions to a CSV file each day</label>
-        <label title="Sends only the aircraft hex code to hexdb.io (registry) and planespotters.net (photo)"><input type="checkbox" id="adsbLookup" checked> Look up registration, type, owner and photo online</label>
+        <div class="card" data-find="keyboard shortcuts keys type frequency">
+          <h3>Keyboard shortcuts</h3>
+          <p class="small muted">Digits &amp; <b>.</b> type a frequency, <b>Enter</b> tunes, <b>↑ ↓</b> step, <b>S</b> scan, <b>M</b> manual, <b>I</b> skip for 10 min, <b>H</b> help, <b>Esc</b> clear.</p>
+        </div>
+        <div class="card" data-find="help guide explain how to">
+          <h3>Help</h3>
+          <p class="small muted">A guide to every control, with a click-to-explain mode.</p>
+          <div class="row wrapline"><button class="btn primary" id="setHelp">? Open the help guide</button></div>
+        </div>
       </div>
-      <div class="card">
-        <h3>Scanner settings</h3>
-        <label>Resume delay after a transmission <input class="inp" type="number" step="0.5" id="setDelay" style="width:5em"> s</label>
-        <label>Time on each memory channel <input class="inp" type="number" step="0.05" id="setDwell" style="width:5em"> s</label>
-        <label>FM de-emphasis <select id="setDeemph"><option value="50">50 µs (UK/Europe)</option><option value="75">75 µs (USA)</option></select></label>
-        <button class="btn primary" id="saveSettings">Save settings</button>
-        <h3>Keyboard</h3>
-        <p class="small muted">Digits &amp; <b>.</b> type a frequency, <b>Enter</b> tunes, <b>↑ ↓</b> step, <b>S</b> scan, <b>M</b> manual, <b>I</b> skip for 10 min, <b>H</b> help, <b>Esc</b> clear.</p>
+    </section>
+        <p class="set-none muted" id="setNone" hidden>No setting matches that. Try another word, or pick a group on the left.</p>
       </div>
     </div>
   </div>
@@ -964,7 +1071,7 @@
       <img src="logo.svg" alt="" style="height:30px">
       <h2 id="updTitle">Update available</h2>
       <span class="grow"></span>
-      <button class="btn" id="updClose" title="Close - you can reopen this from Remote &amp; Settings">✕</button>
+      <button class="btn" id="updClose" title="Close - you can reopen this from Settings › Updates &amp; system">✕</button>
     </div>
     <div class="modal-body">
       <p id="updMsg"></p>
@@ -985,7 +1092,7 @@
   <div class="modal-box login">
     <img src="logo.svg" alt="" style="height:64px">
     <h2>AndySDR remote</h2>
-    <p>Enter the password shown on the receiving PC (Remote &amp; Settings tab).</p>
+    <p>Enter the password shown on the receiving PC (⚙ Settings › Remote access).</p>
     <input class="inp" id="loginPass" type="password" placeholder="Password" autocomplete="current-password">
     <button class="btn primary" id="loginGo">Connect</button>
     <p class="err" id="loginErr"></p>
@@ -1020,6 +1127,7 @@
 <script src="bandplan.js"></script>
 <script src="app.js"></script>
 <script src="rx2.js"></script>
+<script src="settings.js"></script>
 <script src="phone.js"></script>
 </body>
 </html>

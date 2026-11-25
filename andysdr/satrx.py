@@ -204,6 +204,7 @@ class SatRx:
                 if hi > lo:
                     self._gain_range = (lo, hi)
                 dev.set_gain(dev.gain)
+                dev.async_read = True                # an unbroken stream: a picture needs every sample, not most of them
             except Exception as e:                   # noqa: BLE001
                 log.exception("second receiver open")
                 try:
@@ -291,6 +292,7 @@ class SatRx:
                     dev.set_sample_rate(SAMPLE_RATE)
                 dev.set_ppm(c["ppm"])
                 dev.set_gain(dev.gain)
+                dev.async_read = True
             except Exception as e:                   # noqa: BLE001
                 try:
                     dev.close()
@@ -350,6 +352,16 @@ class SatRx:
             meter, self.pass_meter = self.pass_meter, None
             self.passlog.open_key = None
             had_gain, self.job_gain = self.job_gain, None
+            info = None
+            if self.dev and not (job and job.get("preview")):
+                try:
+                    info = self.dev.stream_info() if hasattr(self.dev, "stream_info") else None
+                except Exception:                    # noqa: BLE001
+                    info = None
+                if info and info["wall_s"] > 5:
+                    pct = 100.0 * info["got_s"] / info["wall_s"]
+                    self.decoders.log(f"Second receiver stream: {info['got_s']:.0f} s of samples in {info['wall_s']:.0f} s ({pct:.1f}%), {info['dropped_s']:.1f} s dropped")
+                    log.info("second receiver stream: %s", info)
             if not (job and job.get("preview")):
                 try:
                     self.decoders.stop()             # closes the recording and hands it to SatDump
@@ -359,6 +371,7 @@ class SatRx:
             self.decoders.pass_northbound = False
             if self.dev:
                 try:
+                    self.dev.async_read = False      # the next user of this dongle object starts from the plain reader
                     self.dev.close()
                 except Exception:                    # noqa: BLE001
                     pass
@@ -374,6 +387,8 @@ class SatRx:
                    "stopped": why, "images": self.pass_images, "rx": "rx2", **sm}
             if rec.get("gain") is None and had_gain is not None:
                 rec["gain"] = round(had_gain, 1)
+            if info and info["wall_s"] > 5:
+                rec["iq_pct"] = round(100.0 * info["got_s"] / info["wall_s"], 1)
             self.pass_images = 0
             self.passlog.add(rec)
             self._push_live(force=True)

@@ -464,9 +464,17 @@ function toggleBank(b) {
   });
 })();
 document.querySelectorAll(".radio [data-k]").forEach((b) => b.addEventListener("click", () => { if (!explainOn) key(b.dataset.k); }));
+/* the six less used keys (PGM MODE STEP BANK DLY DEC) fold behind MORE so the keypad is two rows, not four */
+(function keysMoreInit() {
+  const f = document.querySelector(".fkeys"), b = $("keysMore");
+  const set = (on) => { f.classList.toggle("open", on); b.textContent = on ? "LESS ▴" : "MORE ▾"; b.title = on ? "Hide the less used keys" : "Show the less used keys"; try { localStorage.setItem("andysdr.keysmore", on ? "1" : "0"); } catch (e) { /* storage can be unavailable */ } };
+  b.addEventListener("click", () => set(!f.classList.contains("open")));
+  let was = "0"; try { was = localStorage.getItem("andysdr.keysmore") || "0"; } catch (e) { /* ignore */ }
+  set(was === "1");
+})();
 
 document.addEventListener("keydown", (e) => {
-  if (e.target.matches("input, select, textarea") || !$("loginModal").hidden) return;
+  if (e.target.matches("input, select, textarea") || !$("loginModal").hidden || document.body.classList.contains("set-open")) return;   // (the Settings page handles its own keys)
   if (e.key === "Escape") { if (explainOn) setExplain(false); $("helpModal").hidden = true; $("acarsModal").hidden = true; key("clr"); return; }
   const map = { Enter: "e", ArrowUp: "up", ArrowDown: "down", Backspace: "clr", ".": ".", s: "scan", m: "man", p: "pgm", l: "lo", n: "skip" };
   if (/^[0-9]$/.test(e.key)) key(e.key);
@@ -517,10 +525,18 @@ const player = {
 player.setVolume(knobs.vol.value / 100);
 setInterval(() => player.wake(), 1500);
 for (const ev of ["click", "keydown", "touchstart", "focus", "visibilitychange"]) window.addEventListener(ev, () => player.wake(), true);
+// The audio key says AUDIO ON while sound is playing; otherwise it reads MUTED and glows slowly red so it is obvious nothing is coming out.
+function syncPwr() {
+  const live = player.on && !player.muted;
+  $("pwrLed").classList.toggle("on", player.on);
+  $("pwrBtn").classList.toggle("is-muted", !live);
+  $("pwrTxt").textContent = live ? "AUDIO ON" : "MUTED";
+  $("pwrBtn").title = live ? "Sound is playing on this screen - click to mute" : "No sound - click to switch the sound on";
+}
 $("pwrBtn").addEventListener("click", () => {
   if (explainOn) return;
   if (player.on) player.stop(); else { player.start(); player.setVolume(knobs.vol.value / 100); }
-  $("pwrLed").classList.toggle("on", player.on);
+  syncPwr();
   send({ cmd: "audio", on: player.on && $("myAudio").checked });
   if (PHONE_APP) { try { localStorage.setItem("andysdr_audio_off", player.on ? "0" : "1"); } catch (e) {} }   // the app remembers a deliberate Audio off
 });
@@ -531,10 +547,11 @@ function phoneAudioAuto() {
   let off = false; try { off = localStorage.getItem("andysdr_audio_off") === "1"; } catch (e) {}
   if (!PHONE_APP || off || player.on) return;
   player.start(); player.setVolume(knobs.vol.value / 100);
-  $("pwrLed").classList.add("on");
+  syncPwr();
   send({ cmd: "audio", on: $("myAudio").checked });
 }
 phoneAudioAuto();
+syncPwr();
 // the Android app calls this each time it comes back to the front
 window.andyResume = () => {
   player.wake();
@@ -2257,7 +2274,7 @@ $("agcChk").onchange = () => send({ cmd: "agc", on: $("agcChk").checked });
 $("autoGain").onchange = (e) => send({ cmd: "settings", values: { auto_gain: e.target.checked }, quiet: true });
 
 /* ----- settings / remote ----- */
-$("saveSettings").onclick = () => send({ cmd: "settings", values: { scan_delay: +$("setDelay").value, scan_dwell: +$("setDwell").value, deemphasis_us: +$("setDeemph").value } });
+["setDelay", "setDwell", "setDeemph"].forEach((id) => ($(id).onchange = () => send({ cmd: "settings", values: { scan_delay: +$("setDelay").value, scan_dwell: +$("setDwell").value, deemphasis_us: +$("setDeemph").value } })));
 $("setPass").onclick = () => {
   const p = $("newPass").value.trim();
   if (p.length < 4) { toast("Password must be at least 4 characters", "warn"); return; }
@@ -2345,13 +2362,13 @@ function buildQuick() {
   });
   $("qDec").innerHTML = `<button class="key q" data-d="autoid" title="Automatic signal identification (Auto ID): AndySDR picks the mode and decoder for you">AUTO</button>` +
     Q_DECS.map((d, i) => `<button class="key q" data-d="${i}" title="${Q_DEC_TIPS[d[2] || d[1]]}">${d[0]}</button>`).join("") +
-    `<button class="key q danger" data-d="off" title="Stop the running decoder">OFF</button>`;
+    `<button class="key q danger k-rec" data-d="off" title="Stop the running decoder">OFF</button>`;
   $("qLock").innerHTML = [
     "SKIP|next|Leave this channel / frequency and carry on scanning straight away (nothing is locked out – it is visited again next time round). Same as the SKIP key or N on the keyboard.",
     "SKIP 10 MIN|t10|Ignore the channel you are stopped on (or the current one) for 10 minutes, then scan it again. Works while scanning and searching.",
     "LOCK OUT|perm|Permanent lockout (same as the L/O key): a memory channel stays locked out until you untick L/O in the MEMORY tab; a searched frequency is ignored until UNSKIP.",
     "UNSKIP|clr|Stop ignoring everything you skipped or locked out while searching."]
-    .map((x) => { const [l, k, t] = x.split("|"); return `<button class="key q ${k === "clr" || k === "next" ? "" : "danger"}" data-l="${k}" title="${t}">${l}</button>`; }).join("");
+    .map((x) => { const [l, k, t] = x.split("|"); return `<button class="key q ${k === "next" ? "" : "k-lock"}" data-l="${k}" title="${t}">${l}</button>`; }).join("");
   $("qTog").innerHTML = ["AGC|agc|Automatic gain control on/off (turns RF GAIN to automatic)", "MUTE|mute|Silence the sound on this screen without changing the volume knob",
     "MONITOR|mon|Hold the squelch open to listen to the hiss/background – press again to go back to your squelch setting",
     "STEP −|stepdn|Smaller tuning step", "STEP +|stepup|Larger tuning step"]
@@ -2377,7 +2394,7 @@ function buildQuick() {
     else if (b.dataset.f === "replay") doReplay();
     else if (b.dataset.f) showTab(b.dataset.f === "images" ? "img" : "rec");
     else if (b.dataset.t === "agc") send({ cmd: "agc", on: !S.agc });
-    else if (b.dataset.t === "mute") { player.muted = !player.muted; player.setVolume(player.vol); renderQuick(); }
+    else if (b.dataset.t === "mute") { player.muted = !player.muted; player.setVolume(player.vol); syncPwr(); renderQuick(); }
     else if (b.dataset.t === "mon") {
       if (S.squelch > -119) { sqPrev = S.squelch; send({ cmd: "squelch", value: -120 }); } else send({ cmd: "squelch", value: sqPrev });
     }
@@ -3043,8 +3060,8 @@ $("repScan").onclick = () => {
   send({ cmd: "rep_scan", bank: b, text: $("repFind").value.trim(), band: $("repBand").value, mode: $("repMode").value, max_km: +$("repKm").value || 0 });
 };
 $("repPosGps").onclick = () => {
-  showTab("sch"); $("satPosBox").open = true;
-  setTimeout(() => { $("gpsOn").scrollIntoView({ behavior: "smooth", block: "center" }); toast("Tick 'Use a USB GPS unit', pick the port (or Auto-find) – the repeater list then sorts by where the GPS says you are", "info"); }, 150);
+  showSettings("location", "gpsOn");
+  setTimeout(() => { toast("Tick 'Use a USB GPS unit', pick the port (or Auto-find) – the repeater list then sorts by where the GPS says you are", "info"); }, 150);
 };
 function repSetPos(lat, lon, alt) { send({ cmd: "sat_observer", lat, lon, alt }); setTimeout(repAsk, 400); }
 $("repPosSet").onclick = () => repSetPos($("repLat").value.trim().replace(",", "."), $("repLon").value.trim().replace(",", "."));
@@ -3142,7 +3159,7 @@ $("ft8Start4").onclick = () => ft8Go("ft4");
 /* ---- satellite auto-capture */
 const fmtLocal = (t) => new Date(t * 1000).toLocaleString([], { weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 const azName = (a) => ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(a / 45) % 8];
-let SAT_ALL = false, SAT_POS_SHOWN = false, SAT_SHOW_REMOVED = false;
+let SAT_ALL = false, SAT_SHOW_REMOVED = false;
 const SAT_OPEN = new Set();          // satellites whose Options are open
 $("satMore").onclick = () => { SAT_ALL = !SAT_ALL; renderSats(); };
 function renderSats() {
@@ -3247,7 +3264,7 @@ function renderSats() {
   const SHOW = 8, more = !SAT_ALL && st.passes.length > SHOW;
   $("satMore").hidden = st.passes.length <= SHOW;
   $("satMore").textContent = SAT_ALL ? "Show fewer" : `Show all ${st.passes.length} passes`;
-  if (!st.observer && !SAT_POS_SHOWN) { $("satPosBox").open = true; SAT_POS_SHOWN = true; }     // first time: ask for the position
+  $("satPosHint").hidden = !!st.observer;                                  // no position yet: say where to set it
   for (const p of (more ? st.passes.slice(0, SHOW) : st.passes)) {
     const d = p.geo ? "Now" : dayName(p.aos);
     if (d !== lastDay) { lastDay = d; rows += `<tr class="dayrow"><td colspan="7"><b>${esc(d)}</b></td></tr>`; }
@@ -3602,12 +3619,13 @@ setInterval(() => { if (MESH && meshTabOpen()) renderMeshList(); }, 30000);
 /* ======================================================= help */
 const HELP = {
   conn: ["Connection light", "Green CONNECTED means this screen is talking to the AndySDR receiver (on this PC or across the network). If it shows OFFLINE, AndySDR is not running or the network is down – it reconnects by itself."],
-  theme: ["Style", "Changes the colours: Modern dark or light, Blue dark or light, Soft dark (warm amber) or Soft light (cream and green). The layout and the controls are identical in every style – only the colours change. Each computer remembers its own choice."],
+  settings: ["⚙ SETTINGS", "Opens the Settings page: every setting in one place, grouped under labelled headings (Receivers, Audio & squelch, Scanner, Decoders, Display, Location & GPS, Remote access, Alerts, Sharing & logging, Updates & system). Pick a group on the left, or type in the search box to find a setting by any word. Press Esc or Close to go back to the radio."],
+  theme: ["Colours (Settings › Display)", "Changes the colours: Modern dark or light, Blue dark or light, Soft dark (warm amber) or Soft light (cream and green). The layout and the controls are identical in every style – only the colours change. Each computer remembers its own choice."],
   help: ["HELP", "Opens this guide. Tick 'Explain mode' and then click any knob, key or panel to get a description of just that control. Press Esc to leave Explain mode."],
   volume: ["VOLUME knob", "Loudness on THIS computer only (each remote listener has their own). Drag up/down, use the mouse wheel, or click it and use the arrow keys. Double-click resets to 70%."],
   squelch: ["SQUELCH knob", "Mutes the hiss when nobody is transmitting. Turn it up until the noise just disappears – the little raised bar on the S-meter shows where it is set. OPEN (fully left) = always hear everything. Scanning and searching need squelch set above the noise so they know when a channel is quiet."],
   gain: ["RF GAIN knob", "Receiver amplification. The AGC button under the knob switches the receiver's automatic gain on or off – turn it off to set the gain yourself with the knob; for digital voice (DMR, P25, TETRA) manual gain set just below overload usually decodes best. Too little = weak signals lost; too much = overload, false signals and a raised noise floor. Start in the middle, watch the waterfall, and turn down if you see lots of 'ghost' signals. For SDRplay receivers 0-100% controls the LNA state and IF gain together. Turning it switches AGC off; tick Hardware AGC in the Receiver tab to make it automatic. If a strong signal will not decode until you turn the gain down, tick Ease RF gain down on strong signals (Receiver tab): the knob becomes the most gain, and AndySDR lowers it a step at a time while a signal is too strong, starting again from the knob each time you change frequency."],
-  power: ["AUDIO ON/OFF", "Starts or stops sound on this computer. Browsers need one click before they may play audio, so press this once after opening AndySDR. The LED shows green when audio is playing."],
+  power: ["AUDIO / MUTED", "Starts or stops sound on this computer. It reads AUDIO ON (green light) while sound is playing, and MUTED with a slow red glow when there is no sound - press it to switch between the two. Browsers need one click before they may play audio, so press it once after opening AndySDR."],
   lcd: ["Display", "Top row: status flags – SCAN, SRCH (search), HOLD (stopped on a signal), MAN (manual), PRI (priority on), DLY (resume delay), L/O (channel locked out), AGC, REC (recording), DEC (decoder running). Second row: banks 0-9, lit if the bank will be scanned, underlined = bank in use. CH = channel number (bank × 100 + channel). Then the frequency in MHz, mode, channel name and step size. S-meter shows signal strength in dBFS."],
   k_scan: ["SCAN", "Scans all memory channels in the lit banks, skipping locked-out channels. AndySDR uses the spectrum to skip silent channels instantly, so scanning is very fast. It stops on activity, waits the resume delay after the transmission ends, then carries on. ▲/▼ change scan direction or skip the current channel."],
   k_skip: ["SKIP ▸ next channel", "While scanning or searching: leaves the channel (or frequency) the scanner is stopped on – or still waiting on – and carries straight on to the next one. Nothing is locked out, so you hear it again next time round; use L/O or SKIP 10 MIN / 1 HOUR / TODAY if you never want it. While searching, a skipped signal is ignored for 20 seconds so the search moves on to other signals. Not scanning? It tells you to press SCAN or SRCH first. Keyboard: N."],
@@ -3660,7 +3678,7 @@ const HELP = {
   adsb: ["ADS-B aircraft (1090 MHz)", "Tracks aircraft that broadcast ADS-B (nearly every airliner and many smaller aircraft). Press ▶ Start ADS-B: AndySDR tunes to 1090 MHz, centres the receiver exactly on it and decodes the aircraft messages itself – no other program is needed. The table shows callsign, hex address (ICAO), airline and country (from the callsign/address), altitude, speed, heading, climb rate, squawk, distance from you and how long ago it was heard; click a heading to sort. The map shows each aircraft as a plane pointing the way it is flying, coloured by height (orange = low, green = middle, blue = high) with a trail behind it. Squawks 7500, 7600 and 7700 flash red and pop up a warning. You need a receiver running at 2 MS/s or more (any SDRplay RSP, RTL-SDR, Airspy, HackRF) and an antenna that works at 1090 MHz – a short 6.9 cm whip or a proper 1090 MHz collinear, as high and clear of buildings as you can get it. Use the RSP's Antenna A/B (50 Ω) socket, not Hi-Z. Turn RF GAIN up fairly high; if you see lots of messages but few aircraft, turn it down a little. Press Stop (or tune somewhere else) to go back to normal scanning. With the Simulator receiver you get ten practice aircraft."],
   adsbopts: ["ADS-B options", "My position: type your latitude/longitude (decimal degrees, e.g. 51.5074 and -0.1278) or press 📍 Use my location. With it set the map shows range rings, the table shows each aircraft's distance, and positions come out faster and more reliably. Units: aviation (feet, knots, nautical miles) or metric. Street map downloads OpenStreetMap tiles from the internet (the radar-style map works offline). Trails and Labels switch the track lines and text on the map; 'Only with position' hides aircraft that have not sent a position yet; Find dims the others on the map."],
   adsbmap: ["ADS-B map", "Drag to move, mouse wheel or +/− to zoom, double-click to zoom in on a spot, ⌖ Fit to show everything. Click an aircraft for its details; click it again (or ✕) to let go. Rings are 'distance from you' (set My position first)."],
-  topstatus: ["Status strip", "A live read-out across the top of the radio: LOCAL and UTC clocks (UTC is what weather-fax and satellite schedules use), the receiver in use (RX), the width of spectrum it is receiving (SPAN), the audio filter width for the current mode (FILTER), what the scanner is doing (STATE – turns amber while scanning, searching or holding), the running decoder, and how many screens are connected (LINKS). NEXT PASS appears when a satellite is ticked Record in the SCHEDULER: it counts down to the next pass (name, time to go, highest point) and shows ● while one is being recorded; click it to open the scheduler."],
+  topstatus: ["Status strip", "A live read-out across the top of the radio: LOCAL and UTC clocks (UTC is what weather-fax and satellite schedules use), the receiver in use (RX), what the scanner is doing (STATE – turns amber while scanning, searching or holding), the running decoder, and how many screens are connected (LINKS). NEXT PASS appears when a satellite is ticked Record in the SCHEDULER: it counts down to the next pass (name, time to go, highest point) and shows ● while one is being recorded; click it to open the scheduler."],
   leds: ["Indicator lights", "RX (green) – a signal is open on the squelch and you are hearing it. SCAN (amber) – scanning or searching; it flashes while sweeping and stays lit when stopped on a signal. DEC (blue) – a decoder is running. REC (red) – recording to a WAV file. LINK (green) – this screen is connected to the radio."],
   qbw: ["Bandwidth (WIDTH)", "How wide the receive filter is for the current mode. Narrower cuts out neighbouring signals and noise; wider lets the whole signal through. The list shows the usual widths for the mode. AUTO follows the ★ suggestion, which AndySDR works out from the decoder that is running, what Auto ID has measured or recognised, and the channel spacing of the band you are tuned to (the reason is shown underneath). Pick a width yourself and it is remembered for that mode; pick Auto again, or press ★, to go back to the suggestion. Broadcast FM (WFM) is always 200 kHz. The red band on the spectrum and the FILTER read-out at the top show the width in use."],
   qmode: ["Mode buttons", "One click to choose how the signal is demodulated – no need to press MODE repeatedly. NFM/FM for most two-way radio, AM for airband, WFM for FM broadcast, USB/LSB for HF voice and weather fax, CW for Morse, DIG and DIG25 for digital signals (DIG25 is the wider one for TETRA and satellites). The current mode is lit."],
@@ -3695,20 +3713,22 @@ function openHelp() {
   $("helpBody").innerHTML = `
   <h3>QUICK START</h3>
   <ol>
-    <li>Plug in your SDR, open the <b>RECEIVER</b> tab, pick it and press <b>Use this receiver</b>.</li>
+    <li>Plug in your SDR, open <b>⚙ SETTINGS › Receivers</b>, pick it and press <b>Use this receiver</b>.</li>
     <li>Press <b>AUDIO ON/OFF</b> once so this computer can play sound.</li>
     <li>Click the big frequency on the display and type one (for example <code>145.5</code>), or click a signal on the waterfall.</li>
     <li>Turn <b>SQUELCH</b> up until the hiss stops, set <b>RF GAIN</b> so the noise floor is low and signals stand out.</li>
     <li>Store channels with <b>PGM</b> or import from RadioReference in the <b>MEMORY</b> tab, then press <b>SCAN</b>.</li>
     <li>Press <b>SRCH</b> to hunt for live transmissions across a band.</li>
   </ol>
+  <h3>COLOUR CODE</h3>
+  <p>Buttons that mean the same thing share a colour: <b style="color:var(--c-rec)">red</b> = recording or stop (REC, decoder OFF), <b style="color:var(--c-lock)">orange</b> = lock out or ignore (L/O, SKIP 10 MIN, LOCK OUT, UNSKIP), <b style="color:var(--c-go)">green</b> = scanning or searching (SCAN, SRCH). A tinted button is ready; a solid one is switched on. The audio key glows slowly <b style="color:var(--c-rec)">red</b> and reads MUTED whenever there is no sound.</p>
   <h3>KNOBS &amp; DISPLAY</h3>${ctl(["volume", "squelch", "gain", "power", "leds", "lcd", "topstatus"])}
   <h3>QUICK BUTTONS (under the display)</h3>${ctl(["qmode", "qbw", "qband", "qhot", "qdigi", "qdec", "qnotch", "qlock", "qtog", "qfiles", "replay"])}
   <h3>FUNCTION KEYS</h3>${ctl(["k_skip", "k_scan", "k_man", "k_srch", "k_pgm", "k_lo", "k_pri", "k_mode", "k_step", "k_bank", "k_dly", "k_rec", "k_dec", "k_arrows", "k_typefreq"])}
   <p class="small">Keyboard: digits and <code>.</code> type, <code>Enter</code> tunes, <code>↑ ↓</code> step, <code>S</code> scan, <code>M</code> manual, <code>P</code> program, <code>L</code> lockout, <code>I</code> skip 10 min, <code>H</code> help, <code>Esc</code> clear. Click the big frequency to type one with the mouse or on a touch screen.</p>
-  <h3>SCREENS</h3>${ctl(["scope", "zoom", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "satauto", "satrx", "passreport", "phonelayout", "gps", "acars", "sonde", "ft8tab", "morsebox", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "updates", "receiver", "remote", "theme", "conn"])}
+  <h3>SCREENS</h3>${ctl(["scope", "zoom", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "satauto", "satrx", "passreport", "phonelayout", "gps", "acars", "sonde", "ft8tab", "morsebox", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "settings", "updates", "receiver", "remote", "theme", "conn"])}
   <h3>DECODER PROGRAMS</h3>
-  <p>AndySDR has WEFAX and SSTV built in (SSTV: Martin, Scottie, Robot and PD modes – ISS 145.800 NFM, 2 m 144.500 NFM, 20 m 14.230 USB). DSD-FME, multimon-ng and SatDump now come bundled in the <code>decoders</code> folder next to <code>AndySDR.exe</code>. If one shows ✖ in the DECODERS tab, press <b>⬇ Download missing decoders</b> and AndySDR fetches it from GitHub into <code>%APPDATA%\\AndySDR\\decoders</code>. You can also unzip your own copy into either folder (any sub-folder is fine – AndySDR finds the .exe):</p>
+  <p>AndySDR has WEFAX and SSTV built in (SSTV: Martin, Scottie, Robot and PD modes – ISS 145.800 NFM, 2 m 144.500 NFM, 20 m 14.230 USB). DSD-FME, multimon-ng and SatDump now come bundled in the <code>decoders</code> folder next to <code>AndySDR.exe</code>. If one shows ✖ in <b>⚙ SETTINGS › Decoders</b>, press <b>⬇ Download missing decoders</b> and AndySDR fetches it from GitHub into <code>%APPDATA%\\AndySDR\\decoders</code>. You can also unzip your own copy into either folder (any sub-folder is fine – AndySDR finds the .exe):</p>
   <dl><dt>DSD-FME</dt><dd>github.com/lwvmobile/dsd-fme – DMR, P25 1/2, NXDN, dPMR, YSF, M17. AndySDR feeds it like SDR++'s network sink (TCP 127.0.0.1:7355, 48 kHz); DSD-FME plays decoded voice on your speakers itself (AndySDR starts the PulseAudio sound server that comes with it).</dd>
   <dt>multimon-ng</dt><dd>github.com/EliasOenal/multimon-ng – POCSAG 512/1200/2400, FLEX, APRS, DTMF, ZVEI, EAS.</dd>
   <dt>SatDump</dt><dd>satdump.org – Meteor-M N2-3 / N2-4 LRPT (137.9 or 137.1 MHz, 72k). Use DIG25 mode, start the LRPT decoder as the satellite rises, stop it when it sets – pictures appear in WEATHER IMAGES. SatDump needs the Microsoft Visual C++ 2015-2022 x64 runtime (the AndySDR installer adds it).</dd>

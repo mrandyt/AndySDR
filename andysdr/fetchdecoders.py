@@ -3,7 +3,7 @@
 Used in two places:
   * the Windows build (GitHub Actions / build_windows.bat) – bundles them next to AndySDR.exe:
         python -m andysdr.fetchdecoders dist/AndySDR/decoders
-  * the DECODERS tab – "Download missing decoders" fetches anything not yet installed into
+  * Settings › Decoders – "Download missing decoders" fetches anything not yet installed into
     %APPDATA%\\AndySDR\\decoders (no admin rights needed).
 
 Each program is taken from the newest GitHub release that has a Windows build. All three are

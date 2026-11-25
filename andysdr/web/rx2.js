@@ -101,7 +101,7 @@ function rx2Render() {
     const a = b.dataset.a;
     if (a === "on") send({ cmd: "satrx_cfg", enabled: true });
     else if (a === "check") { send({ cmd: "satrx_check" }); toast("Checking the second receiver …"); }
-    else { showTab("sch"); const d = rx2$("satRxBox"); if (d) { d.open = true; d.scrollIntoView({ block: "start" }); } }
+    else showSettings("receivers", "satRxBox");
   }));
 
   const nx = (r.next || []).find((p) => p.los > Date.now() / 1000), lp = r.last;

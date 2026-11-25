@@ -451,6 +451,7 @@ class RtlNativeDevice(BaseDevice):
                  self.TUNERS.get(lib.rtlsdr_get_tuner_type(h), "?"), len(self._gains))
 
     def close(self):
+        self._stream_stop()
         if self.dev:
             try:
                 rtl_lib().rtlsdr_close(self.dev)
@@ -458,7 +459,135 @@ class RtlNativeDevice(BaseDevice):
                 pass
         self.dev = None
 
+    # ---- continuous reading ------------------------------------------------------------------------------------
+    # rtlsdr_read_sync only collects samples while it is being called, so every millisecond spent processing a block is
+    # a millisecond of samples the dongle throws away: the stream is full of tiny gaps (about 5 % of it). A spectrum
+    # does not care, but a satellite picture needs an unbroken run of symbols. With async_read switched on, a
+    # background thread keeps the dongle's transfers flowing the whole time and read() just takes what has arrived.
+    async_read = False
+    _thr = None
+    _rc = None
+    _STREAM_SECONDS = 20          # most that is kept if the processing falls behind; older samples are dropped (and counted)
+
+    def _stream_start(self):
+        import ctypes
+        import collections
+        lib = rtl_lib()
+        if not (lib and hasattr(lib, "rtlsdr_read_async") and hasattr(lib, "rtlsdr_cancel_async")) or not self.dev:
+            return False
+        cb_type = ctypes.CFUNCTYPE(None, ctypes.POINTER(ctypes.c_ubyte), ctypes.c_uint32, ctypes.c_void_p)
+        lib.rtlsdr_read_async.argtypes = [ctypes.c_void_p, cb_type, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32]
+        lib.rtlsdr_cancel_async.argtypes = [ctypes.c_void_p]
+        self._q = collections.deque()
+        self._qlock = threading.Lock()
+        self._qbytes = 0
+        self._dropped = 0
+        self._got = 0
+        self._t_first = None
+        self._t_last = None
+        self._have = threading.Event()
+        self._rc = None
+        cap = int(max(self.sample_rate, 250000) * 2 * self._STREAM_SECONDS)
+
+        def on_data(buf, length, _ctx):
+            try:
+                b = ctypes.string_at(buf, length)
+                now = time.time()
+                with self._qlock:
+                    if self._t_first is None:
+                        self._t_first = now
+                    self._t_last = now
+                    self._got += length
+                    self._q.append(b)
+                    self._qbytes += length
+                    while self._qbytes > cap and len(self._q) > 1:
+                        old = self._q.popleft()
+                        self._qbytes -= len(old)
+                        self._dropped += len(old)
+                self._have.set()
+            except Exception:                               # noqa: BLE001 - never let an error escape into the C code
+                pass
+        self._cb = cb_type(on_data)                         # kept on self so it is not garbage collected while it runs
+        handle = self.dev
+
+        def run():
+            try:
+                self._rc = lib.rtlsdr_read_async(handle, self._cb, None, 0, 1 << 17)    # 15 buffers of 128 kB
+            except Exception as e:                          # noqa: BLE001
+                log.warning("RTL-SDR async read: %s", e)
+                self._rc = -1
+            self._have.set()
+        self._thr = threading.Thread(target=run, name="rtl-stream", daemon=True)
+        self._thr.start()
+        return True
+
+    def _stream_stop(self):
+        thr, self._thr = self._thr, None
+        if thr is None:
+            return
+        if self.dev:
+            try:
+                rtl_lib().rtlsdr_cancel_async(self.dev)
+            except Exception:                               # noqa: BLE001
+                pass
+        thr.join(3.0)
+
+    def stream_info(self):
+        """How the continuous stream has done so far: seconds of samples received against seconds on the clock."""
+        if self._thr is None or self._t_first is None or self._t_last is None:
+            return None
+        wall = self._t_last - self._t_first
+        got = self._got / 2.0 / max(self.sample_rate, 1)
+        return {"got_s": round(got, 1), "wall_s": round(wall, 1), "dropped_s": round(self._dropped / 2.0 / max(self.sample_rate, 1), 1)}
+
+    def _read_stream(self, n):
+        if self._thr is None or not self._thr.is_alive():
+            if self._rc is not None and self._rc != 0:      # it would not start (or died): carry on the old way rather than give no samples
+                log.warning("RTL-SDR async read ended (%s) - using the plain reader", self._rc)
+                self.async_read = False
+                self._thr = None
+                return self._read_sync(n)
+            if not self._stream_start():
+                self.async_read = False
+                return self._read_sync(n)
+        want = max(2, min(2 * n, 1 << 21)) // 2 * 2
+        parts, have = [], 0
+        deadline = time.time() + 0.5
+        while have < want:
+            with self._qlock:
+                b = self._q.popleft() if self._q else None
+                if b is not None:
+                    self._qbytes -= len(b)
+                    if have + len(b) > want:
+                        cut = (want - have) // 2 * 2
+                        self._q.appendleft(b[cut:])
+                        self._qbytes += len(b) - cut
+                        b = b[:cut]
+            if b is None:
+                if time.time() > deadline or (self._thr is not None and not self._thr.is_alive()):
+                    break
+                self._have.wait(0.02)
+                self._have.clear()
+                continue
+            parts.append(b)
+            have += len(b)
+        if not have:
+            if self._thr is not None and not self._thr.is_alive() and self._rc not in (None, 0):
+                log.warning("RTL-SDR async read ended (%s) - using the plain reader", self._rc)
+                self.async_read = False
+                self._thr = None
+                return self._read_sync(n)
+            return np.zeros(0, np.complex64)
+        raw = np.frombuffer(b"".join(parts), np.uint8).astype(np.float32)
+        raw = (raw - 127.4) / 128.0
+        return (raw[0::2] + 1j * raw[1::2]).astype(np.complex64)
+
     def read(self, n):
+        if self.async_read and self.dev:
+            return self._read_stream(n)
+        return self._read_sync(n)
+
+    def _read_sync(self, n):
         import ctypes
         if not self.dev:
             return np.zeros(0, np.complex64)
@@ -474,6 +603,7 @@ class RtlNativeDevice(BaseDevice):
 
     def set_sample_rate(self, sr):
         self.sample_rate = sr
+        self._stream_stop()                                 # restarts by itself on the next read
         if self.dev:
             rtl_lib().rtlsdr_set_sample_rate(self.dev, int(sr))
             rtl_lib().rtlsdr_reset_buffer(self.dev)
