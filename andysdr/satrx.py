@@ -151,7 +151,7 @@ class SatRx:
         c = self.cfg()
         if c["gain_mode"] == "auto":
             lo, hi = self._gain_range
-            return passlog.suggest_gain(self.passlog.for_sat(sid), c["gain"], lo, hi), "auto"
+            return passlog.suggest_gain(self.passlog.for_sat(sid), c["gain"], lo, hi, down=0.15, up=0.15), "auto"   # an 8-bit dongle: stay near the set gain
         return c["gain"], "fixed"
 
     # ------------------------------------------------------------------ plumbing

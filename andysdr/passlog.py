@@ -193,11 +193,12 @@ def best_gain(rows, step):
     return round(statistics.mean(gains[k]), 1), round(statistics.mean(by[k]), 1), len(by[k])
 
 
-def suggest_gain(rows, knob, lo, hi):
-    """The gain to use for the next pass of a satellite whose earlier passes are in `rows` (oldest first)."""
+def suggest_gain(rows, knob, lo, hi, down=0.40, up=0.25):
+    """The gain to use for the next pass of a satellite whose earlier passes are in `rows` (oldest first).  It never strays
+    further than `down` / `up` (fractions of the gain range) below / above the knob; a cheap 8-bit dongle is kept near its knob."""
     span = max(1.0, float(hi) - float(lo))
     step = max(1.0, round(0.08 * span))
-    low_b, high_b = max(float(lo), knob - 0.40 * span), min(float(hi), knob + 0.25 * span)
+    low_b, high_b = max(float(lo), knob - down * span), min(float(hi), knob + up * span)
     allscored = [r for r in rows if r.get("score") is not None and r.get("gain") is not None]
     if not allscored:
         return float(knob)
@@ -222,7 +223,8 @@ def suggest_gain(rows, knob, lo, hi):
         if cands:
             last = {k: max((i for i, r in enumerate(scored) if round(float(r["gain"]) / step) == k), default=-1) for k in cands}
             return float(min(cands, key=lambda k: last[k]) * step)
-    return round(statistics.mean(gains[best]), 1)
+    return round(min(high_b, max(low_b, statistics.mean(gains[best]))), 1)
+
 
 def iq_summary(path, fs=240000):
     """A quick look at a finished pass recording (16-bit stereo WAV, 240 kS/s): how strong the noise is, and where the

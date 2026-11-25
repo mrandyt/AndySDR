@@ -137,6 +137,11 @@ def _iq_summary_test():
     ok = r is not None and r["excess_db"] > 1.0 and r["centre_khz"] is not None and 10 < r["centre_khz"] < 40
     print(("PASS " if ok else "FAIL ") + f"recording check sees the signal and its centre ({r})")
     return ok
+_rows = [{"gain": 38.0, "score": 5.1}, {"gain": 38.0, "score": 3.5}, {"gain": 21.0, "score": 6.2}]
+_g = passlog.suggest_gain(_rows, 38.0, 0, 49.6, down=0.15, up=0.15)
+_okg = 30.0 <= _g <= 38.0 + 0.15 * 49.6
+print(("PASS " if _okg else "FAIL ") + f"a dongle's learned gain stays near its set gain even when a far-off gain scored best ({_g})")
+ok = _okg and ok
 ok = _iq_summary_test() and ok
 print("ALL OK" if ok else "FAILED")
 sys.exit(0 if ok else 1)

@@ -1,4 +1,4 @@
-/* The 2ND RECEIVER screen (the Nooelec / RTL-SDR dongle) and the status strip shown under the tabs on every screen. */
+/* The RECEIVER 2 screen (the Nooelec / RTL-SDR dongle) and the status strip shown under the tabs on every screen. */
 const RX2 = { live: null, log: [], spec: null, best: null, ctlKey: "", wfLast: 0, preset: "meteor", custom: "", lastDraw: 0 };
 const RX2_PRESETS = [
   { id: "meteor", label: "Meteor-M satellite, 137.900 MHz", f: 137.9e6, bw: 60e3, sat: true },
@@ -52,8 +52,8 @@ function rxStripRender() {
   if (run) main = `Recording: ${String(run.name).split(" pass")[0]} until ${run.until}`;
   const st = rx2State(), r = SCH && SCH.satrx;
   const dev2 = r && (r.using || (r.devices && r.devices[0] && r.devices[0].label)) || "";
-  el.innerHTML = `<div class="rxs-chip on"><i class="rxs-dot ok"></i><div><small>MAIN RECEIVER</small><b>${esc(S.device || "–")}</b><span>${esc(main)}</span></div></div>
-    <div class="rxs-chip rx2s ${st.k}" role="button" tabindex="0" data-go="rx2" title="Open the 2nd receiver screen"><i class="rxs-dot"></i><div><small>2ND RECEIVER</small><b title="${esc(dev2)}">${esc(rx2Lbl(dev2) || (r && r.enabled ? "no dongle found" : "not in use"))}</b><span>${esc(st.chip)}</span></div></div>`;
+  el.innerHTML = `<div class="rxs-chip on"><i class="rxs-dot ok"></i><div><small>RECEIVER 1</small><b>${esc(S.device || "–")}</b><span>${esc(main)}</span></div></div>
+    <div class="rxs-chip rx2s ${st.k}" role="button" tabindex="0" data-go="rx2" title="Open the 2nd receiver screen"><i class="rxs-dot"></i><div><small>RECEIVER 2</small><b title="${esc(dev2)}">${esc(rx2Lbl(dev2) || (r && r.enabled ? "no dongle found" : "not in use"))}</b><span>${esc(st.chip)}</span></div></div>`;
   const go = el.querySelector("[data-go]");
   go.onclick = () => showTab("rx2");
   const b = rx2$("rx2Badge"); if (b) b.hidden = st.k !== "rec" && st.k !== "view";

@@ -36,7 +36,7 @@
   let tabNames = {};
 
   function tabButtons() { return [...document.querySelectorAll("nav.tabbar .tab")]; }
-  function labelOf(btn) { return btn.textContent.replace(/\s+\d*\s*$/, "").trim(); }
+  function labelOf(btn) { const c = btn.cloneNode(true); c.querySelectorAll(".tab-badge").forEach((e) => e.remove()); return c.textContent.trim(); }
 
   /* ---------- building the pieces (once) ---------- */
   function build() {
@@ -141,9 +141,27 @@
   function buildMore() {
     const list = $("phMoreList");
     if (!list) return;
+    // grouped, with a line saying what each screen is for; anything not named here still shows up (under Other)
+    const GROUPS = [
+      ["Radios", [["rx", "Main radio: device, gain, sample rate"], ["rx2", "The dongle for weather satellites, aiming meter"], ["sch", "Satellite passes and timed recordings"]]],
+      ["Find and listen", [["act", "What has been heard, search a band"], ["bp", "Who uses which frequency"], ["rep", "Nearest UK repeaters"], ["rec", "Your sound recordings"]]],
+      ["Decoders", [["dec", "DMR, P25, TETRA, NXDN and more"], ["pag", "Pager messages"], ["acars", "Aircraft text messages"], ["adsb", "Aircraft on a map"], ["sonde", "Weather balloons"], ["ism", "433 / 868 MHz sensors"], ["ft8", "FT8 / FT4 amateur radio"], ["mesh", "MeshCore chat"]]],
+      ["Settings", [["net", "Password, remote access, updates"]]],
+    ];
+    const btns = {};
+    tabButtons().forEach((b) => { btns[b.dataset.tab] = b; });
     const skip = new Set(["mem", "img"]);
-    list.innerHTML = tabButtons().filter((b) => !skip.has(b.dataset.tab))
-      .map((b) => `<button type="button" class="ph-item" data-tab="${b.dataset.tab}"><span>${labelOf(b)}</span><em data-badge="${b.dataset.tab}"></em><i>&#8250;</i></button>`).join("");
+    const used = new Set();
+    const item = (t, sub) => `<button type="button" class="ph-item" data-tab="${t}"><span><b>${labelOf(btns[t])}</b>${sub ? `<small>${sub}</small>` : ""}</span><em data-badge="${t}"></em><i>&#8250;</i></button>`;
+    let html = "";
+    GROUPS.forEach(([title, items]) => {
+      const rows = items.filter(([t]) => btns[t] && !skip.has(t));
+      rows.forEach(([t]) => used.add(t));
+      if (rows.length) html += `<h3 class="ph-group">${title}</h3><div class="ph-list">${rows.map(([t, sub]) => item(t, sub)).join("")}</div>`;
+    });
+    const rest = Object.keys(btns).filter((t) => !skip.has(t) && !used.has(t));
+    if (rest.length) html += `<h3 class="ph-group">Other</h3><div class="ph-list">${rest.map((t) => item(t, "")).join("")}</div>`;
+    list.innerHTML = html;
     list.querySelectorAll(".ph-item").forEach((el) => (el.onclick = () => go("sub", el.dataset.tab)));
     refreshBadges();
     const sel = $("phPref");

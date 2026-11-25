@@ -214,3 +214,13 @@ body.phone #memTable td:nth-child(1) { align-self: start; }
 body.phone #memTable select { min-height: 40px; }
 body.phone #memTable td:nth-child(7), body.phone #memTable td:nth-child(8) { min-height: 40px; }
 body.phone #memTable td:nth-child(9) .btn { min-height: 40px; min-width: 38px; padding: 0 8px; }
+
+/* More page: grouped, each item says what it is for */
+#phMoreList { border: 0; background: none; border-radius: 0; overflow: visible; }
+.ph-group { margin: 18px 4px 8px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.ph-group:first-child { margin-top: 4px; }
+.ph-list { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--panel); }
+.ph-item > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ph-item > span b { font-weight: 600; font-size: 16px; }
+.ph-item > span small { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ph-item { min-height: 62px; }
