@@ -195,7 +195,7 @@ def best_gain(rows, step):
 
 def suggest_gain(rows, knob, lo, hi, down=0.40, up=0.25):
     """The gain to use for the next pass of a satellite whose earlier passes are in `rows` (oldest first).  It never strays
-    further than `down` / `up` (fractions of the gain range) below / above the knob; a cheap 8-bit dongle is kept near its knob."""
+    further than `down` / `up` (fractions of the gain range) below / above the knob."""
     span = max(1.0, float(hi) - float(lo))
     step = max(1.0, round(0.08 * span))
     low_b, high_b = max(float(lo), knob - down * span), min(float(hi), knob + up * span)
