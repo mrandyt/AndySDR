@@ -77,6 +77,7 @@ class Scheduler:
         self.running = None          # {"id", "name", "until", "occurrence"}
         self.running2 = None         # the same, for a pass the second (satellite-only) receiver is recording
         self.done = set()            # occurrences already run ("id@YYYY-MM-DDTHH:MM")
+        self.done2 = set()           # passes the second receiver has already taken (it shares them with the main radio)
         self.lock = threading.Lock()
         self.alive = True
         self.sats = SatPlanner(settings, notify=lambda: self._emit())
@@ -299,16 +300,28 @@ class Scheduler:
         if not due:
             return
         sid, p, key, job, until = due
+        if key in self.done2:                           # this receiver has already had its turn at this pass
+            return
         job = dict(job)
         job["gain"], job["gain_mode"] = rx.pass_gain(sid)
         rx.pass_el = lambda ts, sid=sid: self.sats.look(sid, ts)
-        self.sats.done.add(key)                         # claimed: the main radio will not also start it
+        both = bool(self.s.get("satrx_both"))           # "use both receivers": the main radio records this pass as well
+        self.done2.add(key)
+        if len(self.done2) > 200:
+            self.done2 = set(list(self.done2)[-100:])
+        if not both:
+            self.sats.done.add(key)                     # claimed: the main radio will not also start it
         if rx.begin_job(job):
             until_dt = dt.datetime.fromtimestamp(until)
             self.running2 = {"id": job["id"], "name": job["name"], "until": until_dt, "sat": sid, "freq": job["freq"]}
             log.info("capture started on the second receiver: %s (%.4f MHz) until %s", job["name"], job["freq"] / 1e6,
                      until_dt.strftime("%H:%M"))
             self.radio._emit("event", {"level": "info", "text": f"Second receiver started: {job['name']} until {until_dt.strftime('%H:%M')}"})
+            if both:
+                try:
+                    self.radio.merger.expect(job["id"])  # both receivers take it: their frames are merged afterwards
+                except Exception:                        # noqa: BLE001
+                    log.exception("merge expect")
             self._emit()
         else:
             self.sats.done.discard(key)                 # it could not be started: the main radio takes this pass instead

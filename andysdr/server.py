@@ -917,7 +917,7 @@ class Server:
                 r.scheduler.sats.refresh_tles()
                 r.scheduler._emit()
             elif cmd == "satrx_cfg":
-                kw = {k: m[k] for k in ("enabled", "device", "gain", "gain_mode", "bias", "ppm") if k in m}
+                kw = {k: m[k] for k in ("enabled", "device", "gain", "gain_mode", "both", "bias", "ppm") if k in m}
                 try:
                     r.satrx.configure(**kw)
                 except (TypeError, ValueError):

@@ -1056,7 +1056,7 @@ class DecoderManager:
         exe = find_exe("satdump", self.settings.get("decoder_paths", {}))
         if not exe or not path:
             if path and self.pass_done and self.pass_key:
-                self.pass_done(self.pass_key, 0, 0, "SatDump not found")
+                self.pass_done(self.pass_key, 0, 0, "SatDump not found", None)
             return
         out = os.path.join(self.images_dir, os.path.splitext(os.path.basename(path))[0])
         pkey = self.pass_key
@@ -1105,7 +1105,7 @@ class DecoderManager:
                 self.log("Northbound pass: pictures turned round so north is at the top")
             self.log(f"{shown} picture(s) kept" + (f", {len(pngs) - shown} blank one(s) discarded" if len(pngs) > shown else ""))
             if self.pass_done and pkey:
-                self.pass_done(pkey, shown, len(pngs))
+                self.pass_done(pkey, shown, len(pngs), "", out)
             # the pictures are the product: drop the huge raw IQ recording once SatDump has made them
             if pngs and not self.settings.get("keep_iq", False):
                 try:

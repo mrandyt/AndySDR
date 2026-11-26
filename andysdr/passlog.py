@@ -150,6 +150,15 @@ class PassLog:
                     r["note"] = f"{total - shown} blank discarded"
                 self._save()
 
+    def set_merged(self, key, rep, images):
+        """File what came out of putting both receivers' frames together on this pass."""
+        with self.lock:
+            r = self.find(key)
+            if r is not None and rep:
+                r["merged"] = {"frames": rep.get("frames"), "gained": rep.get("gained"),
+                               "gained_pct": rep.get("gained_pct"), "images": int(images or 0)}
+                self._save()
+
     def result(self, r, now=None):
         now = now or time.time()
         if r.get("images", 0) > 0:

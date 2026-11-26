@@ -10,7 +10,7 @@ from collections import deque
 
 import numpy as np
 
-from . import aero, capturemeta, devices, ft8
+from . import aero, capturemeta, devices, ft8, satmerge
 from .adsb import ADSB_FREQ, Adsb
 from .meshsdr import MeshSdr
 from .ism import IsmSensors
@@ -20,7 +20,7 @@ from .repeaters import Repeaters
 from .lastheard import LastHeard
 from .autodetect import SignalClassifier, UNSETTLED
 from .config import DEFAULTS as SETTINGS_DEFAULTS, data_dir
-from .decoders import DecoderManager
+from .decoders import DecoderManager, find_exe
 from .pager import PagerStore
 from .dsp import (AUDIO_RATE, BLOCK_SECONDS, MODES, Receiver, Spectrum, find_peaks_db,
                   pick_sample_rate)
@@ -111,6 +111,10 @@ class Radio:
         self.pass_el = None       # ts -> (elevation, range km) of that satellite
         self.passlog = passlog.PassLog(os.path.join(data_dir(), "passes.jsonl"))
         self.decoders.pass_done = self._pass_images_done
+        # when both receivers take the same pass, this puts the frames they each heard together
+        self.merger = satmerge.Merger(self.decoders.images_dir, find_exe, self.s,
+                                      log_cb=lambda t: self.decoders.log(t),
+                                      done_cb=self._merged_pass_done)
         self.sq_open = False
         self.channel = None               # (bank, ch, entry) when on a memory channel
         self.classifier = SignalClassifier()
@@ -593,12 +597,21 @@ class Radio:
                  rec["name"], rec.get("max_el"), rec.get("gain"), rec.get("snr_peak"), rec.get("snr_med"), rec.get("score"),
                  rec.get("samples", 0), self.passlog.result(rec))
 
-    def _pass_images_done(self, key, shown, total, note=""):
+    def _pass_images_done(self, key, shown, total, note="", out_dir=None):
         """SatDump finished working on a recorded pass: say how many pictures came out."""
         self.passlog.set_images(key, shown, total, note)
+        self.merger.report(key, out_dir, "rx1")             # if the second receiver took this pass too, merge them
         rec = self.passlog.find(key)
         if rec:
             log.info("pass report: %s - %s", rec.get("name"), self.passlog.result(rec))
+        self._emit("schedule", self.scheduler.status())
+
+    def _merged_pass_done(self, key, rep, images):
+        """The merged frames from both receivers have been turned into pictures."""
+        try:
+            self.passlog.set_merged(key, rep, images)
+        except Exception:                                   # noqa: BLE001
+            log.exception("merged pass report")
         self._emit("schedule", self.scheduler.status())
 
     def retune_job(self, f):

@@ -75,6 +75,15 @@ function rx2GainSet(v, final) {
   rx2$("rx2GDn").onclick = () => rx2GainSet(+rg.value - 1, true);
   rx2$("rx2GUp").onclick = () => rx2GainSet(+rg.value + 1, true);
 })();
+/* ---------- use both receivers for a pass ---------- */
+(function () {
+  const b = rx2$("rx2Both"); if (!b) return;
+  b.onchange = () => send({ cmd: "satrx_set", both: b.checked });
+})();
+function rx2BothShow() {
+  const r = SCH && SCH.satrx, b = rx2$("rx2Both"); if (!r || !b) return;
+  if (document.activeElement !== b) b.checked = !!r.both;
+}
 function rx2GainShow() {
   const r = SCH && SCH.satrx, rg = rx2$("rx2GRange"); if (!r || !rg) return;
   rg.min = r.gain_min; rg.max = r.gain_max;
@@ -144,6 +153,7 @@ function rx2Render() {
     ? "Aircraft messages are short bursts, so the bar jumps only while a plane is sending – watch the “best so far”. Turn the antenna a little, wait a minute, and compare. Reset between tries."
     : "The red box marks where a Meteor-M signal appears (a soft hump about 120 kHz wide). It drifts a little as the satellite passes (Doppler).";
   rx2GainShow();
+  rx2BothShow();
   rx2Meter();
   rx2Pics(lv);
   rx2Passes();

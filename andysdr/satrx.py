@@ -82,6 +82,7 @@ class SatRx:
         mode = str(s.get("satrx_gain_mode", "fixed"))
         return {"enabled": bool(s.get("satrx_enabled", False)), "device": str(s.get("satrx_device", "") or ""),
                 "gain": float(s.get("satrx_gain", 38.0)), "gain_mode": mode if mode in ("fixed", "auto") else "fixed",
+                "both": bool(s.get("satrx_both", False)),
                 "bias": bool(s.get("satrx_bias", False)), "ppm": int(s.get("satrx_ppm", 0) or 0)}
 
     def configure(self, **kw):
@@ -95,6 +96,8 @@ class SatRx:
             s["satrx_gain"] = max(lo, min(hi, float(kw["gain"])))
         if "gain_mode" in kw:
             s["satrx_gain_mode"] = "auto" if kw["gain_mode"] == "auto" else "fixed"
+        if "both" in kw:
+            s["satrx_both"] = bool(kw["both"])
         if "bias" in kw:
             s["satrx_bias"] = bool(kw["bias"])
         if "ppm" in kw:
@@ -396,8 +399,14 @@ class SatRx:
                      rec["name"], rec.get("max_el"), rec.get("gain"), rec.get("snr_peak"), rec.get("snr_med"), rec.get("score"),
                      rec.get("samples", 0), self.passlog.result(rec))
 
-    def _pass_images_done(self, key, shown, total, note=""):
+    def _pass_images_done(self, key, shown, total, note="", out_dir=None):
         self.passlog.set_images(key, shown, total, note)
+        merger = getattr(self.radio, "merger", None)        # if the main radio took this pass too, merge them
+        if merger is not None:
+            try:
+                merger.report(key, out_dir, "rx2")
+            except Exception:                               # noqa: BLE001
+                log.exception("second receiver merge report")
         rec = self.passlog.find(key)
         if rec:
             log.info("second receiver pass report: %s - %s", rec.get("name"), self.passlog.result(rec))
@@ -516,7 +525,7 @@ class SatRx:
         chosen = self.choose() if c["enabled"] else None
         lo, hi = self._gain_range
         return {"enabled": c["enabled"], "device": c["device"], "gain": c["gain"], "gain_mode": c["gain_mode"],
-                "bias": c["bias"], "ppm": c["ppm"], "gain_min": lo, "gain_max": hi,
+                "both": c["both"], "bias": c["bias"], "ppm": c["ppm"], "gain_min": lo, "gain_max": hi,
                 "devices": [{"key": d.key, "label": d.label} for d in cands],
                 "using": chosen.label if chosen else "", "ready": bool(chosen) and time.time() >= self.fail_until,
                 "busy": self.busy(), "snr": self.snr, "error": self.last_error,

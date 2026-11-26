@@ -682,6 +682,14 @@
         <input type="range" id="rx2GRange" min="0" max="49.6" step="1" value="38">
         <div class="small muted" id="rx2GHelp">Turn it up until the background noise (the grass on the trace) just starts to rise, but stop before the waterfall turns bright all over or lots of false spikes appear – that means it is too high. There is no single right number - it depends on your antenna and dongle, so try a few steps over a pass and keep the one that gives the best SNR.</div>
       </div>
+      <div class="rx2-both" id="rx2BothBox">
+        <label><input type="checkbox" id="rx2Both"> <b>Use both receivers for a pass</b></label>
+        <div class="small muted">Meteor sends a signal that spins as it travels. A straight antenna – a V-dipole, a discone, a whip –
+          loses it for a moment each time the spin turns away, which is what leaves the black bands across a picture.
+          Two aerials pointing different ways rarely lose it at the same moment. With this on, the main radio records the
+          pass as well, and afterwards the frames each receiver heard are put together into one fuller set of pictures.
+          The main radio stops scanning for the few minutes the satellite is overhead.</div>
+      </div>
       <div class="rx2-scopewrap">
         <canvas id="rx2Spec"></canvas>
         <canvas id="rx2Wf"></canvas>
@@ -887,6 +895,8 @@
         <option value="bluelight">Blue – light</option>
         <option value="softdark">Soft – dark</option>
         <option value="softlight">Soft – light</option>
+        <option value="steel">Brushed steel</option>
+        <option value="steelgrey">Brushed steel – grey</option>
       </select>
     </label>
           <label class="theme-pick" data-help="layout" hidden>Layout

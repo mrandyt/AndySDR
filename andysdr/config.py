@@ -6,7 +6,7 @@ import sys
 import threading
 
 APP_NAME = "AndySDR"
-VERSION = "1.23.1"
+VERSION = "1.24.0"
 GITHUB_REPO = "mrandyt/AndySDR"   # where updates are published (GitHub Releases)
 
 
@@ -47,6 +47,7 @@ DEFAULTS = {
     "agc": False,
     "satrx_enabled": False,       # a second receiver (RTL-SDR dongle) used only for 137 MHz Meteor passes
     "satrx_device": "",           # its key ("" = the first RTL-SDR dongle the main radio is not using)
+    "satrx_both": False,          # record a Meteor pass on BOTH receivers and merge the frames they each heard
     "satrx_gain": 38.0,           # dB
     "satrx_gain_mode": "fixed",   # fixed | auto (learn the best)
     "satrx_bias": False,          # bias-T (powers an LNA through the coax)
@@ -78,7 +79,7 @@ DEFAULTS = {
     "decoder": "",                # active decoder id
     "decoder_paths": {},          # user overrides of external decoder exe paths
     "window_open_browser": False,
-    "theme": "modern",            # modern | modernlight | bluedark | bluelight | softdark | softlight
+    "theme": "modern",            # modern | modernlight | bluedark | bluelight | softdark | softlight | steel | steelgrey
     "auto_decoder": True,         # start a memory channel's decoder automatically
     "auto_identify": True,        # identify signals and start the right decoder by itself
     "schedule": [],               # timed captures (WEFAX, SSTV, LRPT, recordings)
