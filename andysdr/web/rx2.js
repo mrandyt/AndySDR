@@ -83,7 +83,7 @@ function rx2GainShow() {
   if (!RX2G.drag && document.activeElement !== rg) { rg.value = g; rx2$("rx2GVal").textContent = g.toFixed(1) + " dB"; }
   rx2$("rx2GHelp").textContent = r.gain_mode === "auto"
     ? "'Learn the best' is on (Settings): each pass starts from this number and the program tries a little lower and higher on later passes. Changing it here sets the new starting point."
-    : "Turn it up until the background noise (the grass on the trace) just starts to rise, but stop before the waterfall turns bright all over or lots of false spikes appear – that means it is too high. Meteor passes usually like 35 to 45 dB.";
+    : "Turn it up until the background noise (the grass on the trace) just starts to rise, but stop before the waterfall turns bright all over or lots of false spikes appear – that means it is too high. There is no single right number - it depends on your antenna and dongle, so try a few steps over a pass and keep the one that gives the best SNR.";
 }
 
 /* ---------- the screen ---------- */

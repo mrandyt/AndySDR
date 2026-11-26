@@ -43,9 +43,12 @@ Name: "{autodesktop}\AndySDR"; Filename: "{app}\AndySDR.exe"; Tasks: desktopicon
 [Run]
 Filename: "{tmp}\vc_redist.x64.exe"; Parameters: "/install /quiet /norestart"; StatusMsg: "Installing Visual C++ runtime for the decoders..."; Flags: waituntilterminated skipifdoesntexist
 Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""AndySDR"" dir=in action=allow program=""{app}\AndySDR.exe"" profile=private"; Flags: runhidden; Tasks: firewall
-Filename: "{app}\AndySDR.exe"; Description: "Start AndySDR now"; Flags: nowait postinstall skipifsilent
+; runasoriginaluser: the installer is elevated to write to Program Files, but AndySDR itself must start with the normal
+; user's rights - an elevated copy ignores clicks and keys from other normal-rights programs (Windows UIPI) and runs the
+; whole radio app as administrator for no reason.
+Filename: "{app}\AndySDR.exe"; Description: "Start AndySDR now"; Flags: nowait postinstall skipifsilent runasoriginaluser
 ; after an in-app update ( /RELAUNCH=1 ) start AndySDR again, with --server / --browser if it was started that way
-Filename: "{app}\AndySDR.exe"; Parameters: "{param:LAUNCHARGS|}"; Flags: nowait; Check: RelaunchAfterUpdate
+Filename: "{app}\AndySDR.exe"; Parameters: "{param:LAUNCHARGS|}"; Flags: nowait runasoriginaluser; Check: RelaunchAfterUpdate
 
 [UninstallRun]
 Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""AndySDR"""; Flags: runhidden; RunOnceId: "fw"
