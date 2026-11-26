@@ -78,7 +78,7 @@ function rx2GainSet(v, final) {
 /* ---------- use both receivers for a pass ---------- */
 (function () {
   const b = rx2$("rx2Both"); if (!b) return;
-  b.onchange = () => send({ cmd: "satrx_set", both: b.checked });
+  b.onchange = () => send({ cmd: "satrx_cfg", both: b.checked });
 })();
 function rx2BothShow() {
   const r = SCH && SCH.satrx, b = rx2$("rx2Both"); if (!r || !b) return;
