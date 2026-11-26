@@ -127,6 +127,19 @@ class MergerTests(unittest.TestCase):
             time.sleep(0.05)
         self.assertTrue(any("3 frames" in t for t in self.logs), self.logs)
 
+    def test_both_receivers_reporting_one_folder_is_not_a_merge(self):
+        self.m.expect("pass4")
+        d = self._dir("lrpt_same", [frame(5, 1), frame(5, 2)])
+        self.m.report("pass4", d, "rx1")
+        self.m.report("pass4", d, "rx2")
+        import time
+        for _ in range(40):
+            if self.logs:
+                break
+            time.sleep(0.05)
+        self.assertTrue(any("same file" in t for t in self.logs), self.logs)
+        self.assertFalse(os.path.exists(os.path.join(self.d, "lrpt_same_merged")))
+
     def test_drop_forgets_a_pass(self):
         self.m.expect("pass3")
         self.m.drop("pass3")

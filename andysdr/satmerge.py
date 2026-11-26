@@ -178,6 +178,10 @@ class Merger:
 
     def _run(self, key, dirs):
         try:
+            if len(set(os.path.normcase(os.path.abspath(d)) for d in dirs.values())) < 2:
+                log.warning("merge: both receivers reported the same folder %s", list(dirs.values())[0])
+                self.log_cb("Both receivers recorded the pass into the same file, so there was nothing to merge.")
+                return
             paths = [p for p in (self._cadu(d) for d in dirs.values()) if p]
             if len(paths) < 2:
                 self.log_cb("Both receivers ran, but only one of them found any frames - nothing to merge.")

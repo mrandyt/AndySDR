@@ -43,7 +43,7 @@ class SatRx:
         self.s = radio.s
         self.lock = threading.RLock()
         self.passlog = passlog.PassLog(os.path.join(data_dir(), "passes_rx2.jsonl"))
-        self.decoders = DecoderManager(self.s, self._emit)
+        self.decoders = DecoderManager(self.s, self._emit, tag="rx2")
         self.decoders.freq_fn = lambda: self.freq
         self.decoders.job_fn = lambda: self.job
         self.decoders.rate_fn = lambda: self.fs

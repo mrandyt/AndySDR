@@ -259,9 +259,11 @@ class TcpAudioServer(threading.Thread):
 
 
 class DecoderManager:
-    def __init__(self, settings, emit):
+    def __init__(self, settings, emit, tag=""):
         self.settings = settings
         self.emit = emit           # emit(kind, payload) -> GUI
+        self.tag = tag             # which receiver this belongs to ("" main, "rx2" second): keeps their files apart
+                                   # when both record the same pass
         self.pass_key = None       # satellite pass being recorded (for the pass report)
         self.pass_done = None      # callback(key, pictures, total, note) when SatDump has finished a pass
         self.active = None
@@ -484,7 +486,12 @@ class DecoderManager:
             elif dec_id == "lrpt":
                 exe = find_exe("satdump", ov)
                 ts = time.strftime("%Y%m%d_%H%M%S")
-                self.rec_path = os.path.join(data_dir(), "recordings", f"lrpt_{ts}_240k.wav")
+                suffix = f"_{self.tag}" if self.tag else ""
+                self.rec_path = os.path.join(data_dir(), "recordings", f"lrpt_{ts}_240k{suffix}.wav")
+                n = 1
+                while os.path.exists(self.rec_path):               # the other receiver got there first in the same second
+                    self.rec_path = os.path.join(data_dir(), "recordings", f"lrpt_{ts}_240k{suffix}_{n}.wav")
+                    n += 1
                 self.rec = wave.open(self.rec_path, "wb")
                 self.rec.setnchannels(2)
                 self.rec.setsampwidth(2)
