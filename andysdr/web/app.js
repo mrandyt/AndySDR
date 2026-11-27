@@ -1517,14 +1517,17 @@ function renderDecoders() {
   renderState && S.freq && renderState();
 }
 $("decOff").onclick = () => send({ cmd: "decoder", id: "" });
-$("decClear").onclick = () => ($("decLog").textContent = "");
+$("decClear").onclick = () => { $("decLog").textContent = ""; decLen = 0; };
 $("decFetch").onclick = () => { decLine("Downloading missing decoder programs from GitHub …"); send({ cmd: "fetch_decoders" }); };
 $("dsdSub").onchange = () => { if (S.decoder === "dsd") send({ cmd: "decoder", id: "dsd", sub: $("dsdSub").value }); };
+let decLen = 0;
 function decLine(text, t) {
   const log = $("decLog");
   const atBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 20;
-  log.textContent += `[${t || new Date().toLocaleTimeString()}] ${text}\n`;
-  if (log.textContent.length > 120000) log.textContent = log.textContent.slice(-90000);
+  const line = `[${t || new Date().toLocaleTimeString()}] ${text}\n`;
+  decLen = (decLen || 0) + line.length;
+  log.appendChild(document.createTextNode(line));            // add the line - not the whole log rebuilt each time (that made the box shake while decoding)
+  if (decLen > 120000) { log.textContent = log.textContent.slice(-90000); decLen = log.textContent.length; }
   if (atBottom) log.scrollTop = log.scrollHeight;
   lcdText($("lcdDecode"), text);
 }
@@ -3149,8 +3152,16 @@ $("repPosGeo").onclick = () => {
 
 /* ======================================================= auto-identify */
 const SIG_DIGITAL = /DMR|P25|NXDN|dPMR|Digital|Pager|APRS|DTMF|TETRA/;
+let sigHold = 0, sigShown = null, sigAt = 0;
 function renderSignal() {
-  const r = S.signal;
+  let r = S.signal;
+  /* a signal that drops out for a moment (squelch closing between words, a brief fade) keeps its label for a few seconds -
+     the chip no longer flickers on and off - but it goes at once when the radio has been retuned */
+  if (r) { sigShown = r; sigAt = S.freq; clearTimeout(sigHold); sigHold = 0; }
+  else if (sigShown && sigAt === S.freq) {
+    if (!sigHold) sigHold = setTimeout(() => { sigHold = 0; sigShown = null; renderSignal(); }, 5000);
+    r = sigShown;
+  } else sigShown = null;
   for (const id of ["sigChip", "sigNow"]) {
     const el = $(id);
     if (!r) { el.hidden = true; continue; }
@@ -3160,7 +3171,7 @@ function renderSignal() {
     el.className = "sig-chip " + (r.kind === "SSTV" || r.kind === "WEFAX" ? "pic" : SIG_DIGITAL.test(r.kind) ? "dig" : "ana");
     el.title = `Identified automatically · SNR ${r.snr ?? "?"} dB · bandwidth ${r.bw ?? "?"} kHz` + (r.baud ? ` · ${r.baud} Bd` : "");
   }
-  if (r && r.stable !== false && !S.decoder) lcdText($("lcdDecode"), "ID: " + r.label);
+  if (S.signal && r.stable !== false && !S.decoder) lcdText($("lcdDecode"), "ID: " + r.label);
 }
 $("muteDig").onchange = (e) => send({ cmd: "settings", values: { mute_digital_audio: e.target.checked }, quiet: true });
 $("dsdGate").onchange = (e) => send({ cmd: "settings", values: { dsd_gate: e.target.checked }, quiet: true });

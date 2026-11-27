@@ -1312,7 +1312,21 @@ body.set-open .set-btn { background: var(--accent); color: var(--accent-ink); bo
 body.set-open { overflow: hidden; }
 
 /* small pieces elsewhere */
-.dec-hint { align-items: center; }
+.dec-hint { align-items: center; min-height: 34px; }
+/* the Auto-ID chips keep their place whether or not a signal is named, so the rows around them (and the log under the
+   Decoders row) no longer jump up and down as the chip appears and disappears */
+#sigChip, #sigNow { display: inline-block; box-sizing: border-box; height: 28px; line-height: 22px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+#sigChip[hidden], #sigNow[hidden] { display: inline-block; visibility: hidden; }
+/* on a wide screen the bar under the spectrum header stays ONE line: long names are cut with … instead of wrapping and
+   making the whole screen below jump taller and shorter */
+@media (min-width: 900px) {
+  .vfo-bar { flex-wrap: nowrap; }
+  .vfo-bar > * { min-width: 0; }
+  .vfo-bar .vfo-chip, .vfo-bar .auto-id, .vfo-bar .vfo-hint { flex: 0 0 auto; white-space: nowrap; }
+  #sigChip { flex: 0 1 auto; max-width: 38%; }
+  .vfo-band { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vfo-band { flex: 0 1 auto; }
+}
 .setlink { color: var(--accent); font-weight: 600; text-decoration: none; }
 .setlink:hover { text-decoration: underline; }
 .sat-poshint { flex-direction: row; align-items: center; gap: 14px; border: 1px solid var(--accent); }
