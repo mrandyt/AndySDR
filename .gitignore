@@ -5,3 +5,7 @@ dist/
 Output/
 *.spec.bak
 android/local.properties
+
+# Never publish Android builds to GitHub
+*.apk
+*.aab
