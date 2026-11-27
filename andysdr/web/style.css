@@ -1549,3 +1549,10 @@ body.phone #tab-set .card { padding: 14px; }
 .grp-dot { position: absolute; top: 5px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--panel2); }
 .grp-dot[hidden] { display: none; }
 [data-theme] .tabbar { background: var(--panel2); }
+
+/* ---- scheduler sub-navigation ---- */
+.subnav { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 12px; }
+.subnav button { background: var(--panel2); border: 1px solid var(--line); color: var(--muted); padding: 9px 16px; border-radius: 999px; font-weight: 800; letter-spacing: .6px; font-size: 12px; cursor: pointer; }
+.subnav button:hover { color: var(--text); }
+.subnav button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.schpanel[hidden] { display: none; }

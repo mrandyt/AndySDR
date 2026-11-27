@@ -1348,6 +1348,19 @@ function syncGroups(name) {
   document.querySelectorAll(".tabbar .tab").forEach((t) => { if (!t.classList.contains("tab-set")) t.hidden = !TAB_GROUPS[gi][2].includes(t.dataset.tab); });
 }
 
+/* ----- scheduler: three panels (satellite passes / pass report / timed captures) ----- */
+(function schPanels() {
+  const nav = $("schNav"); if (!nav) return;
+  const show = (sp) => {
+    nav.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.sp === sp));
+    document.querySelectorAll("#tab-sch .schpanel").forEach((p) => (p.hidden = p.dataset.sp !== sp));
+    try { localStorage.setItem("andysdr_schpanel", sp); } catch (e) {}
+  };
+  nav.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => show(b.dataset.sp)));
+  let last = "sat"; try { last = localStorage.getItem("andysdr_schpanel") || "sat"; } catch (e) {}
+  show(["sat", "rep", "tim"].includes(last) ? last : "sat");
+})();
+
 /* ----- memory ----- */
 function esc(s) { return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 function renderMemory() {

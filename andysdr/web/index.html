@@ -710,13 +710,19 @@
 
   <div class="tabpage" id="tab-sch">
     <div class="row wrapline" data-help="sched">
-      <b>Scheduled captures</b>
-      <span class="muted small">Times are this PC's clock (<span id="schNow">--:--</span>). AndySDR tunes, runs the decoder, then puts the radio back how it was. Tick a capture to switch it on or off.</span>
+      <b>Scheduler</b>
+      <span class="muted small">Times are this PC's clock (<span id="schNow">--:--</span>). AndySDR tunes, runs the decoder, then puts the radio back how it was.</span>
       <span class="grow"></span>
       <span id="schRunning" class="sig-chip" hidden></span>
       <button class="btn danger" id="schStop" hidden>■ Stop capture</button>
     </div>
     <div class="card sch-clash" id="schClash" hidden></div>
+    <nav class="subnav" id="schNav" role="tablist">
+      <button data-sp="sat" class="on" title="Satellites that pass over you: switch them on, see the pass times">🛰 SATELLITE PASSES</button>
+      <button data-sp="rep" title="How each recorded pass went, and the antenna map">📊 PASS REPORT</button>
+      <button data-sp="tim" title="Timed recordings on any frequency (weather fax, SSTV and so on)">⏰ TIMED CAPTURES</button>
+    </nav>
+    <div class="schpanel" data-sp="tim" hidden>
     <div class="tablewrap">
       <table class="grid" id="schTable">
         <thead><tr><th>On</th><th>When</th><th>Name</th><th>Frequency</th><th>Mode</th><th>Do</th><th>Length</th><th>Priority</th><th>Next</th><th></th></tr></thead>
@@ -739,6 +745,8 @@
       <button class="btn" id="schClear">New</button>
     </div>
     </details>
+    </div>
+    <div class="schpanel" data-sp="sat">
     <div class="card sat-card" data-help="satauto">
       <div class="row wrapline"><b>🛰 Satellite auto-capture</b>
         <span class="muted small">Switch a satellite on and AndySDR works out every pass over your location, tunes in and starts the decoder by itself.</span></div>
@@ -761,6 +769,10 @@
       <div class="row wrapline"><b>Pass schedule – recording starts and stops by itself on each pass</b><span class="grow"></span><button class="btn sm" id="satMore" hidden>Show all passes</button></div>
       <div class="tablewrap"><table class="grid" id="satPasses">
         <thead><tr><th>Satellite</th><th>Starts</th><th>Ends</th><th>Peak</th><th>Rises at</th><th>Freq</th><th>Status</th></tr></thead><tbody></tbody></table></div>
+    </div>
+    </div>
+    <div class="schpanel" data-sp="rep" hidden>
+    <div class="card">
       <div class="row wrapline" style="margin-top:14px" data-help="passreport"><b>Pass report – how each recorded pass went</b><span class="grow"></span><span class="muted small">Signal = how far the satellite stood above the noise, at its best</span></div>
       <div class="tablewrap"><table class="grid" id="satLog">
         <thead><tr><th>When</th><th>Satellite</th><th>Peak</th><th>RF gain</th><th>Signal</th><th>Result</th><th title="How much of the picture is filled in – scan lines that have data, between the first and the last">Fill</th></tr></thead><tbody></tbody></table></div>
@@ -779,6 +791,7 @@
           <div class="muted" style="margin-top:8px">Straight up is the centre, the horizon is the outer ring and north is at the top. Each dot is a moment in a pass, coloured by how strong the signal was <b>for that distance</b> – green is strong, red is weak. A patch of red on one side means the antenna is poor in that direction: try turning or tilting it, then check the map again after a few passes.</div></div>
       </div>
     </details>
+    </div>
     <p class="muted small">Tips: Met Office Northwood fax charts are sent throughout the day – look up the current broadcast schedule and add a capture for the charts you want. ISS SSTV events are announced by ARISS a week or two ahead. Meteor-M passes over the UK happen several times a day; a satellite-pass app gives the times. Pictures appear in WEATHER IMAGES.</p>
   </div>
 
