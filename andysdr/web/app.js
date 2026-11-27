@@ -76,7 +76,7 @@ function connect() {
   ws.onopen = () => {
     setConn(true);
     // after a dropped link (server restart, update, Wi-Fi blip) the server has forgotten this screen wants sound
-    if (typeof player !== "undefined" && player.on && $("myAudio").checked) send({ cmd: "audio", on: true });
+    if (typeof player !== "undefined" && player.live() && $("myAudio").checked) send({ cmd: "audio", on: true });
   };
   ws.onclose = () => { setConn(false); setTimeout(connect, 2000); };
   ws.onmessage = (ev) => {
@@ -168,7 +168,7 @@ function onJSON(m) {
 function onHello(h) {
   $("loginModal").hidden = true;
   // the server only listens to a screen that has logged in, so ask for the sound now (asking when the link opened was ignored on a password-protected radio)
-  if (typeof player !== "undefined" && player.on && $("myAudio").checked) send({ cmd: "audio", on: true });
+  if (typeof player !== "undefined" && player.live() && $("myAudio").checked) send({ cmd: "audio", on: true });
   if (h.token) { token = h.token; tokStore.setItem("andysdr_token", token); }
   if (h.token && window.AndyBridge) { try { window.AndyBridge.setToken(h.token); } catch (e) { /* not the Android app */ } }   // lets the Android app's alert service log in
   isLocal = h.local;
@@ -503,7 +503,8 @@ const player = {
   ctx: null, gain: null, node: null, ring: new Float32Array(48000 * 4), w: 0, r: 0, buffering: true, on: false, vol: knobs.vol.value / 100,
   start() {
     try { this.ctx = new AudioContext({ sampleRate: 48000 }); } catch (e) { this.ctx = new AudioContext(); }
-    this.gain = this.ctx.createGain(); this.gain.gain.value = this.vol;
+    this.r = this.w; this.buffering = true;
+    this.gain = this.ctx.createGain(); this.gain.gain.value = this.muted ? 0 : this.vol * this.vol * 1.6;
     this.node = this.ctx.createScriptProcessor(2048, 0, 1);
     this.node.onaudioprocess = (ev) => this.pull(ev.outputBuffer.getChannelData(0));
     this.node.connect(this.gain).connect(this.ctx.destination);
@@ -513,12 +514,21 @@ const player = {
   },
   // browsers / WebView2 can leave the audio engine "suspended" (autoplay rules, minimised window, PC sleep): wake it
   wake() { if (this.on && this.ctx && this.ctx.state !== "running" && this.ctx.state !== "closed") this.ctx.resume().catch(() => {}); },
-  stop() { if (this.ctx) this.ctx.close(); this.ctx = null; this.on = false; },
+  stop() { if (this.ctx) this.ctx.close(); this.ctx = null; this.on = false; this.r = this.w; this.buffering = true; },
   muted: false,
+  live() { return this.on && !this.muted; },                  // sound is really coming out of this screen
   setVolume(v) { this.vol = v; if (this.gain) this.gain.gain.value = this.muted ? 0 : v * v * 1.6; },
+  /* MUTE is a gain of zero on the running audio - instant, nothing is closed and rebuilt - and the server is told to stop
+     sending sound to this screen while it is silent.  Un-mute starts from fresh audio, never a burst of stale sound. */
+  setMuted(m) {
+    this.muted = !!m;
+    this.r = this.w; this.buffering = true;
+    this.setVolume(this.vol);
+    if (!this.muted) this.wake();
+  },
   avail() { return (this.w - this.r + this.ring.length) % this.ring.length; },
   push(pcm) {
-    if (!this.on) return;
+    if (!this.on || this.muted) return;
     const ratio = this.ctx.sampleRate / 48000, N = this.ring.length;
     const n = Math.floor(pcm.length * ratio);
     for (let i = 0; i < n; i++) {
@@ -542,19 +552,23 @@ setInterval(() => player.wake(), 1500);
 for (const ev of ["click", "keydown", "touchstart", "focus", "visibilitychange"]) window.addEventListener(ev, () => player.wake(), true);
 // The audio key says AUDIO ON while sound is playing; otherwise it reads MUTED and glows slowly red so it is obvious nothing is coming out.
 function syncPwr() {
-  const live = player.on && !player.muted;
-  $("pwrLed").classList.toggle("on", player.on);
+  const live = player.live();
+  $("pwrLed").classList.toggle("on", live);
   $("pwrBtn").classList.toggle("is-muted", !live);
   $("pwrTxt").textContent = live ? "AUDIO ON" : "MUTED";
   $("pwrBtn").title = live ? "Sound is playing on this screen - click to mute" : "No sound - click to switch the sound on";
 }
-$("pwrBtn").addEventListener("click", () => {
-  if (explainOn) return;
-  if (player.on) player.stop(); else { player.start(); player.setVolume(knobs.vol.value / 100); }
+// ONE switch for sound, used by the big AUDIO key and by the MUTE quick button: the first press starts the audio (browsers need a
+// press for that), after that it mutes / un-mutes.  Pressing it can never leave the key saying MUTED while the sound is on, or the other way round.
+function toggleSound() {
+  if (!player.on) { player.muted = false; player.start(); player.setVolume(knobs.vol.value / 100); }
+  else player.setMuted(!player.muted);
   syncPwr();
-  send({ cmd: "audio", on: player.on && $("myAudio").checked });
-  if (PHONE_APP) { try { localStorage.setItem("andysdr_audio_off", player.on ? "0" : "1"); } catch (e) {} }   // the app remembers a deliberate Audio off
-});
+  if (typeof renderQuick === "function") renderQuick();
+  send({ cmd: "audio", on: player.live() && $("myAudio").checked });
+  if (PHONE_APP) { try { localStorage.setItem("andysdr_audio_off", player.live() ? "0" : "1"); } catch (e) {} }   // the app remembers a deliberate Audio off
+}
+$("pwrBtn").addEventListener("click", () => { if (!explainOn) toggleSound(); });
 // The Android app is allowed to start sound without a tap, so it switches the sound on by itself every time it opens
 // (unless Audio was switched off by hand last time) - before this, every launch started silent until Audio was pressed.
 const PHONE_APP = /AndySDRRemote/.test(navigator.userAgent);
@@ -571,9 +585,9 @@ syncPwr();
 window.andyResume = () => {
   player.wake();
   if (!ws || ws.readyState > 1) connect();
-  else if (player.on && $("myAudio").checked) send({ cmd: "audio", on: true });
+  else if (player.live() && $("myAudio").checked) send({ cmd: "audio", on: true });
 };
-$("myAudio").addEventListener("change", (e) => send({ cmd: "audio", on: e.target.checked && player.on }));
+$("myAudio").addEventListener("change", (e) => send({ cmd: "audio", on: e.target.checked && player.live() }));
 
 /* ======================================================= spectrum + waterfall */
 const specC = $("spec"), wfC = $("wf");
@@ -2472,7 +2486,7 @@ function buildQuick() {
     else if (b.dataset.f === "replay") doReplay();
     else if (b.dataset.f) showTab(b.dataset.f === "images" ? "img" : "rec");
     else if (b.dataset.t === "agc") send({ cmd: "agc", on: !S.agc });
-    else if (b.dataset.t === "mute") { player.muted = !player.muted; player.setVolume(player.vol); syncPwr(); renderQuick(); }
+    else if (b.dataset.t === "mute") toggleSound();
     else if (b.dataset.t === "mon") {
       if (S.squelch > -119) { sqPrev = S.squelch; send({ cmd: "squelch", value: -120 }); } else send({ cmd: "squelch", value: sqPrev });
     }
@@ -2502,7 +2516,7 @@ function renderQuick() {
   $("qTog").querySelectorAll("button").forEach((b) => {
     const t = b.dataset.t;
     if (t === "agc") b.classList.toggle("on", !!S.agc);
-    else if (t === "mute") b.classList.toggle("on", player.muted);
+    else if (t === "mute") b.classList.toggle("on", !player.live());
     else if (t === "mon") b.classList.toggle("on", S.squelch <= -119);
   });
 }
@@ -3762,7 +3776,7 @@ const HELP = {
   volume: ["VOLUME knob", "Loudness on THIS computer only (each remote listener has their own). Drag up/down, use the mouse wheel, or click it and use the arrow keys. Double-click resets to 70%."],
   squelch: ["SQUELCH knob", "Mutes the hiss when nobody is transmitting. Turn it up until the noise just disappears – the little raised bar on the S-meter shows where it is set. OPEN (fully left) = always hear everything. Scanning and searching need squelch set above the noise so they know when a channel is quiet."],
   gain: ["RF GAIN knob", "Receiver amplification. The AGC button under the knob switches the receiver's automatic gain on or off – turn it off to set the gain yourself with the knob; for digital voice (DMR, P25, TETRA) manual gain set just below overload usually decodes best. Too little = weak signals lost; too much = overload, false signals and a raised noise floor. Start in the middle, watch the waterfall, and turn down if you see lots of 'ghost' signals. For SDRplay receivers 0-100% controls the LNA state and IF gain together. Turning it switches AGC off; tick Hardware AGC in the Receiver tab to make it automatic. If a strong signal will not decode until you turn the gain down, tick Ease RF gain down on strong signals (Receiver tab): the knob becomes the most gain, and AndySDR lowers it a step at a time while a signal is too strong, starting again from the knob each time you change frequency."],
-  power: ["AUDIO / MUTED", "Starts or stops sound on this computer. It reads AUDIO ON (green light) while sound is playing, and MUTED with a slow red glow when there is no sound - press it to switch between the two. Browsers need one click before they may play audio, so press it once after opening AndySDR."],
+  power: ["AUDIO / MUTED", "Switches sound on this computer on and off. It reads AUDIO ON (green light) while sound is playing, and MUTED with a slow red glow when there is no sound - press it to switch between the two (the MUTE button in the quick buttons does exactly the same, so the two always agree). Muting is instant and also stops the radio sending sound to this screen. Browsers need one click before they may play audio, so press it once after opening AndySDR."],
   lcd: ["Display", "Top row: status flags – SCAN, SRCH (search), HOLD (stopped on a signal), MAN (manual), PRI (priority on), DLY (resume delay), L/O (channel locked out), AGC, REC (recording), DEC (decoder running). Second row: banks 0-9, lit if the bank will be scanned, underlined = bank in use. CH = channel number (bank × 100 + channel). Then the frequency in MHz, mode, channel name and step size. S-meter shows signal strength in dBFS."],
   k_scan: ["SCAN", "Scans all memory channels in the lit banks, skipping locked-out channels. AndySDR uses the spectrum to skip silent channels instantly, so scanning is very fast. It stops on activity, waits the resume delay after the transmission ends, then carries on. ▲/▼ change scan direction or skip the current channel."],
   k_skip: ["SKIP ▸ next channel", "While scanning or searching: leaves the channel (or frequency) the scanner is stopped on – or still waiting on – and carries straight on to the next one. Nothing is locked out, so you hear it again next time round; use L/O or SKIP 10 MIN / 1 HOUR / TODAY if you never want it. While searching, a skipped signal is ignored for 20 seconds so the search moves on to other signals. Not scanning? It tells you to press SCAN or SRCH first. Keyboard: N."],
