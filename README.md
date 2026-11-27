@@ -5,7 +5,9 @@ spectrum/waterfall, 1000 memory channels, a band search that finds every live tr
 RadioReference UK CSV import, digital/analogue decoding, weather pictures, and a built-in
 network server so any other PC, laptop, tablet or phone in the house can use the radio.
 
-**Latest: 1.24.3** – **longer live view and an aiming tone** on the second receiver screen: *Watch live* is no longer limited to 90 seconds – pick 90 s, 5 min, 15 min, 1 hour or *Until I stop it* – the signal number is now large enough to read from across the roof, and a **🔊 Tone** box plays a note that rises as the signal gets stronger so you can turn the antenna without looking. A real pass still takes over, and a view left on is ended after 4 hours.
+**Latest: 1.24.4** – **choose dual or single receiving for each satellite**: on **SCHEDULER › Satellite auto-capture**, each Meteor-M row now has a **Both receivers** tick box (shown while the second receiver is switched on). Ticked, the main radio and the second receiver both record every pass of that satellite and the pictures are merged afterwards; unticked, the second receiver records it alone. Until you choose, a satellite follows the setting on the Receiver 2 screen, as before.
+
+**1.24.3** – **longer live view and an aiming tone** on the second receiver screen: *Watch live* is no longer limited to 90 seconds – pick 90 s, 5 min, 15 min, 1 hour or *Until I stop it* – the signal number is now large enough to read from across the roof, and a **🔊 Tone** box plays a note that rises as the signal gets stronger so you can turn the antenna without looking. A real pass still takes over, and a view left on is ended after 4 hours.
 
 **1.24.2** – fixes *Use both receivers for a pass*: both receivers named their recording after the time the pass started, so when they shared a pass they wrote into the same file and spoiled each other's recording. Each receiver now records to its own file, and a merge is refused if the two ever point at the same folder.
 

@@ -898,7 +898,7 @@ class Server:
             elif cmd == "schedule_delete":
                 r.scheduler.delete_job(str(m["id"]))
             elif cmd == "sat_cfg":
-                kw = {k: m[k] for k in ("enabled", "freq", "min_el", "from", "to", "days", "track", "gain_mode", "gain", "hidden") if k in m}
+                kw = {k: m[k] for k in ("enabled", "freq", "min_el", "from", "to", "days", "track", "gain_mode", "gain", "hidden", "both") if k in m}
                 if "gain_mode" in kw and kw["gain_mode"] not in ("knob", "fixed", "auto"):
                     kw["gain_mode"] = "knob"
                 if "gain" in kw:

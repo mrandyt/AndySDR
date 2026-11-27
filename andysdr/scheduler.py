@@ -305,7 +305,9 @@ class Scheduler:
         job = dict(job)
         job["gain"], job["gain_mode"] = rx.pass_gain(sid)
         rx.pass_el = lambda ts, sid=sid: self.sats.look(sid, ts)
-        both = bool(self.s.get("satrx_both"))           # "use both receivers": the main radio records this pass as well
+        both = self.sats.cfg().get(sid, {}).get("both")  # chosen for this satellite on the scheduler?
+        if both is None:                                 # not chosen: follow the Receiver 2 screen's setting
+            both = bool(self.s.get("satrx_both"))        # "use both receivers": the main radio records this pass as well
         self.done2.add(key)
         if len(self.done2) > 200:
             self.done2 = set(list(self.done2)[-100:])

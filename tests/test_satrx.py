@@ -117,9 +117,14 @@ check("only the 137 MHz Meteors", took == {"meteor_m23", "meteor_m24"}, took)
 # ---- scheduler hand-over
 L1 = "1 59051U 24039A   26167.62069696  .00000001  00000-0  19950-4 0  9993"
 L2 = "2 59051  98.7010 126.9258 0007253 162.5453 197.5976 14.22429458119188"
+class FakeMerger:
+    def __init__(self): self.expected = []
+    def expect(self, jid): self.expected.append(jid)
+
 class MainRadio:
     def __init__(self, sat=None):
         self.started, self.ended, self.events, self.satrx = [], 0, [], sat
+        self.merger = FakeMerger()
     def begin_job(self, job): self.started.append(job)
     def end_job(self, why=None): self.ended += 1
     def retune_job(self, f): pass
@@ -224,6 +229,29 @@ check("if the second receiver cannot start, the main radio takes the pass", not 
 m3, sch3 = make(None)
 sch3.tick(when)
 check("no second receiver at all: unchanged behaviour", len(m3.started) == 1 and sch3.running and not sch3.running2)
+
+# ---- "Both receivers" chosen per satellite on the scheduler (None = follow the Receiver 2 screen's setting)
+check("a satellite follows the global setting until it is chosen", make(StubRx())[1].sats.cfg()["meteor_m24"]["both"] is None)
+sb = StubRx()
+mb, schb = make(sb)
+schb.sats.set_cfg("meteor_m24", both=True)
+check("the choice is remembered for that satellite", schb.sats.cfg()["meteor_m24"]["both"] is True and schb.sats.status()["sats"][0] is not None)
+schb.tick(when)
+check("both ticked on the satellite (global off): the second receiver AND the main radio take the pass", len(sb.started) == 1 and len(mb.started) == 1, (sb.started, mb.started))
+check("and the merge is told to wait for both receivers", len(mb.merger.expected) == 1, mb.merger.expected)
+sc = StubRx()
+mc, schc = make(sc)
+schc.s["satrx_both"] = True
+schc.sats.set_cfg("meteor_m24", both=False)
+schc.tick(when)
+check("single chosen on the satellite (global on): the second receiver takes it alone", len(sc.started) == 1 and not mc.started, (sc.started, mc.started))
+sd = StubRx()
+md, schd = make(sd)
+schd.s["satrx_both"] = True
+schd.tick(when)
+check("not chosen: the Receiver 2 screen's setting applies", len(sd.started) == 1 and len(md.started) == 1, (sd.started, md.started))
+schb.sats.set_cfg("meteor_m24", both="yes")
+check("a value that is not true/false means 'follow the global setting'", schb.sats.cfg()["meteor_m24"]["both"] is None)
 
 # ---- a live view must never make a pass go to the main radio (14:59 on 25 Nov: the Nooelec was in live view when the pass began)
 good = FakeDongle("rtlsdr:TEST")

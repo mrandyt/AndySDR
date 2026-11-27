@@ -1139,6 +1139,7 @@ body.customise #qJump .key::after { content: none; }
 .sat-rec { flex: 1 1 230px; display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .sat-freq { flex: 0 0 11em; font-family: var(--mono); }
 .sat-next { flex: 1 1 200px; font-size: 13px; }
+.sat-both { display: flex; align-items: center; gap: 6px; white-space: nowrap; cursor: pointer; }
 .sat-detail { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 .sat-detail[hidden] { display: none; }
 .sat-grid { display: flex; flex-wrap: wrap; gap: 10px 26px; align-items: center; }

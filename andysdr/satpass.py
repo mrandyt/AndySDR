@@ -204,7 +204,9 @@ class SatPlanner:
                         "gain": (float(u["gain"]) if u.get("gain") not in (None, "") else None),
                         "from": str(u.get("from") or ""), "to": str(u.get("to") or ""),
                         "days": sorted({int(x) for x in (u.get("days") or []) if str(x).isdigit() and 0 <= int(x) <= 6}),
-                        "hidden": bool(u.get("hidden", False))}
+                        "hidden": bool(u.get("hidden", False)),
+                        # None = follow the "use both receivers" setting on the Receiver 2 screen; True/False = chosen for this satellite
+                        "both": (bool(u["both"]) if isinstance(u.get("both"), bool) else None)}
         return out
 
     def set_cfg(self, sid, **kw):
@@ -212,7 +214,7 @@ class SatPlanner:
             return
         c = dict(self.s.get("sat_auto") or {})
         u = dict(c.get(sid) or {})
-        for k in ("enabled", "freq", "min_el", "from", "to", "days", "track", "gain_mode", "gain", "hidden"):
+        for k in ("enabled", "freq", "min_el", "from", "to", "days", "track", "gain_mode", "gain", "hidden", "both"):
             if k in kw:
                 u[k] = kw[k]
         if u.get("hidden"):
