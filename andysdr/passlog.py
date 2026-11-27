@@ -65,7 +65,7 @@ class PassMeter:
         self._last = 0.0
 
     def add(self, now, snr, gain):
-        if snr is None or now - self._last < 1.0:
+        if snr is None or not math.isfinite(snr) or now - self._last < 1.0:      # a dropped buffer can read as -inf / NaN: not a measurement
             return
         self._last = now
         el, rng, az = None, None, None

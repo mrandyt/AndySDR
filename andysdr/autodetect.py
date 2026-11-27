@@ -139,7 +139,7 @@ class SignalClassifier:
         floor = float(np.percentile(Pdb[np.abs(f) < 16000], 12))
         inband = np.abs(f) < 6500
         snr = float(np.max(Pdb[inband]) - floor)
-        if snr < 9:
+        if not np.isfinite(snr) or snr < 9:        # (NaN compares false with everything: a dropped buffer must not pass as a signal)
             return None
         # occupied bandwidth = span holding 99 % of the power above the noise floor
         sel = np.abs(f) < 16000

@@ -137,7 +137,7 @@ def _afsk(rng, bits, n=N):
 
 
 def aprs(rng, snr):
-    a = _afsk(rng, rng.integers(0, 2, 60))
+    a = _afsk(rng, rng.integers(0, 2, N * 1200 // FS + 2))      # a full second of packet data
     iq = np.exp(1j * 2 * np.pi * np.cumsum(a * 2500.0) / FS)
     iq = _with_noise(rng, iq, snr)
     return iq.astype(np.complex64), _fm_demod(iq), "NFM", 144.8e6, "APRS"

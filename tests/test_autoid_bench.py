@@ -67,5 +67,11 @@ for t in range(120):
     k, m, _ = read(lambda r, s: G.fm_voice(r, s, ctcss=100.0), 18 if t % 2 else 32, 9000 + t)
     c += k in DIGITAL
 check("FM voice with a sub-tone: no false digital readings in 120 runs", c == 0, c)
+
+# 6. garbage in, nothing out: a dropped buffer (NaN / infinity / zeros / DC) is never "a signal"
+for label, iq in (("NaN", np.full(G.N, np.nan, np.complex64)), ("infinity", np.full(G.N, np.inf, np.complex64)),
+                  ("zeros", np.zeros(G.N, np.complex64)), ("DC only", np.full(G.N, 0.5 + 0j, np.complex64))):
+    r = SignalClassifier().classify(iq, np.zeros(G.N, np.float32), "NFM", 150e6)
+    check(f"{label} samples are not identified as a signal", r is None, r)
 print("ALL OK" if not fails else "FAILED: " + ", ".join(fails))
 sys.exit(1 if fails else 0)

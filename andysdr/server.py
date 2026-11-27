@@ -104,6 +104,25 @@ def _diag_extra(radio=None):
         return {}
 
 
+def _finite(o):
+    """Copy of o with every NaN / infinity turned into None (JSON cannot carry them and a browser refuses the whole message)."""
+    if isinstance(o, float):
+        return o if o == o and o not in (float("inf"), float("-inf")) else None
+    if isinstance(o, dict):
+        return {k: _finite(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_finite(v) for v in o]
+    return o
+
+
+def _dumps(o):
+    """json.dumps that never writes NaN / Infinity (invalid JSON): the cheap strict dump first, the clean copy only if needed."""
+    try:
+        return json.dumps(o, allow_nan=False)
+    except ValueError:
+        return json.dumps(_finite(o))
+
+
 class Server:
     def __init__(self, radio, settings):
         self.radio = radio
@@ -159,7 +178,7 @@ class Server:
         else:
             if kind == "state":
                 payload = dict(payload, listeners=len(self.clients))
-            frame = _ws_frame(json.dumps({"type": kind, "data": payload}).encode(), 1)
+            frame = _ws_frame(_dumps({"type": kind, "data": payload}).encode(), 1)
             for c in self.clients:
                 c.push(frame, droppable=(kind in ("state", "adsb", "meshsdr", "update_progress", "bias", "gps", "datalink_status", "satrx_live")))
 
@@ -207,7 +226,7 @@ class Server:
                 since = int((query.get("since") or ["-1"])[0])
             except ValueError:
                 since = -1
-            await self._send(writer, 200, json.dumps(self.alerts.since(since)).encode(), "application/json",
+            await self._send(writer, 200, _dumps(self.alerts.since(since)).encode(), "application/json",
                              extra={"Cache-Control": "no-store"})
             return
         if path == "/api/replay.wav":
