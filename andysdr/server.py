@@ -942,7 +942,7 @@ class Server:
             elif cmd == "satrx_cfg":
                 kw = {k: m[k] for k in ("enabled", "device", "gain", "gain_mode", "both", "bias", "ppm") if k in m}
                 try:
-                    r.satrx.configure(**kw)
+                    r.satrx.configure(who=(c.peer or "?"), **kw)
                 except (TypeError, ValueError):
                     r._emit("event", {"level": "warn", "text": "Second receiver: a setting was not understood"})
                 r.scheduler._emit()

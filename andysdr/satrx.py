@@ -32,6 +32,10 @@ PREVIEW_MAX_SECONDS = 4 * 3600    # "until I stop it" is still ended after 4 hou
 PREVIEW_FREQ = 137900000
 ACTIONS = ("lrpt",)              # what this receiver records (137 MHz Meteor pictures)
 
+# the settings configure() writes, keyed by the name used in a satrx_cfg request
+SETTINGS = {"enabled": "satrx_enabled", "device": "satrx_device", "gain": "satrx_gain",
+            "gain_mode": "satrx_gain_mode", "both": "satrx_both", "bias": "satrx_bias", "ppm": "satrx_ppm"}
+
 
 def takes(sid, sat):
     """Does this second receiver record that satellite?  Only the 137 MHz LRPT ones."""
@@ -88,8 +92,15 @@ class SatRx:
                 "both": bool(s.get("satrx_both", False)),
                 "bias": bool(s.get("satrx_bias", False)), "ppm": int(s.get("satrx_ppm", 0) or 0)}
 
-    def configure(self, **kw):
+    def configure(self, who="", **kw):
+        """Change the second receiver's settings.
+
+        Every setting this actually changes is written to the log with its old and new value and who asked, so that a
+        setting which turns out later to have moved on its own (the "use both receivers" tickbox has done this twice)
+        can be traced back to the request that moved it.
+        """
         s = self.s
+        before = {name: s.get(name) for name in SETTINGS.values()}
         if "enabled" in kw:
             s["satrx_enabled"] = bool(kw["enabled"])
         if "device" in kw:
@@ -106,6 +117,10 @@ class SatRx:
         if "ppm" in kw:
             s["satrx_ppm"] = max(-200, min(200, int(float(kw["ppm"]))))
         s.save()
+        for name in SETTINGS.values():
+            old, now = before[name], s.get(name)
+            if old != now:
+                log.info("second receiver: %s %r -> %r  (asked by %s)", name, old, now, who or "?")
         self.fail_until = 0.0
         self._found = ([], 0.0)
 

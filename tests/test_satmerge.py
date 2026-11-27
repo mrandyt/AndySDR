@@ -140,6 +140,82 @@ class MergerTests(unittest.TestCase):
         self.assertTrue(any("same file" in t for t in self.logs), self.logs)
         self.assertFalse(os.path.exists(os.path.join(self.d, "lrpt_same_merged")))
 
+    def _wait(self, n=50):
+        import time
+        for _ in range(n):
+            if self.logs:
+                break
+            time.sleep(0.05)
+
+    def test_a_receiver_that_heard_nothing_leaves_no_empty_folder(self):
+        """The real case: the second receiver decoded a file, but it came out empty.
+
+        Every merged folder on Andy's machine was one of these - created, then left empty with nothing in it
+        to say why.  The pass should say plainly which receiver heard nothing and make no folder at all.
+        """
+        self.m.expect("pass5")
+        d1 = self._dir("lrpt_f", [frame(5, n) for n in (1, 2, 3)])
+        d2 = self._dir("lrpt_f_rx2", [])                    # decoded, but not one frame in it
+        self.m.report("pass5", d1, "rx1")
+        self.m.report("pass5", d2, "rx2")
+        self._wait()
+        self.assertFalse(os.path.exists(os.path.join(self.d, "lrpt_f_merged")), "an empty merged folder was left")
+        self.assertTrue(any("Nothing to merge" in t for t in self.logs), self.logs)
+        self.assertTrue(any("second receiver" in t for t in self.logs), self.logs)
+
+    def test_neither_receiver_heard_anything(self):
+        self.m.expect("pass6")
+        d1 = self._dir("lrpt_g", [])
+        d2 = self._dir("lrpt_g_rx2", [])
+        self.m.report("pass6", d1, "rx1")
+        self.m.report("pass6", d2, "rx2")
+        self._wait()
+        self.assertFalse(os.path.exists(os.path.join(self.d, "lrpt_g_merged")))
+        self.assertTrue(any("main receiver" in t and "second receiver" in t for t in self.logs), self.logs)
+
+    def test_a_folder_with_no_decoded_file_at_all(self):
+        self.m.expect("pass7")
+        d1 = self._dir("lrpt_h", [frame(5, 1)])
+        d2 = os.path.join(self.d, "lrpt_h_rx2")             # the decode never ran
+        os.makedirs(d2, exist_ok=True)
+        self.m.report("pass7", d1, "rx1")
+        self.m.report("pass7", d2, "rx2")
+        self._wait()
+        self.assertFalse(os.path.exists(os.path.join(self.d, "lrpt_h_merged")))
+        self.assertTrue(any("Nothing to merge" in t for t in self.logs), self.logs)
+
+    def test_two_receivers_that_both_heard_something_still_merge(self):
+        self.m.expect("pass8")
+        d1 = self._dir("lrpt_i", [frame(5, n) for n in (1, 2)])
+        d2 = self._dir("lrpt_i_rx2", [frame(5, n) for n in (2, 3, 4)])
+        self.m.report("pass8", d1, "rx1")
+        self.m.report("pass8", d2, "rx2")
+        self._wait()
+        self.assertTrue(any("4 frames" in t for t in self.logs), self.logs)
+        self.assertTrue(os.path.isfile(os.path.join(self.d, "lrpt_i_merged", "meteor_m2-x_lrpt.cadu")))
+
+    def test_the_wait_is_measured_from_the_first_receiver_not_the_pass(self):
+        """A long pass plus a slow decode used to use up the whole wait before either receiver reported."""
+        self.m.expect("pass9")
+        self.m._waiting["pass9"]["started"] = 0.0           # as if the pass began hours ago
+        d1 = self._dir("lrpt_j", [frame(5, 1), frame(5, 2)])
+        d2 = self._dir("lrpt_j_rx2", [frame(5, 3)])
+        self.m.report("pass9", d1, "rx1")
+        self.assertIn("pass9", self.m._waiting, "it gave up before the second receiver had a chance")
+        self.m.report("pass9", d2, "rx2")
+        self._wait()
+        self.assertTrue(any("3 frames" in t for t in self.logs), self.logs)
+
+    def test_it_still_gives_up_on_a_receiver_that_takes_too_long(self):
+        self.m.expect("pass10")
+        d1 = self._dir("lrpt_k", [frame(5, 1)])
+        self.m.report("pass10", d1, "rx1")
+        self.m._waiting["pass10"]["first"] = 0.0            # as if the first receiver finished hours ago
+        d2 = self._dir("lrpt_k_rx2", [frame(5, 2)])
+        self.m.report("pass10", d2, "rx2")
+        self.assertNotIn("pass10", self.m._waiting)
+        self.assertFalse(os.path.exists(os.path.join(self.d, "lrpt_k_merged")))
+
     def test_drop_forgets_a_pass(self):
         self.m.expect("pass3")
         self.m.drop("pass3")

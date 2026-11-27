@@ -27,6 +27,12 @@ CADU = 1024                         # bytes per frame, Meteor LRPT
 COUNTER_BITS = 24
 COUNTER_WRAP = 1 << COUNTER_BITS
 
+RX_NAMES = {"rx1": "the main receiver", "rx2": "the second receiver"}
+
+
+def rx_name(rx):
+    return RX_NAMES.get(rx, str(rx or "one receiver"))
+
 
 def read_frames(path):
     """{(vcid, counter): frame} for a .cadu file. Frames that are the wrong shape are skipped."""
@@ -143,7 +149,7 @@ class Merger:
         if not key:
             return
         with self._lock:
-            self._waiting[key] = {"started": time.time(), "dirs": {}}
+            self._waiting[key] = {"started": time.time(), "first": 0.0, "dirs": {}}
         log.info("merge: expecting both receivers for pass %s", key)
 
     def report(self, key, out_dir, rx):
@@ -154,11 +160,17 @@ class Merger:
             w = self._waiting.get(key)
             if w is None:
                 return                              # not a shared pass, or it has already been merged
-            w["dirs"][rx] = out_dir
-            if time.time() - w["started"] > self.WAIT_SECONDS:
+            now = time.time()
+            if w["dirs"] and now - w["first"] > self.WAIT_SECONDS:
                 self._waiting.pop(key, None)
-                log.info("merge: pass %s waited too long, giving up", key)
+                log.info("merge: pass %s waited too long for the other receiver, giving up", key)
                 return
+            if not w["dirs"]:
+                # The clock starts when the FIRST receiver finishes, not when the pass began.  Measured from the
+                # start, a long pass plus a slow SatDump run could use up the whole wait before the second
+                # receiver had even reported, and a mergeable pass would be thrown away.
+                w["first"] = now
+            w["dirs"][rx] = out_dir
             if len(w["dirs"]) < 2:
                 log.info("merge: pass %s has %s of 2 receivers", key, len(w["dirs"]))
                 return
@@ -182,17 +194,29 @@ class Merger:
                 log.warning("merge: both receivers reported the same folder %s", list(dirs.values())[0])
                 self.log_cb("Both receivers recorded the pass into the same file, so there was nothing to merge.")
                 return
-            paths = [p for p in (self._cadu(d) for d in dirs.values()) if p]
-            if len(paths) < 2:
-                self.log_cb("Both receivers ran, but only one of them found any frames - nothing to merge.")
+            found = {rx: self._cadu(d) for rx, d in dirs.items()}
+            # Count what each receiver actually heard BEFORE making anywhere to put the result.  A decoded file
+            # exists even when the receiver heard nothing - it is simply empty - so the old check, which only
+            # asked whether the file was there, went on to create a _merged folder and then found nothing to put
+            # in it.  Every merged folder on disk so far is one of those: created, then left empty with no word
+            # of why.  There is nothing to merge unless two receivers each heard at least one frame.
+            heard = {rx: len(read_frames(p)) for rx, p in found.items() if p}
+            for rx in found:
+                heard.setdefault(rx, 0)
+            silent = sorted(rx for rx, n in heard.items() if not n)
+            if len(silent) >= len(heard) - 1:
+                who = " and ".join(rx_name(rx) for rx in silent) or "one receiver"
+                log.info("merge: pass %s not merged, heard %s", key, heard)
+                self.log_cb(f"Nothing to merge on this pass: {who} heard no frames. "
+                            f"The pictures you have are from the receiver that did.")
                 return
             name = os.path.basename(sorted(dirs.values())[0]) + "_merged"
             out_dir = os.path.join(self.images_dir, name)
             os.makedirs(out_dir, exist_ok=True)
             merged = os.path.join(out_dir, "meteor_m2-x_lrpt.cadu")
-            rep = merge(paths, merged)
+            rep = merge([p for p in found.values() if p], merged)
             if not rep:
-                self.log_cb("Both receivers ran, but their frames could not be merged.")
+                self.log_cb("Both receivers heard frames, but they could not be merged.")
                 return
             self.log_cb(describe(rep))
             images = self._images(merged, out_dir)
