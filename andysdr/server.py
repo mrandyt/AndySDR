@@ -594,8 +594,10 @@ class Server:
         cmd = m.get("cmd")
         try:
             if cmd == "tune":
+                log.info("tune %s MHz %s  (asked by %s)", int(m["freq"]) / 1e6, m.get("mode") or "", c.peer or "?")
                 r.set_frequency(int(m["freq"]), m.get("mode"))
             elif cmd == "step":
+                log.info("step %+d  (asked by %s)", int(m.get("dir", 1)), c.peer or "?")
                 r.step(int(m.get("dir", 1)))
             elif cmd == "mode":
                 r.set_mode(m["mode"])

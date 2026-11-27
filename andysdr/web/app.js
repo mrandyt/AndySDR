@@ -477,12 +477,23 @@ document.querySelectorAll(".radio [data-k]").forEach((b) => b.addEventListener("
   set(was === "1");
 })();
 
+/* The radio's keyboard shortcuts (▲▼ step, 0-9 . Enter, S M P L N) only work while the pointer is over the radio or the
+   spectrum.  Anywhere else the keys do what they always do - ▲▼ scroll the page, Space presses the focused button - so
+   scrolling a long tab with the arrow keys can no longer nudge the frequency by a step, or start a scan, by accident. */
+let kbOver = false;
+for (const q of ["#radio", ".panel.scope"]) {
+  const el = document.querySelector(q);
+  if (el) { el.addEventListener("pointerenter", () => { kbOver = true; }); el.addEventListener("pointerleave", () => { kbOver = false; }); }
+}
 document.addEventListener("keydown", (e) => {
-  if (e.target.matches("input, select, textarea") || !$("loginModal").hidden || document.body.classList.contains("set-open")) return;   // (the Settings page handles its own keys)
+  if (e.target.matches("input, select, textarea, [role=slider]") || !$("loginModal").hidden || document.body.classList.contains("set-open")) return;   // (the Settings page handles its own keys)
+  if (e.ctrlKey || e.altKey || e.metaKey) return;                                  // browser shortcuts (Ctrl+S, Alt+Left ...) are never ours
   if (e.key === "Escape") { if (explainOn) setExplain(false); $("helpModal").hidden = true; $("acarsModal").hidden = true; key("clr"); return; }
+  if (e.key === "h" || e.key === "?") { openHelp(); return; }
+  if (!kbOver) return;
+  if (e.key === "Enter" && e.target.matches("button, a")) return;                 // Enter on a focused button presses that button
   const map = { Enter: "e", ArrowUp: "up", ArrowDown: "down", Backspace: "clr", ".": ".", s: "scan", m: "man", p: "pgm", l: "lo", n: "skip" };
   if (/^[0-9]$/.test(e.key)) key(e.key);
-  else if (e.key === "h" || e.key === "?") openHelp();
   else if (e.key === "i") send({ cmd: "lockout_temp", minutes: 10 });
   else if (map[e.key]) { key(map[e.key]); e.preventDefault(); }
 });
@@ -3756,7 +3767,7 @@ const HELP = {
   k_rec: ["REC", "Records what you hear to a WAV file in %APPDATA%\\AndySDR\\recordings. Press again to stop."],
   k_dec: ["DEC", "Opens the Decoders tab to pick a decoder for digital voice, pagers, weather fax or satellite images."],
   k_typefreq: ["Type a frequency", "Click the big frequency on the display, type the frequency in MHz (for example 153.025 or 8.04) and press Enter or GO. On a keyboard you can also just start typing digits and press Enter."],
-  k_arrows: ["▲ ▼", "Step up/down by the STEP size. While scanning or searching they set the direction / skip to the next channel."],
+  k_arrows: ["▲ ▼", "Step up/down by the STEP size. While scanning or searching they set the direction / skip to the next channel. The keyboard arrow keys (and 0-9, S, M, P, L, N) do the same only while the mouse pointer is over the radio or the spectrum - anywhere else they scroll the page as normal."],
   layout: ["Layout", "Control room puts the radio on the left, a big spectrum in the middle and seven panels around it (memory, decoder log, pictures, scheduler, recordings with instant replay, live activity, pager messages) so you can see everything at once. Each panel has a drop-down to choose what it shows – every tab is available – and a ⤢ button to make it full size. Classic is the original tabbed page; Auto uses Control room on big screens only."],
   zoom: ["Zoom", "Magnify the spectrum. On a touch screen stretch two fingers apart to zoom in and pinch to zoom out; on a laptop touchpad do the same pinch gesture; with a mouse hold Ctrl and scroll. When zoomed in, scroll the wheel (or two-finger swipe on the touchpad) up/down to slide the view left/right, or drag it. Click a signal to tune it. Follow keeps the view centred on the frequency you are tuned to; Fit shows everything. Shift+scroll still steps the tuning frequency."],
   scope: ["Spectrum & waterfall", "Live picture of the radio band around you. The top graph shows signal strength across the received bandwidth; the waterfall below shows history – transmissions appear as bright streaks. Click anywhere to tune there; pinch or Ctrl+scroll to zoom (see Zoom). The red line and shading show the channel you are listening to. 'Range' and 'Top' set the display contrast."],
