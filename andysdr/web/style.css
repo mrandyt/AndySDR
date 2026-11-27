@@ -1539,3 +1539,13 @@ body.phone #tab-set .card { padding: 14px; }
 .rx2-both { margin: 10px 0 2px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel2); }
 .rx2-both label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .rx2-both .small { margin-top: 5px; }
+
+/* ---- grouped tab bar: headings on top, only that heading's tabs below ---- */
+.tab[hidden] { display: none; }
+.grpbar { display: flex; gap: 6px; padding: 8px 12px 0; background: var(--panel); border-bottom: 1px solid var(--line); }
+.grp { position: relative; background: var(--panel2); border: 1px solid var(--line); border-bottom: 0; color: var(--muted); padding: 9px 18px; font-weight: 800; letter-spacing: .8px; font-size: 12px; cursor: pointer; border-radius: 10px 10px 0 0; }
+.grp:hover { color: var(--text); }
+.grp.active { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+.grp-dot { position: absolute; top: 5px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--panel2); }
+.grp-dot[hidden] { display: none; }
+[data-theme] .tabbar { background: var(--panel2); }

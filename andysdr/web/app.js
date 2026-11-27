@@ -1240,6 +1240,7 @@ function showTab(name) {
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === name));
   document.querySelectorAll(".tabpage").forEach((p) => p.classList.toggle("active", p.id === "tab-" + name));
   tabEffects(name);
+  if (typeof syncGroups === "function") syncGroups(name);
 }
 /* ----- control-room layout: the tab pages can sit in docks around the spectrum, several visible at once ----- */
 const CR = { on: false, docks: {}, home: [], names: {}, focus: "B2",
@@ -1311,6 +1312,41 @@ function crAuto() {
 $("layoutSel").onchange = crAuto;
 window.addEventListener("resize", () => { clearTimeout(CR.t); CR.t = setTimeout(crAuto, 200); });
 document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => showTab(t.dataset.tab)));
+
+/* ----- grouped tab bar (PC): four headings, each shows only its own tabs, so the bar is never a wall of 15 buttons ----- */
+var TG = { ready: false, last: {} };
+const TAB_GROUPS = [
+  ["LISTEN", "Memory channels, live search, decoders, band plan and repeaters", ["mem", "act", "dec", "bp", "rep"]],
+  ["DATA & MESSAGES", "Pagers, aircraft, balloons, sensors, FT8 and MeshCore", ["pag", "adsb", "acars", "sonde", "ism", "ft8", "mesh"]],
+  ["SATELLITES", "Pass scheduler and the second receiver", ["sch", "rx2"]],
+  ["PICTURES & AUDIO", "Weather pictures and sound recordings", ["img", "rec"]],
+];
+(function groupBar() {
+  const nav = document.querySelector(".tabbar"); if (!nav) return;
+  const bar = document.createElement("nav"); bar.className = "grpbar"; bar.id = "grpBar";
+  bar.innerHTML = TAB_GROUPS.map((g, i) => `<button class="grp" data-g="${i}" title="${g[1]}">${g[0]}<span class="grp-dot" hidden></span></button>`).join("");
+  nav.parentNode.insertBefore(bar, nav);
+  bar.querySelectorAll(".grp").forEach((b) => b.addEventListener("click", () => {
+    const g = TAB_GROUPS[+b.dataset.g]; showTab(TG.last[b.dataset.g] || g[2][0]);
+  }));
+  TG.ready = true;
+  const cur = document.querySelector(".tab.active"); syncGroups(cur ? cur.dataset.tab : "mem");
+  setInterval(() => syncGroups(), 1500);
+})();
+function syncGroups(name) {
+  if (!TG.ready) return;
+  if (!name) { const c = document.querySelector(".tab.active"); name = c ? c.dataset.tab : "mem"; }
+  const gi = TAB_GROUPS.findIndex((g) => g[2].includes(name));
+  if (gi < 0) return;
+  TG.last[gi] = name;
+  document.querySelectorAll("#grpBar .grp").forEach((b, i) => {
+    b.classList.toggle("active", i === gi);
+    // a dot on a heading that is not open when something inside it has news (a badge number)
+    const news = TAB_GROUPS[i][2].some((n) => { const bd = document.querySelector(`.tab[data-tab="${n}"] .tab-badge`); return bd && !bd.hidden; });
+    b.querySelector(".grp-dot").hidden = !(news && i !== gi);
+  });
+  document.querySelectorAll(".tabbar .tab").forEach((t) => { if (!t.classList.contains("tab-set")) t.hidden = !TAB_GROUPS[gi][2].includes(t.dataset.tab); });
+}
 
 /* ----- memory ----- */
 function esc(s) { return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }

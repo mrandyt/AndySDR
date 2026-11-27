@@ -14,7 +14,7 @@ body.phone.ph-typing #phNav { display: none; }
 #phNav button.on { color: var(--accent); font-weight: 600; }
 
 /* which page shows */
-body.phone .tabbar { display: none; }
+body.phone .tabbar, body.phone .grpbar { display: none; }
 body.phone[data-pp="radio"] section.tabs, body.phone[data-pp="more"] section.tabs { display: none; }
 body.phone:not([data-pp="radio"]) section.radio, body.phone:not([data-pp="radio"]) section.scope { display: none; }
 body.phone:not([data-pp="radio"]) #phBar { display: flex; }
