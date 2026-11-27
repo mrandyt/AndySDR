@@ -1207,6 +1207,7 @@ body.customise #qJump .key::after { content: none; }
 .rx2-bar i { display: block; height: 100%; width: 0; background: #7a8088; transition: width .25s; }
 .rx2-bar i.lo { background: #7a8088; } .rx2-bar i.mid { background: var(--warn); } .rx2-bar i.hi { background: var(--ok); }
 .rx2-snr { font-size: 16px; }
+.rx2-snr .rx2-big { font-size: 34px; line-height: 1.1; font-variant-numeric: tabular-nums; }
 #rx2Spark { flex: 1 1 200px; height: 56px; width: 100%; background: rgba(127,127,127,.08); border-radius: 8px; }
 .rx2-pics { display: flex; gap: 8px; flex-wrap: wrap; }
 .rx2-pics img { height: 110px; border-radius: 8px; border: 1px solid var(--line); cursor: zoom-in; background: #000; }

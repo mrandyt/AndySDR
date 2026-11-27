@@ -1,5 +1,6 @@
 /* The RECEIVER 2 screen (the Nooelec / RTL-SDR dongle) and the status strip shown under the tabs on every screen. */
-const RX2 = { live: null, log: [], spec: null, best: null, ctlKey: "", wfLast: 0, preset: "meteor", custom: "", lastDraw: 0 };
+const RX2_DURS = [[90, "90 seconds"], [300, "5 minutes"], [900, "15 minutes"], [3600, "1 hour"], [0, "Until I stop it"]];
+const RX2 = { dur: (() => { try { const v = parseInt(localStorage.getItem("andysdr_rx2_dur"), 10); return RX2_DURS.some((d) => d[0] === v) ? v : 900; } catch (e) { return 900; } })(), tone: false, live: null, log: [], spec: null, best: null, ctlKey: "", wfLast: 0, preset: "meteor", custom: "", lastDraw: 0 };
 const RX2_PRESETS = [
   { id: "meteor", label: "Meteor-M satellite, 137.900 MHz", f: 137.9e6, bw: 60e3, sat: true },
   { id: "meteor2", label: "Meteor-M satellite, 137.100 MHz", f: 137.1e6, bw: 60e3, sat: true },
@@ -25,8 +26,8 @@ function rx2State() {
   const lv = RX2.live && RX2.live.on !== undefined ? RX2.live : r.live;
   const name = r.using || (r.devices && r.devices[0] && r.devices[0].label) || "";
   if (lv && lv.on) {
-    if (lv.preview) return { k: "view", chip: `live view${lv.left != null ? " · " + lv.left + " s left" : ""}`, title: "LIVE VIEW – nothing is being recorded",
-      sub: `Listening on ${fmtMHz(lv.freq, 3)} MHz so you can see it working${lv.left != null ? " · stops by itself in " + lv.left + " s" : ""}` };
+    if (lv.preview) return { k: "view", chip: `live view${lv.left != null ? " · " + rx2Cd(lv.left) + " left" : ""}`, title: "LIVE VIEW – nothing is being recorded",
+      sub: `Listening on ${fmtMHz(lv.freq, 3)} MHz so you can see it working${lv.left != null ? " · stops by itself in " + rx2Cd(lv.left) : " · stays on until you press Stop"}` };
     return { k: "rec", chip: `RECORDING ${lv.name ? String(lv.name).split(" pass")[0] : ""}`.trim(), title: `RECORDING – ${lv.name ? String(lv.name).split(" pass")[0] : "a pass"}`,
       sub: `${fmtMHz(lv.freq, 4)} MHz · ${rx2Cd(lv.elapsed)} so far${lv.el != null ? " · satellite " + lv.el + "° up" : ""}${lv.images ? " · " + lv.images + " picture" + (lv.images > 1 ? "s" : "") + " so far" : ""}` };
   }
@@ -125,16 +126,20 @@ function rx2Render() {
     tile("LAST PASS", lp ? esc(String(lp.name || lp.sat).replace(/ \(.*/, "")) : "none yet", lp ? `${fmtLocal(lp.start)} · ${esc(lp.result)}${lp.snr != null ? " · best " + lp.snr + " dB" : ""}` : "nothing recorded on this one yet");
 
   // live view controls
-  const key = [lv.on, lv.preview, RX2.preset, r.enabled, !!(r.devices || []).length].join("|");
+  const key = [lv.on, lv.preview, RX2.preset, RX2.dur, r.enabled, !!(r.devices || []).length].join("|");
   if (key !== RX2.ctlKey) {
     RX2.ctlKey = key;
     const pv = lv.on && lv.preview, busy = lv.on && !lv.preview;
     rx2$("rx2Ctl").innerHTML = `<label class="small">Look at <select id="rx2Pre" ${lv.on ? "disabled" : ""}>${RX2_PRESETS.map((p) => `<option value="${p.id}" ${p.id === RX2.preset ? "selected" : ""}>${esc(p.label)}</option>`).join("")}</select></label>
       <input class="inp" id="rx2Cus" placeholder="MHz" style="width:6.5em" value="${esc(RX2.custom)}" ${RX2.preset === "custom" && !lv.on ? "" : "hidden"}>
-      ${pv ? `<button class="btn danger" id="rx2Go">■ Stop live view</button>` : `<button class="btn primary" id="rx2Go" ${busy || !r.enabled || !(r.devices || []).length ? "disabled" : ""}>▶ Watch live (90 s)</button>`}
+      <label class="small">for <select id="rx2Dur" ${lv.on ? "disabled" : ""}>${RX2_DURS.map((d) => `<option value="${d[0]}" ${d[0] === RX2.dur ? "selected" : ""}>${d[1]}</option>`).join("")}</select></label>
+      ${pv ? `<button class="btn danger" id="rx2Go">■ Stop live view</button>` : `<button class="btn primary" id="rx2Go" ${busy || !r.enabled || !(r.devices || []).length ? "disabled" : ""}>▶ Watch live</button>`}
+      <label class="small" title="A tone that rises as the signal gets stronger, so you can listen while you turn the antenna"><input type="checkbox" id="rx2Tone" ${RX2.tone ? "checked" : ""}> 🔊 Tone</label>
       <button class="btn sm" id="rx2Reset" title="Forget the best reading so far">Reset best</button>
-      <span class="muted small">${busy ? "A pass is being recorded – this is its live view." : "Opens the dongle for 90 seconds, nothing is recorded. A real pass always takes over."}</span>`;
+      <span class="muted small">${busy ? "A pass is being recorded – this is its live view." : "Opens the dongle for the time you pick, nothing is recorded. A real pass always takes over."}</span>`;
     const sel = rx2$("rx2Pre"); if (sel) sel.onchange = () => { RX2.preset = sel.value; RX2.ctlKey = ""; rx2Render(); };
+    const du = rx2$("rx2Dur"); if (du) du.onchange = () => { RX2.dur = parseInt(du.value, 10); try { localStorage.setItem("andysdr_rx2_dur", String(RX2.dur)); } catch (e) { /* not kept */ } RX2.ctlKey = ""; rx2Render(); };
+    const tn = rx2$("rx2Tone"); if (tn) tn.onchange = () => { RX2.tone = tn.checked; if (RX2.tone) rx2ToneStart(); else rx2ToneStop(); };
     const cu = rx2$("rx2Cus"); if (cu) cu.oninput = () => (RX2.custom = cu.value);
     rx2$("rx2Reset").onclick = () => { RX2.best = null; rx2Meter(); };
     rx2$("rx2Go").onclick = () => {
@@ -142,7 +147,7 @@ function rx2Render() {
       const p = RX2_PRESETS.find((x) => x.id === RX2.preset) || RX2_PRESETS[0];
       let f = p.f;
       if (p.id === "custom") { f = parseFloat(String(RX2.custom).replace(",", ".")) * 1e6; if (!(f >= 30e6 && f <= 1700e6)) { toast("Type a frequency in MHz, e.g. 137.9", "warn"); return; } }
-      RX2.best = null; send({ cmd: "satrx_view", on: true, freq: Math.round(f), bw: p.bw });
+      RX2.best = null; send({ cmd: "satrx_view", on: true, freq: Math.round(f), bw: p.bw, secs: RX2.dur });
     };
   }
   const idle = rx2$("rx2Idle");
@@ -160,16 +165,49 @@ function rx2Render() {
   rx2LogRender();
 }
 
+/* ---------- aiming tone: the pitch rises with the signal (needs the Tone box ticked; only ever plays while a live view is on) ---------- */
+const RX2_TONE = { ctx: null, osc: null, gain: null };
+function rx2ToneStart() {
+  try {
+    if (!RX2_TONE.ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext; if (!AC) { toast("This browser cannot play the tone", "warn"); return; }
+      RX2_TONE.ctx = new AC();
+    }
+    if (RX2_TONE.ctx.state === "suspended") RX2_TONE.ctx.resume();
+    if (RX2_TONE.osc) return;
+    const o = RX2_TONE.ctx.createOscillator(), g = RX2_TONE.ctx.createGain();
+    o.type = "sine"; o.frequency.value = 200; g.gain.value = 0;
+    o.connect(g); g.connect(RX2_TONE.ctx.destination); o.start();
+    RX2_TONE.osc = o; RX2_TONE.gain = g;
+  } catch (e) { /* the tone is a bonus - never break the screen */ }
+}
+function rx2ToneStop() {
+  try { if (RX2_TONE.osc) { RX2_TONE.osc.stop(); RX2_TONE.osc.disconnect(); RX2_TONE.gain.disconnect(); } } catch (e) { /* already stopped */ }
+  RX2_TONE.osc = RX2_TONE.gain = null;
+}
+function rx2ToneSet(snr) {
+  try {
+    const on = RX2.tone && RX2.live && RX2.live.on && snr != null;
+    if (RX2.tone && !RX2_TONE.osc) rx2ToneStart();
+    if (!RX2_TONE.osc) return;
+    const t = RX2_TONE.ctx.currentTime;
+    // 0 dB -> 250 Hz, 15 dB -> 1450 Hz; silent while there is no reading
+    RX2_TONE.osc.frequency.setTargetAtTime(250 + Math.max(0, Math.min(15, snr == null ? 0 : snr)) * 80, t, 0.05);
+    RX2_TONE.gain.gain.setTargetAtTime(on ? 0.12 : 0, t, 0.05);
+  } catch (e) { /* ignore */ }
+}
+
 function rx2Meter() {
   const lv = RX2.live; if (!rx2Visible()) return;
   const snr = lv && lv.on ? lv.snr : null;
   if (snr != null && (RX2.best == null || snr > RX2.best)) RX2.best = snr;
+  rx2ToneSet(snr);
   const fill = rx2$("rx2Fill"), txt = rx2$("rx2SnrTxt");
   const pct = snr == null ? 0 : Math.max(0, Math.min(100, snr / 15 * 100));
   fill.style.width = pct + "%";
   fill.className = snr == null ? "" : snr < 1.5 ? "lo" : snr < 4 ? "mid" : "hi";
   const word = snr == null ? (lv && lv.on ? "measuring …" : "no reading – the receiver is idle") : snr < 1.5 ? "no signal" : snr < 3 ? "very faint" : snr < 5 ? "weak" : snr < 8 ? "good" : "strong";
-  txt.innerHTML = `<b>${snr == null ? "–" : snr.toFixed(1)} dB</b> ${word}${RX2.best != null ? ` <span class="muted">· best so far ${RX2.best.toFixed(1)} dB</span>` : ""}`;
+  txt.innerHTML = `<b class="rx2-big">${snr == null ? "–" : snr.toFixed(1)} dB</b> ${word}${RX2.best != null ? ` <span class="muted">· best so far ${RX2.best.toFixed(1)} dB</span>` : ""}`;
   const c = rx2$("rx2Spark"), dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
   if (!w) return;
   if (c.width !== w * dpr) { c.width = w * dpr; c.height = h * dpr; }

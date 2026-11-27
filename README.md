@@ -5,7 +5,9 @@ spectrum/waterfall, 1000 memory channels, a band search that finds every live tr
 RadioReference UK CSV import, digital/analogue decoding, weather pictures, and a built-in
 network server so any other PC, laptop, tablet or phone in the house can use the radio.
 
-**Latest: 1.24.2** – fixes *Use both receivers for a pass*: both receivers named their recording after the time the pass started, so when they shared a pass they wrote into the same file and spoiled each other's recording. Each receiver now records to its own file, and a merge is refused if the two ever point at the same folder.
+**Latest: 1.24.3** – **longer live view and an aiming tone** on the second receiver screen: *Watch live* is no longer limited to 90 seconds – pick 90 s, 5 min, 15 min, 1 hour or *Until I stop it* – the signal number is now large enough to read from across the roof, and a **🔊 Tone** box plays a note that rises as the signal gets stronger so you can turn the antenna without looking. A real pass still takes over, and a view left on is ended after 4 hours.
+
+**1.24.2** – fixes *Use both receivers for a pass*: both receivers named their recording after the time the pass started, so when they shared a pass they wrote into the same file and spoiled each other's recording. Each receiver now records to its own file, and a merge is refused if the two ever point at the same folder.
 
 **1.24.1** – fixes the *Use both receivers for a pass* tickbox, which in 1.24.0 looked ticked but never reached the program.
 

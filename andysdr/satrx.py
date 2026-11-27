@@ -27,7 +27,8 @@ ENUM_EVERY = 20.0                # seconds between looks for the dongle
 RETRY_AFTER_FAIL = 180.0         # after a failed start, leave the pass to the main radio for a while
 SPEC_MIN_DB, SPEC_MAX_DB = -130.0, -10.0       # same scale as the main spectrum
 SPEC_EVERY = 3                    # send every 3rd block (about 7 pictures a second) to the screens
-PREVIEW_SECONDS = 90              # a "live view" test stops by itself
+PREVIEW_SECONDS = 90              # a "live view" test stops by itself (unless a longer time is chosen)
+PREVIEW_MAX_SECONDS = 4 * 3600    # "until I stop it" is still ended after 4 hours so a forgotten view cannot hold the dongle for ever
 PREVIEW_FREQ = 137900000
 ACTIONS = ("lrpt",)              # what this receiver records (137 MHz Meteor pictures)
 
@@ -69,6 +70,8 @@ class SatRx:
         self.t_start = 0.0
         self._blk = 0
         self._live_t = 0.0
+        self.preview_secs = PREVIEW_SECONDS
+        self.preview_open = False
         self._live_snr_t = 0.0
         self.view_bw = 60e3
         self.last_error = ""
@@ -265,17 +268,20 @@ class SatRx:
         self._push_live(force=True)
         return g
 
-    def begin_preview(self, freq=None, bw=None):
+    def begin_preview(self, freq=None, bw=None, secs=None):
         """A short live view (no recording) so the antenna and dongle can be seen working any time.
-        `freq` (Hz) and `bw` (Hz, the width the signal meter measures) let it be pointed at any steady signal."""
+        `freq` (Hz) and `bw` (Hz, the width the signal meter measures) let it be pointed at any steady signal.
+        `secs` is how long to watch: None = 90 s, 0 = until stopped (ended after 4 h at the latest)."""
         try:
             freq = int(float(freq)) if freq else PREVIEW_FREQ
             bw = float(bw) if bw else 60e3
+            secs = PREVIEW_SECONDS if secs is None else int(float(secs))
         except (TypeError, ValueError):
             return False, "That frequency was not understood"
         if not 30e6 <= freq <= 1.7e9:
             return False, "Choose a frequency between 30 and 1700 MHz"
         bw = max(4e3, min(100e3, bw))
+        secs = PREVIEW_MAX_SECONDS if secs <= 0 else max(10, min(PREVIEW_MAX_SECONDS, secs))
         if self.job is not None:
             return False, ("A pass is being recorded right now - the live view below is already showing it"
                            if not self.job.get("preview") else "The live view is already running")
@@ -310,6 +316,8 @@ class SatRx:
             self.spec = Spectrum(2048)
             self.freq = freq
             self.view_bw = bw
+            self.preview_secs = secs
+            self.preview_open = secs >= PREVIEW_MAX_SECONDS
             self.job = {"id": "preview", "name": "Live view", "preview": True, "freq": freq}
             self.pass_meter = None
             self.discard = 3
@@ -323,7 +331,8 @@ class SatRx:
             self.thread = threading.Thread(target=self._run, args=(self.gen,), name="satrx-view", daemon=True)
             self.thread.start()
         self._push_live(force=True)
-        return True, f"Live view on {freq / 1e6:.3f} MHz for {PREVIEW_SECONDS} s"
+        return True, (f"Live view on {freq / 1e6:.3f} MHz until you stop it" if self.preview_open
+                      else f"Live view on {freq / 1e6:.3f} MHz for {self.preview_secs} s")
 
     def stop_preview(self):
         if self.job is not None and self.job.get("preview"):
@@ -492,7 +501,7 @@ class SatRx:
             except Exception:                        # noqa: BLE001
                 log.exception("second receiver block")
             self._push_live()
-            if preview and now - self.t_start > PREVIEW_SECONDS:
+            if preview and now - self.t_start > self.preview_secs:
                 break
         if self.job is not None and self.gen == gen:    # ended by itself (not asked to): the scheduler notices job is None
             threading.Thread(target=self.end_job, args=("receiver stopped",), name="satrx-end", daemon=True).start()
@@ -507,7 +516,8 @@ class SatRx:
                 "gain": self.job_gain, "snr": self.snr, "el": None if self.cur_el is None else round(self.cur_el, 1),
                 "range": None if self.cur_range is None else int(self.cur_range), "images": self.pass_images,
                 "elapsed": int(time.time() - self.t_start) if self.t_start else 0,
-                "left": max(0, int(PREVIEW_SECONDS - (time.time() - self.t_start))) if job.get("preview") else None,
+                "left": (max(0, int(self.preview_secs - (time.time() - self.t_start))) if not self.preview_open else None) if job.get("preview") else None,
+                "open": bool(job.get("preview") and self.preview_open),
                 "bw": self.view_bw if job.get("preview") else None, "hist": self.snr_hist[-120:], "recent": self.recent_images[:6], "max_el": job.get("max_el")}
 
     def _push_live(self, force=False):

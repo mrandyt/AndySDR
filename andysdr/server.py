@@ -936,7 +936,7 @@ class Server:
                     r.scheduler._emit()
             elif cmd == "satrx_view":
                 if m.get("on", True):
-                    ok, text = await asyncio.get_running_loop().run_in_executor(None, lambda: r.satrx.begin_preview(m.get("freq"), m.get("bw")))
+                    ok, text = await asyncio.get_running_loop().run_in_executor(None, lambda: r.satrx.begin_preview(m.get("freq"), m.get("bw"), m.get("secs")))
                     self._reply(c, "event", {"level": "info" if ok else "warn", "text": text, "rx2": True})
                 else:
                     await asyncio.get_running_loop().run_in_executor(None, r.satrx.stop_preview)
