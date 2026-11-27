@@ -125,6 +125,8 @@ class Radio:
         self.auto_gen = 0                 # bumps on every retune so late results are ignored
         self.auto_busy = False
         self.auto_mode_prev = None        # mode before auto-identify switched it
+        self.auto_mode_lock = False       # you picked a mode by hand: Auto leaves the mode alone until you retune
+        self.auto_mode_vote = (None, 0)   # (mode, how many readings in a row asked for it) - two are needed before switching
         self.pre = deque(maxlen=60)       # last ~3 s of demodulated blocks, replayed into a decoder auto-identify starts
         self.auto_q = queue.Queue(maxsize=1)
         threading.Thread(target=self._auto_worker, name="autoid", daemon=True).start()
@@ -364,6 +366,8 @@ class Radio:
         self.classifier.history.clear()
         self.auto_gen += 1
         self.sstv_watch = None
+        self.auto_mode_lock = False
+        self.auto_mode_vote = (None, 0)
         if self.auto_mode_prev:              # put back the mode auto-identify changed
             if self.rx and self.auto_mode_prev != self.mode:
                 self.mode = self.auto_mode_prev
@@ -532,6 +536,33 @@ class Radio:
                     self.rx.set_mode(self.mode)
                 self.auto_mode_prev = None
                 self._push_state(True)
+
+        elif not active and r["kind"] in ("FM voice", "AM voice", "SSB voice"):
+            self._auto_voice_mode(r)
+
+    def _auto_voice_mode(self, r):
+        """Plain analogue voice and no decoder: make sure the demodulator matches what is on the air.  The classifier
+        names FM / AM / USB / LSB only when the evidence is clear; two readings in a row are needed, a mode you chose
+        by hand is never overridden, and WFM / CW are left alone."""
+        want = r.get("mode")
+        if not want and r["kind"] == "FM voice" and self.mode in ("DIG", "DIG25"):
+            want = "NFM"                     # not digital after all, but a digital demodulator is still selected
+        cur = self.mode
+        if (not want or getattr(self, "auto_mode_lock", False) or cur in ("WFM", "CW") or want == cur
+                or (want == "NFM" and cur == "FM")):
+            self.auto_mode_vote = (None, 0)
+            return
+        vm, vn = getattr(self, "auto_mode_vote", (None, 0))
+        vn = vn + 1 if vm == want else 1
+        self.auto_mode_vote = (want, vn)
+        if vn < 2:
+            return
+        self.auto_mode_vote = (None, 0)
+        self.mode = want
+        self.rx.set_mode(want)
+        what = {"NFM": "analogue FM voice", "AM": "AM voice", "USB": "upper-sideband voice", "LSB": "lower-sideband voice"}.get(want, r["kind"])
+        self._emit("event", {"level": "info", "text": f"Auto: {what} – switched to {want}"})
+        self._push_state(True)
 
     # ------------------------------------------------------------------ scheduled captures
     def begin_job(self, job):
@@ -708,6 +739,7 @@ class Radio:
     def set_mode(self, mode):
         def do():
             if mode in MODES:
+                self.auto_mode_lock = True          # a mode chosen by hand is respected until the next retune
                 self.mode = mode
                 self.rx.set_mode(mode)
                 self._push_state(True)

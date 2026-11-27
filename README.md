@@ -5,7 +5,9 @@ spectrum/waterfall, 1000 memory channels, a band search that finds every live tr
 RadioReference UK CSV import, digital/analogue decoding, weather pictures, and a built-in
 network server so any other PC, laptop, tablet or phone in the house can use the radio.
 
-**Latest: 1.25.3** – **tidier quick buttons**: the BAND buttons are split into *Everyday* and *Data & satellites*, and the 21 DECODE buttons into *Voice*, *Data & messages* and *Pictures*. Same buttons, same places in the TUNE / DIGITAL / TOOLS pages – just easier to find.
+**Latest: 1.26.0** – **more accurate Auto ID**: it now tells **FM, AM and upper/lower sideband** voice apart from the signal itself (not from whichever mode is selected) and switches the demodulator to **NFM / AM / USB / LSB** by itself, after two consistent readings. A mode you pick by hand is respected until you tune elsewhere, and a carrier with nobody talking is left alone. Fixed: speech occasionally read as a digital signal (about 4 % of readings in tests – now none), weak NXDN/dPMR read as a pager, **DTMF** never recognised, and analogue FM left in a digital (DIG) mode like the 168 MHz case. Checked with a new benchmark of synthetic signals (`tests/test_autoid_bench.py`, 20 signal types at several strengths).
+
+**1.25.3** – **tidier quick buttons**: the BAND buttons are split into *Everyday* and *Data & satellites*, and the 21 DECODE buttons into *Voice*, *Data & messages* and *Pictures*. Same buttons, same places in the TUNE / DIGITAL / TOOLS pages – just easier to find.
 
 **1.25.2** – **tidier Scheduler**: three panels behind a small switch – **Satellite passes** (switch satellites on, pass times, the L-band pointing helper), **Pass report** (how each pass went, the Fill score, set-aside option and the antenna map) and **Timed captures** (weather fax, SSTV and other timed recordings). It opens on the one you used last.
 

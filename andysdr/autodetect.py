@@ -197,12 +197,11 @@ class SignalClassifier:
             tone.update(info)
             return tone
 
-        if mode in ("AM", "USB", "LSB", "CW"):
-            kind = {"AM": "AM voice", "CW": "Morse (CW)"}.get(mode, "SSB voice")
-            return R(kind, kind, conf=0.5)
+        if mode == "CW":
+            return R("Morse (CW)", "Morse (CW)", conf=0.5)
 
         # ---- FSK digital: symbol rate lines + discriminator levels
-        if env_cv < 0.35:
+        if env_cv < 0.35 and mode not in ("USB", "LSB"):
             dd = np.diff(dfull) ** 2
             lines = _line_strength(dd, [512, 1200, 1600, 2400, 3200, 4800])
             best = max(lines, key=lines.get)
@@ -216,7 +215,10 @@ class SignalClassifier:
             lev = _levels(d)
             k = _kurtosis(d)
             info.update(baud=best, line=round(strength, 1), dev=round(dev), levels=lev, kurt=round(k, 2))
-            if strength > 12 and dev > 900:
+            # A real 4FSK / 2FSK signal has a flat, few-level discriminator (kurtosis about 1.2-2.5; the real DMR recording
+            # measures 2.4).  Speech and noise are peaky (3 and up) and only brush a weak "symbol rate" line by chance, so a
+            # weak line needs the flat shape too; a strong line is believed on its own.
+            if strength > 12 and dev > 900 and (k < 2.9 or strength > 45):
                 if best == 4800:
                     burst = 0.3 < duty < 0.7 and a1 - a0 > FS * 0.3 and self._tdma(env[a0:a1])
                     if burst:
@@ -225,16 +227,66 @@ class SignalClassifier:
                         return R("Digital 4FSK", "Digital 4FSK 4800 Bd – DMR repeater / P25 / Fusion / M17",
                                  "dsd", "auto", "DIG", 0.75)
                     return R("P25 / DMR", "P25 Phase 1 or DMR repeater (4FSK 4800 Bd)", "dsd", "auto", "DIG", 0.8)
-                if best == 2400 and lev != 2 and k > 1.15:
+                if best == 2400 and (k >= 1.75 or (lev != 2 and k > 1.15)):      # 4FSK is flatter-topped than speech but not as flat as 2FSK; the level count alone is unreliable in noise
                     if 446.0e6 <= freq <= 446.2e6:
                         return R("dPMR", "dPMR446 (4FSK 2400 Bd)", "dsd", "dpmr", "DIG", 0.85)
                     return R("NXDN / dPMR", "NXDN 4800 or dPMR (4FSK 2400 Bd)", "dsd", "nxdn48", "DIG", 0.75)
-                if best in (512, 1200, 2400, 1600, 3200) and (lev == 2 or k < 1.4):
+                # a 2FSK pager has a very flat discriminator (kurtosis about 1.25); a noisy 4FSK that happens to show two
+            # clusters (dPMR, NXDN) measures 2 or more
+            if best in (512, 1200, 2400, 1600, 3200) and k < 1.75:
                     name = "FLEX" if best in (1600, 3200) else f"POCSAG {best}"
                     return R("Pager", f"Pager – {name} (2FSK {best} Bd)", "pager", "auto", None, 0.85)
-        # ---- analogue FM voice (report a CTCSS sub-tone if there is one)
-        ct = self._ctcss(d)
+        # ---- analogue voice: FM, AM or single sideband, judged from the signal itself (not from the mode that happens
+        # to be selected) so the right demodulator can be chosen.  A mode is only named when the evidence is clear;
+        # an idle carrier (nobody talking) says nothing about FM or AM and leaves the mode alone.
+        ana = self._analogue(x, d, env_cv, snr)
+        ct = self._ctcss(d) if ana != "SSB" else None
+        if ana in ("USB", "LSB"):
+            return R("SSB voice", f"Single-sideband voice ({ana})", dmode=ana, conf=0.8)
+        if ana == "AM":
+            return R("AM voice", "AM voice", dmode="AM", conf=0.8)
+        if ana == "FM":
+            return R("FM voice", "Analogue FM voice" + (f" · CTCSS {ct} Hz" if ct else ""), dmode="NFM", conf=0.8, ctcss=ct)
         return R("FM voice", "Analogue FM voice" + (f" · CTCSS {ct} Hz" if ct else ""), conf=0.6, ctcss=ct)
+
+    # ------------------------------------------------------------------
+    def _analogue(self, x, d, env_cv, snr):
+        """'FM', 'AM', 'USB', 'LSB' or None (cannot tell - e.g. a carrier with nobody talking).
+        x = the channel-filtered IQ, d = the FM discriminator output (keyed stretch), env_cv = envelope variation."""
+        if snr < 10 or len(x) < 8000:
+            return None
+        n = len(x)
+        X = np.fft.fftshift(np.fft.fft(x * np.hanning(n)))
+        P = np.abs(X) ** 2
+        f = np.fft.fftshift(np.fft.fftfreq(n, 1 / FS))
+        band = np.abs(f) < 5000
+        tot = float(P[band].sum()) + 1e-20
+        pk = int(np.argmax(np.where(band, P, 0)))
+        carrier = float(P[np.abs(f - f[pk]) < 40].sum()) / tot          # share of the power in one steady line
+        # sideband balance: around the carrier when there is one (an AM signal is symmetric about it, even when the radio
+        # is tuned a few hundred Hz off), else around the tuned frequency (a suppressed-carrier sideband sits on one side)
+        ref = float(f[pk]) if carrier > 0.25 else 0.0
+        pos = float(P[(f > ref + 150) & (f < ref + 3500)].sum()) + 1e-20
+        neg = float(P[(f < ref - 150) & (f > ref - 3500)].sum()) + 1e-20
+        asym = 10 * np.log10(pos / neg)
+        # a single sideband: no carrier line, all the energy on one side, a strongly varying envelope
+        if carrier < 0.2 and abs(asym) > 9 and env_cv > 0.45:
+            return "USB" if asym > 0 else "LSB"
+        # Speech has its energy between 300 and 2800 Hz; the receiver's own noise rises towards 5 kHz.  That shape,
+        # measured on the envelope (AM) or on the discriminator (FM), is the evidence - a carrier with nobody talking,
+        # or plain noise, is flat there and is not named.
+        def shape(v):
+            fv, Pv = signal.welch(v, fs=FS, nperseg=2048)
+            return float(Pv[(fv > 300) & (fv < 2800)].sum()) / (float(Pv[(fv > 4500) & (fv < 6000)].sum()) + 1e-20)
+        env = np.abs(x)
+        env_shape = shape(env - env.mean())
+        # AM: a steady carrier with the envelope following the speech
+        if carrier > 0.25 and abs(asym) < 6 and env_cv > 0.06 and env_shape > 8:
+            return "AM"
+        # FM voice: constant envelope and a discriminator that carries speech
+        if env_cv < 0.2 and env_shape < 8 and len(d) > 4000 and float(np.std(d)) > 150 and shape(d) > 4.0:
+            return "FM"
+        return None
 
     # ------------------------------------------------------------------
     def _tdma(self, env):
@@ -277,9 +329,10 @@ class SignalClassifier:
             return {"kind": "APRS", "label": "AFSK 1200 – APRS / packet data", "decoder": "data", "sub": "auto",
                     "mode": None, "conf": 0.85}
         # DTMF: one low-group and one high-group tone
-        lo = max(_band_power(f, P, t, 20) for t in DTMF_LO)
-        hi = max(_band_power(f, P, t, 20) for t in DTMF_HI)
-        if (lo + hi) / tot > 0.7 and min(lo, hi) / tot > 0.15:
+        # (summed over the four tones of each group: a run of different digits spreads the energy over several tones)
+        lo = sum(_band_power(f, P, t, 20) for t in DTMF_LO)
+        hi = sum(_band_power(f, P, t, 20) for t in DTMF_HI)
+        if (lo + hi) / tot > 0.6 and min(lo, hi) / tot > 0.2:
             return {"kind": "DTMF", "label": "DTMF tones", "decoder": "data", "sub": "auto", "mode": None,
                     "conf": 0.8}
         # SSTV / WEFAX: a single swept tone between 1100 and 2300 Hz
