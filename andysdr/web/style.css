@@ -1556,3 +1556,8 @@ body.phone #tab-set .card { padding: 14px; }
 .subnav button:hover { color: var(--text); }
 .subnav button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .schpanel[hidden] { display: none; }
+
+/* ---- sub-headings inside the BAND and DECODE button groups ---- */
+.q-row > .q-sub { grid-column: 1 / -1; font-size: 9.5px; letter-spacing: 1.4px; color: var(--muted); font-weight: 700; opacity: .8; margin-top: 4px; padding-bottom: 2px; border-bottom: 1px solid var(--line); }
+.q-row > .q-sub:first-child { margin-top: 0; }
+.q-row > .q-sub:empty { border: 0; margin: 0; padding: 0; }

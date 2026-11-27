@@ -2401,7 +2401,12 @@ let sqPrev = -60;
 
 function buildQuick() {
   $("qMode").innerHTML = MODES.map((m) => `<button class="key q" data-m="${m}" title="Switch to ${m}">${m}</button>`).join("");
-  $("qBand").innerHTML = Q_BANDS.map((b, i) => `<button class="key q" data-b="${i}" title="${b[5]}">${b[0]}</button>`).join("");
+  // the band buttons, under two small headings so the long row reads as two short ones
+  const BAND_EVERYDAY = ["AIR", "MARINE", "PMR", "2M", "70CM", "CB", "FM BC"];
+  const bandBtn = (b, i) => `<button class="key q" data-b="${i}" title="${b[5]}">${b[0]}</button>`;
+  const bandList = Q_BANDS.map((b, i) => [b, i]);
+  $("qBand").innerHTML = `<span class="q-sub">EVERYDAY</span>` + bandList.filter(([b]) => BAND_EVERYDAY.includes(b[0])).map(([b, i]) => bandBtn(b, i)).join("") +
+    `<span class="q-sub">DATA &amp; SATELLITES</span>` + bandList.filter(([b]) => !BAND_EVERYDAY.includes(b[0])).map(([b, i]) => bandBtn(b, i)).join("");
   $("qDigi").innerHTML = `<option value="">Choose a band…</option>` + Q_DIGI.map((d, i) => `<option value="${i}">${d[0]}</option>`).join("");
   $("qDigi").addEventListener("change", (e) => {
     const d = Q_DIGI[+e.target.value]; $("qDigiInfo").textContent = d ? d[7] : ""; if (!d) return;
@@ -2413,9 +2418,15 @@ function buildQuick() {
     send({ cmd: "decoder", id: d[5], sub: d[6] || "auto" });
     send({ cmd: "search", start: Math.round(d[1] * 1e6), stop: Math.round(d[2] * 1e6), step: d[4], mode: d[3] });
   });
+  // the decoders under three small headings: voice, data & messages, pictures
+  const decBtn = (n) => { const i = Q_DECS.findIndex((d) => d[0] === n); if (i < 0) return ""; const d = Q_DECS[i]; return `<button class="key q" data-d="${i}" title="${Q_DEC_TIPS[d[2] || d[1]]}">${d[0]}</button>`; };
+  const DEC_GROUPS = [["VOICE", ["DMR", "P25", "NXDN", "dPMR", "M17", "TETRA", "TETRAPOL"]],
+    ["DATA &amp; MESSAGES", ["PAGER", "APRS", "ACARS", "VDL2", "AERO", "ADS-B", "SONDE", "FT8", "FT4", "MORSE"]],
+    ["PICTURES", ["WEFAX", "SSTV", "LRPT", "METOP"]]];
+  const decSeen = DEC_GROUPS.flatMap((g) => g[1]), decExtra = Q_DECS.map((d) => d[0]).filter((n) => !decSeen.includes(n));   // anything added to Q_DECS later still shows up
   $("qDec").innerHTML = `<button class="key q" data-d="autoid" title="Automatic signal identification (Auto ID): AndySDR picks the mode and decoder for you">AUTO</button>` +
-    Q_DECS.map((d, i) => `<button class="key q" data-d="${i}" title="${Q_DEC_TIPS[d[2] || d[1]]}">${d[0]}</button>`).join("") +
-    `<button class="key q danger k-rec" data-d="off" title="Stop the running decoder">OFF</button>`;
+    DEC_GROUPS.map((g, k) => `<span class="q-sub">${g[0]}</span>` + g[1].map(decBtn).join("") + (k === DEC_GROUPS.length - 1 ? decExtra.map(decBtn).join("") : "")).join("") +
+    `<span class="q-sub"></span><button class="key q danger k-rec" data-d="off" title="Stop the running decoder">OFF</button>`;
   $("qLock").innerHTML = [
     "SKIP|next|Leave this channel / frequency and carry on scanning straight away (nothing is locked out – it is visited again next time round). Same as the SKIP key or N on the keyboard.",
     "SKIP 10 MIN|t10|Ignore the channel you are stopped on (or the current one) for 10 minutes, then scan it again. Works while scanning and searching.",

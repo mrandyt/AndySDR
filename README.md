@@ -5,7 +5,9 @@ spectrum/waterfall, 1000 memory channels, a band search that finds every live tr
 RadioReference UK CSV import, digital/analogue decoding, weather pictures, and a built-in
 network server so any other PC, laptop, tablet or phone in the house can use the radio.
 
-**Latest: 1.25.2** – **tidier Scheduler**: three panels behind a small switch – **Satellite passes** (switch satellites on, pass times, the L-band pointing helper), **Pass report** (how each pass went, the Fill score, set-aside option and the antenna map) and **Timed captures** (weather fax, SSTV and other timed recordings). It opens on the one you used last.
+**Latest: 1.25.3** – **tidier quick buttons**: the BAND buttons are split into *Everyday* and *Data & satellites*, and the 21 DECODE buttons into *Voice*, *Data & messages* and *Pictures*. Same buttons, same places in the TUNE / DIGITAL / TOOLS pages – just easier to find.
+
+**1.25.2** – **tidier Scheduler**: three panels behind a small switch – **Satellite passes** (switch satellites on, pass times, the L-band pointing helper), **Pass report** (how each pass went, the Fill score, set-aside option and the antenna map) and **Timed captures** (weather fax, SSTV and other timed recordings). It opens on the one you used last.
 
 **1.25.1** – **tidier main screen**: the row of 15 tabs is now four headings – **LISTEN** (memory, live activity, decoders, band plan, repeaters), **DATA & MESSAGES** (pagers, ADS-B, aircraft text, sondes, sensors, FT8, MeshCore), **SATELLITES** (scheduler, receiver 2) and **PICTURES & AUDIO** – and only the tabs of the open heading show. A dot on a heading means something new arrived inside it. The tablet/phone menu is unchanged.
 
