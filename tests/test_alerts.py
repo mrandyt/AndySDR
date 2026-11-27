@@ -139,5 +139,22 @@ check("... returning only what is new", [x["id"] for x in json.loads(body)["aler
 h, body = ask("/api/alerts?since=junk&token=secret")
 check("a bad since value is treated as -1", h.startswith("HTTP/1.1 200") and json.loads(body)["alerts"] == [])
 
+# --- a satellite pass has finished
+now[0] += 1000
+b = Alerts(St({}), clock=lambda: now[0])
+b.feed("pass_done", {"name": "Meteor-M N2-4 (LRPT)", "rx": "rx2", "images": 19, "fill": 72.5, "max_el": 79.6})
+r = b.since(0)["alerts"]
+check("a pass with pictures alerts (as a capture alert, which the app already shows)", len(r) == 1 and r[0]["kind"] == "capture" and r[0]["title"] == "Pass finished: Meteor-M N2-4 (LRPT) (second receiver)")
+check("... saying how many pictures, how filled-in and how high", r[0]["text"] == "19 pictures · 72.5% filled in · peak 80\u00b0")
+b.feed("pass_done", {"name": "Meteor-M N2-3 (LRPT)", "images": 0, "fill": None})
+check("a pass with no pictures stays quiet", len(b.since(0)["alerts"]) == 1)
+b.feed("pass_done", {"name": "Meteor-M N2-3 (LRPT)", "images": 0, "fill": 31.0, "poor": True})
+check("a poor pass says its pictures were set aside", "set aside" in b.since(0)["alerts"][-1]["text"] and "31.0%" in b.since(0)["alerts"][-1]["text"])
+b.feed("pass_done", {"name": "Meteor-M N2-4 (LRPT)", "merged_fill": 88.0, "fill": 72.5, "images": 19})
+check("a merged pass says what both receivers made together", "88.0%" in b.since(0)["alerts"][-1]["text"] and "72.5%" in b.since(0)["alerts"][-1]["text"])
+c = Alerts(St({"alert_pass": False}), clock=lambda: now[0])
+c.feed("pass_done", {"name": "x", "images": 5, "fill": 80.0})
+check("it can be switched off", c.since(0)["alerts"] == [])
+
 print("FAILED: " + ", ".join(fails) if fails else "ALL PASS")
 sys.exit(1 if fails else 0)

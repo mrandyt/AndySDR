@@ -704,7 +704,7 @@
     <div class="card"><div class="row wrapline"><b>Pictures from this receiver</b><span class="grow"></span><button class="btn sm" id="rx2AllPics">All weather images ›</button></div>
       <div id="rx2Pics" class="rx2-pics"></div></div>
     <div class="card"><b>Its recent passes</b>
-      <div class="tablewrap"><table class="grid" id="rx2Passes"><thead><tr><th>When</th><th>Satellite</th><th>Peak</th><th>Gain</th><th>Signal</th><th>Result</th></tr></thead><tbody></tbody></table></div></div>
+      <div class="tablewrap"><table class="grid" id="rx2Passes"><thead><tr><th>When</th><th>Satellite</th><th>Peak</th><th>Gain</th><th>Signal</th><th>Result</th><th title="How much of the picture is filled in – scan lines that have data, between the first and the last">Fill</th></tr></thead><tbody></tbody></table></div></div>
     <div class="card"><b>What it has just done</b><ul id="rx2Log" class="rx2-log"></ul></div>
   </div>
 
@@ -763,8 +763,22 @@
         <thead><tr><th>Satellite</th><th>Starts</th><th>Ends</th><th>Peak</th><th>Rises at</th><th>Freq</th><th>Status</th></tr></thead><tbody></tbody></table></div>
       <div class="row wrapline" style="margin-top:14px" data-help="passreport"><b>Pass report – how each recorded pass went</b><span class="grow"></span><span class="muted small">Signal = how far the satellite stood above the noise, at its best</span></div>
       <div class="tablewrap"><table class="grid" id="satLog">
-        <thead><tr><th>When</th><th>Satellite</th><th>Peak</th><th>RF gain</th><th>Signal</th><th>Result</th></tr></thead><tbody></tbody></table></div>
+        <thead><tr><th>When</th><th>Satellite</th><th>Peak</th><th>RF gain</th><th>Signal</th><th>Result</th><th title="How much of the picture is filled in – scan lines that have data, between the first and the last">Fill</th></tr></thead><tbody></tbody></table></div>
     </div>
+    <div class="row wrapline small" style="margin-top:6px"><label>Set aside pictures that are less than <input id="tidyFill" class="inp" type="number" min="0" max="95" step="5" style="width:4.5em" value="0">% filled in</label><span class="muted">0 = keep everything. They go to a separate 'poor pictures' folder, not the bin, and the pass report says so.</span></div>
+    <details class="card" id="amBox" style="margin-top:10px" data-help="antennamap">
+      <summary><b>Antenna map</b> <span class="muted small">– where in the sky is your signal strong or weak?</span></summary>
+      <div class="row wrapline" style="margin-top:8px">
+        <label class="small">Receiver <select id="amRx"><option value="">Main radio</option><option value="rx2" selected>Second receiver</option></select></label>
+        <label class="small">Passes <select id="amN"><option value="5">last 5</option><option value="12" selected>last 12</option><option value="30">last 30</option><option value="100">all</option></select></label>
+        <span class="muted small" id="amMsg"></span>
+      </div>
+      <div class="row wrapline" style="align-items:flex-start;gap:18px;margin-top:8px">
+        <canvas id="amCv" width="340" height="340" style="max-width:100%"></canvas>
+        <div class="small" style="flex:1 1 220px"><div id="amSum"></div>
+          <div class="muted" style="margin-top:8px">Straight up is the centre, the horizon is the outer ring and north is at the top. Each dot is a moment in a pass, coloured by how strong the signal was <b>for that distance</b> – green is strong, red is weak. A patch of red on one side means the antenna is poor in that direction: try turning or tilting it, then check the map again after a few passes.</div></div>
+      </div>
+    </details>
     <p class="muted small">Tips: Met Office Northwood fax charts are sent throughout the day – look up the current broadcast schedule and add a capture for the charts you want. ISS SSTV events are announced by ARISS a week or two ahead. Meteor-M passes over the UK happen several times a day; a satellite-pass app gives the times. Pictures appear in WEATHER IMAGES.</p>
   </div>
 
@@ -977,6 +991,7 @@
         <label><input type="checkbox" id="alEmerg"> An aircraft squawking 7500 / 7600 / 7700</label>
         <label><input type="checkbox" id="alPri"> Activity on the priority channel</label>
         <label><input type="checkbox" id="alCap"> A scheduled capture (satellite pass, WEFAX, SSTV…) starting</label>
+        <label><input type="checkbox" id="alPass"> A satellite pass has finished – how many pictures and how filled-in they are</label>
         <label><input type="checkbox" id="alWatch"> Someone on your <b>watch list</b> is heard (DMR · P25 · NXDN · M17)</label>
         <div class="row wrapline"><button class="btn" id="alTest">Send a test alert</button></div>
       </div>

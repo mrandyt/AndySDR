@@ -344,14 +344,14 @@ class SatPlanner:
         return doppler_freq(sat, obs[0], obs[1], obs[2], now or time.time(), c["freq"])
 
     def look(self, sid, ts):
-        """(elevation deg, range km) of a satellite at unix time ts from the observer, or None."""
+        """(elevation deg, range km, azimuth deg) of a satellite at unix time ts from the observer, or None."""
         obs = self.observer()
         d = SATELLITES.get(sid)
         sr = self.satrec(d["norad"]) if d else None
         if not obs or sr is None:
             return None
         la = look_angles(sr, obs[0], obs[1], obs[2], ts)
-        return (la[0], la[2]) if la else None
+        return (la[0], la[2], la[1]) if la else None
 
     def geo_visible(self, sid, now=None):
         obs, sat = self.observer(), self.satrec(SATELLITES[sid]["norad"])

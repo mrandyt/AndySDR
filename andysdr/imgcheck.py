@@ -52,3 +52,51 @@ def rotate_180(path):
         return True
     except Exception:
         return False
+
+
+# --------------------------------------------------------------------------- how filled-in a satellite picture is
+_SKIP = ("map", "corrected", "project", "false_color", "composite_")
+
+
+def scanline_fill(path):
+    """How much of a satellite picture's scan lines hold data.
+
+    A scan line the receiver missed comes out as a row of pure black. Counted between the first and the
+    last line that has data (the start and end of a pass are low and weak, so they are not blamed on the
+    antenna). Returns (fill_percent, lines_between_first_and_last) or None if the picture cannot be read.
+    """
+    if Image is None:
+        return None
+    try:
+        with Image.open(path) as im:
+            a = np.asarray(im.convert("RGB"))
+    except Exception:
+        return None
+    if a.ndim != 3 or a.shape[0] < 20:
+        return None
+    black = (a.max(axis=2) == 0).mean(axis=1) >= 0.98          # rows that are (nearly) all pure black
+    have = np.flatnonzero(~black)
+    if have.size < 10:
+        return 0.0, 0
+    span = black[have[0]:have[-1] + 1]
+    return round(100.0 * (1.0 - float(span.mean())), 1), int(span.size)
+
+
+def folder_fill(out_dir):
+    """The fill figure for one pass's pictures: the median over the plain (uncorrected, no map) ones.
+
+    Returns {"pct": ..., "lines": ...} or None when there is nothing to measure.
+    """
+    import glob
+    files = []
+    for f in glob.glob(os.path.join(out_dir, "**", "*.png"), recursive=True):
+        name = os.path.basename(f).lower()
+        if name.startswith("rgb") or "_rgb_" in name or "msu" in name:
+            if not any(w in name for w in _SKIP):
+                files.append(f)
+    vals = [v for v in (scanline_fill(f) for f in files[:12]) if v is not None and v[1] > 0]
+    if not vals:
+        return None
+    vals.sort()
+    pct, lines = vals[len(vals) // 2]
+    return {"pct": pct, "lines": lines}

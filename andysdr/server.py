@@ -435,8 +435,8 @@ class Server:
             "settings": {k: self.s[k] for k in ("scan_delay", "scan_dwell", "search_threshold_db",
                                                  "server_port", "require_password_local",
                                                  "deemphasis_us", "theme",
-                                                 "update_check", "update_auto_download", "hidden_buttons",
-                                                 "alert_pager", "alert_emergency", "alert_priority", "alert_capture", "alert_watch",
+                                                 "update_check", "update_auto_download", "hidden_buttons", "tidy_min_fill",
+                                                 "alert_pager", "alert_emergency", "alert_priority", "alert_capture", "alert_watch", "alert_pass",
                                                  "watch_list", "dmr_db_auto")},
             "server": {"addresses": lan_addresses(), "port": self.s["server_port"],
                        "password": self.s["password"] if self._is_local(c.peer) else "",
@@ -683,9 +683,9 @@ class Server:
                 allowed = {"scan_delay": float, "scan_dwell": float, "search_threshold_db": float,
                            "require_password_local": bool, "deemphasis_us": int, "theme": str,
                            "password": str, "mute_digital_audio": bool, "auto_gain": bool, "dsd_gate": bool, "update_check": bool, "update_auto_download": bool,
-                           "alert_pager": bool, "alert_emergency": bool, "alert_priority": bool, "alert_capture": bool,
+                           "alert_pager": bool, "alert_emergency": bool, "alert_priority": bool, "alert_capture": bool, "alert_pass": bool,
                            "alert_watch": bool, "watch_list": clean_watch_list,
-                           "dmr_db_auto": bool}
+                           "dmr_db_auto": bool, "tidy_min_fill": lambda v: max(0, min(95, int(float(v))))}
                 for k, v in m.get("values", {}).items():
                     if k in allowed:
                         if k == "password" and (not self._is_local(c.peer) or len(str(v)) < 4):
@@ -897,6 +897,8 @@ class Server:
                 r.scheduler.save_job(m["job"])
             elif cmd == "schedule_delete":
                 r.scheduler.delete_job(str(m["id"]))
+            elif cmd == "pass_note":
+                r.scheduler.set_pass_note(m.get("key"), m.get("rx") or "", m.get("text") or "")
             elif cmd == "sat_cfg":
                 kw = {k: m[k] for k in ("enabled", "freq", "min_el", "from", "to", "days", "track", "gain_mode", "gain", "hidden", "both") if k in m}
                 if "gain_mode" in kw and kw["gain_mode"] not in ("knob", "fixed", "auto"):
@@ -952,6 +954,10 @@ class Server:
                 r.scheduler._emit()
             elif cmd == "sat_refresh":
                 r.scheduler.sats.refresh_tles(force=True)
+            elif cmd == "antenna_map":
+                sr = r.scheduler._satrx() if m.get("rx") == "rx2" else None
+                pl = sr.passlog if sr is not None else getattr(r, "passlog", None)
+                self._reply(c, "antenna_map", dict(pl.antenna_map(m.get("n") or 12) if pl else {"passes": 0, "points": [], "sectors": {}, "text": ""}, rx=m.get("rx") or ""))
             elif cmd == "geo_look":
                 self._reply(c, "geo_look", self._geo_look(r, m.get("lon")))
             elif cmd == "schedule_run":

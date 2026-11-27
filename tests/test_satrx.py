@@ -230,6 +230,17 @@ m3, sch3 = make(None)
 sch3.tick(when)
 check("no second receiver at all: unchanged behaviour", len(m3.started) == 1 and sch3.running and not sch3.running2)
 
+# ---- notes on passes reach the right receiver's pass report
+from andysdr import passlog as _pl
+mn, schn = make(StubRx())
+mn.passlog = _pl.PassLog(os.path.join(tmp, "n_main.jsonl"))
+mn.passlog.add({"key": "sat:m:1", "sat": "meteor_m24", "name": "Meteor", "start": 1, "end": 2})
+stubn = StubRx(); stubn.passlog = _pl.PassLog(os.path.join(tmp, "n_rx2.jsonl"))
+stubn.passlog.add({"key": "sat:m:1", "sat": "meteor_m24", "name": "Meteor", "start": 1, "end": 2})
+mn.satrx = stubn; schn.satrx = stubn
+check("a note on a main-radio pass goes to the main pass report only", schn.set_pass_note("sat:m:1", "", "dipole level") and mn.passlog.view(1)[0]["user_note"] == "dipole level" and stubn.passlog.view(1)[0]["user_note"] is None)
+check("a note on a second-receiver pass goes to that report only", schn.set_pass_note("sat:m:1", "rx2", "dipole tilted") and stubn.passlog.view(1)[0]["user_note"] == "dipole tilted" and mn.passlog.view(1)[0]["user_note"] == "dipole level")
+
 # ---- "Both receivers" chosen per satellite on the scheduler (None = follow the Receiver 2 screen's setting)
 check("a satellite follows the global setting until it is chosen", make(StubRx())[1].sats.cfg()["meteor_m24"]["both"] is None)
 sb = StubRx()

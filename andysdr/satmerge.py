@@ -197,8 +197,14 @@ class Merger:
             self.log_cb(describe(rep))
             images = self._images(merged, out_dir)
             rep["images"] = images
+            try:
+                from . import imgcheck
+                rep["fill"] = imgcheck.folder_fill(out_dir)
+            except Exception:                       # noqa: BLE001
+                rep["fill"] = None
             if images:
-                self.log_cb(f"Merged pass: {images} picture(s) from both receivers together, in the Images tab.")
+                self.log_cb(f"Merged pass: {images} picture(s) from both receivers together, in the Images tab."
+                            + (f" Picture fill {rep['fill']['pct']}%." if rep.get("fill") else ""))
             if self.done_cb:
                 try:
                     self.done_cb(key, rep, images)

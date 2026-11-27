@@ -415,6 +415,19 @@ class Scheduler:
         self._emit()
 
     # ------------------------------------------------------------------ GUI
+    def set_pass_note(self, key, rx, text):
+        """Save the user's note on a pass in the pass report of the receiver that recorded it."""
+        log_ = None
+        if rx == "rx2":
+            sr = self._satrx()
+            log_ = sr.passlog if sr is not None else None
+        else:
+            log_ = getattr(self.radio, "passlog", None)
+        ok = bool(log_ and log_.set_user_note(str(key), text))
+        if ok:
+            self._emit()
+        return ok
+
     def status(self):
         r = None
         if self.running:

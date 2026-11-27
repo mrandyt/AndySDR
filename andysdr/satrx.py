@@ -408,8 +408,8 @@ class SatRx:
                      rec["name"], rec.get("max_el"), rec.get("gain"), rec.get("snr_peak"), rec.get("snr_med"), rec.get("score"),
                      rec.get("samples", 0), self.passlog.result(rec))
 
-    def _pass_images_done(self, key, shown, total, note="", out_dir=None):
-        self.passlog.set_images(key, shown, total, note)
+    def _pass_images_done(self, key, shown, total, note="", out_dir=None, fill=None):
+        self.passlog.set_images(key, shown, total, note, fill)
         merger = getattr(self.radio, "merger", None)        # if the main radio took this pass too, merge them
         if merger is not None:
             try:
@@ -419,6 +419,11 @@ class SatRx:
         rec = self.passlog.find(key)
         if rec:
             log.info("second receiver pass report: %s - %s", rec.get("name"), self.passlog.result(rec))
+            try:
+                self.radio._emit("pass_done", {"name": rec.get("name"), "rx": "rx2", "images": rec.get("images", 0), "fill": rec.get("fill"),
+                                               "max_el": rec.get("max_el"), "poor": bool(rec.get("poor"))})
+            except Exception:                        # noqa: BLE001
+                log.exception("pass alert")
         try:
             self.radio.scheduler._emit()
         except Exception:                            # noqa: BLE001
@@ -493,7 +498,7 @@ class SatRx:
                         except Exception:            # noqa: BLE001
                             la = None
                         if la:
-                            self.cur_el, self.cur_range = la
+                            self.cur_el, self.cur_range = la[0], la[1]
                 rx = self.rx
                 if not preview and rx is not None:
                     x240 = rx.stage1.process(rx.mixer.process(iq, self.freq - dev.center, fs))

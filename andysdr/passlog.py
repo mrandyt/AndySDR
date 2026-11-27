@@ -19,6 +19,8 @@ log = logging.getLogger("andysdr.passlog")
 
 WINDOW = 12                # learning looks at the last dozen scored passes, so it follows slow changes
 KEEP = 300                 # lines kept in the file
+TRACK_EVERY = 3            # one point on the antenna map for every third reading (about every 3 s)
+TRACK_MAX = 400            # most points kept per pass
 MIN_SAMPLES = 25           # about 25 s of signal needed before a pass counts for learning
 REF_RANGE_KM = 1000.0      # SNR is scaled to this distance so a low pass and a high pass can be compared
 BAND_HALF_HZ = {"lrpt": 60e3, "sstv": 8e3, "record": 8e3, "wefax": 8e3, "goes": 300e3, "metop": 300e3}
@@ -56,8 +58,9 @@ class PassMeter:
     """Collects one sample a second during a pass."""
 
     def __init__(self, el_fn=None):
-        self.el_fn = el_fn              # ts -> (elevation deg, range km) or None
+        self.el_fn = el_fn              # ts -> (elevation deg, range km[, azimuth deg]) or None
         self.s = []                     # (snr, norm_snr, el, gain)
+        self.track = []                 # (azimuth, elevation, distance-corrected snr), a point every few seconds
         self.t0 = time.time()
         self._last = 0.0
 
@@ -65,16 +68,19 @@ class PassMeter:
         if snr is None or now - self._last < 1.0:
             return
         self._last = now
-        el, rng = None, None
+        el, rng, az = None, None, None
         if self.el_fn:
             try:
                 r = self.el_fn(now)
             except Exception:
                 r = None
             if r:
-                el, rng = r
+                el, rng = r[0], r[1]
+                az = r[2] if len(r) > 2 else None
         norm = snr + 20.0 * math.log10(max(rng, 200.0) / REF_RANGE_KM) if rng else None
         self.s.append((snr, norm, el, gain))
+        if az is not None and el is not None and norm is not None and len(self.s) % TRACK_EVERY == 0:
+            self.track.append((int(round(az)) % 360, int(round(el)), round(norm, 1)))
 
     def summary(self):
         if not self.s:
@@ -88,6 +94,8 @@ class PassMeter:
             out["gain"] = round(statistics.median(gains), 1)
         if len(high) >= MIN_SAMPLES:
             out["score"] = round(statistics.median(high), 1)       # distance-corrected, comparable between passes
+        if self.track:
+            out["track"] = [list(p) for p in self.track[-TRACK_MAX:]]     # [azimuth, elevation, strength] for the antenna map
         return out
 
 
@@ -138,12 +146,16 @@ class PassLog:
                 r["images"] = r.get("images", 0) + n
                 self._save()
 
-    def set_images(self, key, shown, total, note=""):
+    def set_images(self, key, shown, total, note="", fill=None):
         with self.lock:
             r = self.find(key)
             if r is not None:
                 r["images"] = int(shown)
                 r["decoded"] = True
+                if fill and fill.get("pct") is not None:
+                    r["fill"] = fill["pct"]              # % of scan lines with data (between first and last line)
+                    if fill.get("poor"):
+                        r["poor"] = True                  # the pictures were set aside, not shown in the gallery
                 if note:
                     r["note"] = note
                 elif total > shown:
@@ -156,11 +168,28 @@ class PassLog:
             r = self.find(key)
             if r is not None and rep:
                 r["merged"] = {"frames": rep.get("frames"), "gained": rep.get("gained"),
-                               "gained_pct": rep.get("gained_pct"), "images": int(images or 0)}
+                               "gained_pct": rep.get("gained_pct"), "images": int(images or 0),
+                               "fill": (rep.get("fill") or {}).get("pct")}
                 self._save()
+
+    def set_user_note(self, key, text):
+        """A note the user wrote on a pass (for example which way the antenna was pointing). Empty text removes it."""
+        text = " ".join(str(text or "").split())[:200]
+        with self.lock:
+            r = self.find(key)
+            if r is None:
+                return False
+            if text:
+                r["user_note"] = text
+            else:
+                r.pop("user_note", None)
+            self._save()
+            return True
 
     def result(self, r, now=None):
         now = now or time.time()
+        if r.get("poor"):
+            return f"poor ({r.get('fill')}% filled) – set aside"
         if r.get("images", 0) > 0:
             return f"{r['images']} picture{'s' if r['images'] != 1 else ''}"
         if r.get("note") and r.get("decoded"):
@@ -175,8 +204,31 @@ class PassLog:
             out.append({"key": r.get("key"), "sat": r.get("sat"), "name": r.get("name"), "start": r.get("start"),
                         "max_el": r.get("max_el"), "gain": r.get("gain"), "gain_mode": r.get("gain_mode"),
                         "snr": r.get("snr_peak"), "score": r.get("score"), "samples": r.get("samples", 0),
-                        "result": self.result(r, now), "images": r.get("images", 0), "stopped": r.get("stopped")})
+                        "result": self.result(r, now), "images": r.get("images", 0), "stopped": r.get("stopped"),
+                        "fill": r.get("fill"), "merged_fill": (r.get("merged") or {}).get("fill"),
+                        "user_note": r.get("user_note")})
         return out
+
+    def antenna_map(self, n=12, min_el=5):
+        """Where in the sky the signal was strong and weak over the last n passes that have a track.
+
+        Strength is distance-corrected (see PassMeter), so a low pass is not blamed for being far away.
+        Returns {"passes": n, "points": [[az, el, strength], ...], "sectors": {...}, "text": "..."}.
+        """
+        rows = [r for r in self.rows if r.get("track")][-max(1, int(n)):]
+        pts = [p for r in rows for p in r["track"] if p[1] >= min_el]
+        sec = {}
+        for az, el, v in pts:
+            sec.setdefault(int(((az + 22.5) % 360) // 45), []).append(v)
+        names = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+        avg = {names[k]: round(statistics.mean(v), 1) for k, v in sec.items() if len(v) >= 5}
+        text = ""
+        if len(avg) >= 3:
+            best, worst = max(avg, key=avg.get), min(avg, key=avg.get)
+            gap = round(avg[best] - avg[worst], 1)
+            text = (f"Strongest toward {best} ({avg[best]} dB), weakest toward {worst} ({avg[worst]} dB) – {gap} dB apart." if gap >= 1.5
+                    else "Pretty even in every direction – the antenna is not favouring any side.")
+        return {"passes": len(rows), "points": pts[-1500:], "sectors": avg, "text": text}
 
     def for_sat(self, sid):
         return [r for r in self.rows if r.get("sat") == sid]

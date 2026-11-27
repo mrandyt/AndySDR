@@ -6,7 +6,7 @@ import sys
 import threading
 
 APP_NAME = "AndySDR"
-VERSION = "1.24.4"
+VERSION = "1.25.0"
 GITHUB_REPO = "mrandyt/AndySDR"   # where updates are published (GitHub Releases)
 
 
@@ -47,6 +47,7 @@ DEFAULTS = {
     "agc": False,
     "satrx_enabled": False,       # a second receiver (RTL-SDR dongle) used only for 137 MHz Meteor passes
     "satrx_device": "",           # its key ("" = the first RTL-SDR dongle the main radio is not using)
+    "tidy_min_fill": 0,           # set aside satellite pictures that are less than this % filled in (0 = off)
     "satrx_both": False,          # record a Meteor pass on BOTH receivers and merge the frames they each heard
     "satrx_gain": 38.0,           # dB
     "satrx_gain_mode": "fixed",   # fixed | auto (learn the best)
@@ -107,7 +108,7 @@ DEFAULTS = {
     "adsb_share": False,          # re-broadcast as SBS (30003) and raw AVR (30002) for other programs
     "adsb_sbs_port": 30003,
     "adsb_raw_port": 30002,
-    "alert_pager": True, "alert_emergency": True, "alert_priority": True, "alert_capture": True, "alert_watch": True,   # what the tablet app is notified about
+    "alert_pager": True, "alert_emergency": True, "alert_priority": True, "alert_capture": True, "alert_watch": True, "alert_pass": True,   # what the tablet app is notified about
     "watch_list": [],             # callsigns, radio IDs and talkgroups to alert on when heard (DMR / P25 / NXDN / M17)
     "dmr_db_auto": True,          # download / refresh the RadioID callsign list by itself (names in DMR Last heard)
     "dmr_db_url": "",             # optional own address for that list (blank = RadioID.net)

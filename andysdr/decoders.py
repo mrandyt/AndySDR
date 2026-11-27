@@ -1059,6 +1059,20 @@ class DecoderManager:
         self.active = None
         self.status = "off"
 
+    def _set_aside(self, kept, out):
+        """Move a poor pass's pictures out of the gallery into <data>/images_poor/<pass> (nothing is deleted). Returns how many."""
+        dest_root = os.path.join(data_dir(), "images_poor", os.path.basename(out.rstrip("/\\")))
+        n = 0
+        for f, _rel in kept:
+            try:
+                dest = os.path.join(dest_root, os.path.relpath(f, out))
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                shutil.move(f, dest)
+                n += 1
+            except (OSError, ValueError):
+                self.log("Could not set a picture aside: " + os.path.basename(f))
+        return n
+
     def _run_satdump(self, path):
         exe = find_exe("satdump", self.settings.get("decoder_paths", {}))
         if not exe or not path:
@@ -1100,19 +1114,40 @@ class DecoderManager:
             pngs = glob.glob(os.path.join(out, "**", "*.png"), recursive=True)
             self.log(f"SatDump finished – {len(pngs)} images")
             shown = 0
+            kept = []
             for f in pngs[:30]:
                 rel = os.path.relpath(f, self.images_dir).replace("\\", "/")
                 if imgcheck.discard_if_blank(f):
                     continue
                 if flip and "project" not in rel.lower():
                     imgcheck.rotate_180(f)       # a northbound pass is scanned south-to-north: turn it so north is at the top
+                kept.append((f, rel))
+            fill = None
+            try:
+                fill = imgcheck.folder_fill(out)                 # how filled-in the pictures are (the pass report shows it)
+            except Exception:                                    # noqa: BLE001
+                pass
+            floor = 0
+            try:
+                floor = int(self.settings.get("tidy_min_fill", 0) or 0)
+            except (TypeError, ValueError):
+                pass
+            if kept and fill and floor > 0 and fill["pct"] < floor:
+                moved = self._set_aside(kept, out)               # too many gaps: keep them, but out of the gallery
+                if moved:
+                    fill["poor"] = True
+                    self.log(f"Picture fill {fill['pct']}% is under your {floor}% limit – {moved} picture(s) set aside in the 'poor pictures' folder")
+                    kept = []
+            for f, rel in kept:
                 shown += 1
                 self.emit("image", {"file": rel})
             if flip and shown:
                 self.log("Northbound pass: pictures turned round so north is at the top")
             self.log(f"{shown} picture(s) kept" + (f", {len(pngs) - shown} blank one(s) discarded" if len(pngs) > shown else ""))
             if self.pass_done and pkey:
-                self.pass_done(pkey, shown, len(pngs), "", out)
+                if fill:
+                    self.log(f"Picture fill: {fill['pct']}% of the scan lines between the first and last have data")
+                self.pass_done(pkey, shown, len(pngs), "", out, fill)
             # the pictures are the product: drop the huge raw IQ recording once SatDump has made them
             if pngs and not self.settings.get("keep_iq", False):
                 try:

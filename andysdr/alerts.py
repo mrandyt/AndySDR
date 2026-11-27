@@ -9,14 +9,15 @@ Android app polls from a background service and turns into notifications.
   priority   activity on the priority channel
   capture    a scheduled capture (satellite pass, WEFAX, SSTV ...) has started
   watch      someone on your WATCH LIST was heard on DMR / P25 / NXDN / M17 (a callsign, a radio ID or a talkgroup)
+  pass       a satellite pass has finished and made pictures (sent to the app as a "capture" alert: how many, how filled-in)
 
-Each kind can be switched off with the settings alert_pager / alert_emergency / alert_priority / alert_capture / alert_watch.
+Each kind can be switched off with the settings alert_pager / alert_emergency / alert_priority / alert_capture / alert_watch / alert_pass.
 """
 import threading
 import time
 from collections import deque
 
-KINDS = ("pager", "emergency", "priority", "capture", "watch")
+KINDS = ("pager", "emergency", "priority", "capture", "watch", "pass")
 SQUAWK = {"7500": "hijack", "7600": "radio failure", "7700": "general emergency"}
 EMERGENCY_REPEAT_S = 30 * 60     # the same aircraft with the same code is announced again after half an hour
 SAME_TEXT_S = 60                 # an identical alert inside this time is ignored
@@ -133,6 +134,31 @@ class Alerts:
             self._event(payload)
         elif kind == "heard":
             self._heard(payload)
+        elif kind == "pass_done":
+            self._pass_done(payload)
+
+    def _pass_done(self, d):
+        """A satellite pass has been turned into pictures: say how it went (only passes that made pictures are worth a buzz)."""
+        if not isinstance(d, dict) or not self.enabled("pass"):
+            return
+        name = str(d.get("name") or "Satellite pass")
+        rx = " (second receiver)" if d.get("rx") == "rx2" else ""
+        if d.get("merged_fill") is not None:
+            self.add("capture", f"Merged pass: {name}", f"Both receivers together: {d['merged_fill']}% filled in"
+                     + (f" (best single receiver {d['fill']}%)" if d.get("fill") is not None else "") + ".")
+            return
+        if d.get("poor"):
+            self.add("capture", f"Poor pass: {name}{rx}", f"Only {d.get('fill')}% filled in – the pictures were set aside.")
+            return
+        n = int(d.get("images") or 0)
+        if n <= 0:
+            return
+        bits = [f"{n} picture{'s' if n != 1 else ''}"]
+        if d.get("fill") is not None:
+            bits.append(f"{d['fill']}% filled in")
+        if d.get("max_el") is not None:
+            bits.append(f"peak {round(d['max_el'])}°")
+        self.add("capture", f"Pass finished: {name}{rx}", " · ".join(bits))
 
     def _pager(self, m):
         if not self.enabled("pager") or not isinstance(m, dict):

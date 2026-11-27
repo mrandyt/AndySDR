@@ -597,19 +597,25 @@ class Radio:
                  rec["name"], rec.get("max_el"), rec.get("gain"), rec.get("snr_peak"), rec.get("snr_med"), rec.get("score"),
                  rec.get("samples", 0), self.passlog.result(rec))
 
-    def _pass_images_done(self, key, shown, total, note="", out_dir=None):
+    def _pass_images_done(self, key, shown, total, note="", out_dir=None, fill=None):
         """SatDump finished working on a recorded pass: say how many pictures came out."""
-        self.passlog.set_images(key, shown, total, note)
+        self.passlog.set_images(key, shown, total, note, fill)
         self.merger.report(key, out_dir, "rx1")             # if the second receiver took this pass too, merge them
         rec = self.passlog.find(key)
         if rec:
             log.info("pass report: %s - %s", rec.get("name"), self.passlog.result(rec))
+            self._emit("pass_done", {"name": rec.get("name"), "rx": "", "images": rec.get("images", 0), "fill": rec.get("fill"),
+                                     "max_el": rec.get("max_el"), "poor": bool(rec.get("poor"))})
         self._emit("schedule", self.scheduler.status())
 
     def _merged_pass_done(self, key, rep, images):
         """The merged frames from both receivers have been turned into pictures."""
         try:
             self.passlog.set_merged(key, rep, images)
+            rec = self.passlog.find(key) or {}
+            mf = (rec.get("merged") or {}).get("fill")
+            if mf is not None:
+                self._emit("pass_done", {"name": rec.get("name"), "rx": "", "merged_fill": mf, "fill": rec.get("fill"), "images": images})
         except Exception:                                   # noqa: BLE001
             log.exception("merged pass report")
         self._emit("schedule", self.scheduler.status())
