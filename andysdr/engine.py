@@ -803,6 +803,7 @@ class Radio:
         return float(self.job_gain) if self.job_gain is not None else float(self.s["rf_gain"])
 
     # ------------------------------------------------------------------ finding the best gain
+    GCAL_STUCK = 8.0           # no readings for this long means the receiver has stopped: give up on the sweep
     GCAL_SETTLE = 0.45        # seconds to let the receiver settle after a gain change
     GCAL_READ = 0.35          # ...then this long collecting noise-floor readings
 
@@ -855,6 +856,22 @@ class Radio:
             return
         self._emit("gaincal", {"running": True, "step": g["i"] + 1, "steps": len(g["gains"]),
                                "gain": g["gains"][g["i"]]})
+
+    def _gcal_watch(self, now):
+        """Abandon a sweep that has stopped getting readings.
+
+        The sweep only advances when a block of samples arrives. If the receiver stops delivering - another program has
+        grabbed it, the USB has dropped, the driver has errored - every step after that silently never happens, and the
+        gain is left wherever the test last put it. That is worse than not running the test at all, so give up and put
+        the gain back.
+        """
+        g = self.gcal
+        if g is None or g["t"] <= 0.0 or now - g["t"] < self.GCAL_STUCK:
+            return
+        log.warning("gain test: no spectrum for %.1f s at step %d of %d - abandoning",
+                    now - g["t"], g["i"] + 1, len(g["gains"]))
+        self.gaincal_stop("the receiver stopped sending samples part-way through, so the test was abandoned and the "
+                          "gain put back. Worth checking no other program has the receiver open, then trying again.")
 
     def _gaincal_tick(self, spec_db, now):
         g = self.gcal
@@ -1759,6 +1776,7 @@ class Radio:
                         self._emit("event", {"level": "error", "text": str(e)})
             except queue.Empty:
                 pass
+            self._gcal_watch(time.time())     # runs even when no samples arrive, which is the case it is there for
             fs = self.dev.sample_rate
             block = int(fs * BLOCK_SECONDS)
             try:

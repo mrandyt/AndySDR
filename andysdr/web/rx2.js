@@ -321,6 +321,7 @@ function rx2PanelShow() {
   set("rx2pState", state);
   const chip = rx2$("rx2pDot"); if (chip) chip.className = "rx2p-dot " + cls;
   const nx = (r.next && r.next[0]) || null;
+  set("rx2pNextLbl", live ? "LISTENING ON" : "NEXT");   // while it is working, that figure is where it is, not what is next
   set("rx2pNext", live ? (live.freq ? fmtMHz(live.freq, 3) + " MHz" : "")
     : nx ? `${nx.name} · ${fmtClock(nx.aos)} · up to ${Math.round(nx.max_el)}°` : "no pass due");
   set("rx2pSig", live && live.snr != null ? live.snr.toFixed(1) + " dB" : "–");

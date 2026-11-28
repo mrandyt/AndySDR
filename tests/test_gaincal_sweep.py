@@ -62,10 +62,11 @@ def radio(dev, job=None, scan="manual", agc=False):
     r._emit = lambda k, v: r.emitted.append((k, v))
     r._push_state = lambda *a, **k: None
     for name in ("gaincal_start", "gaincal_stop", "_gcal_next", "_gaincal_tick", "_gcal_finish", "_gcal_save",
-                 "gaincal_saved", "set_gain_with_squelch"):
+                 "gaincal_saved", "set_gain_with_squelch", "_gcal_watch"):
         setattr(r, name, getattr(E.Radio, name).__get__(r, E.Radio))
     r.GCAL_SETTLE = E.Radio.GCAL_SETTLE
     r.GCAL_READ = E.Radio.GCAL_READ
+    r.GCAL_STUCK = E.Radio.GCAL_STUCK
     return r
 
 
@@ -189,6 +190,40 @@ r7.set_gain_with_squelch(29.0, 60.0)
 check("using a saved gain carries the squelch", abs(float(r7.s["squelch"]) - -91.0) < 0.01, r7.s["squelch"])
 r7.set_gain_with_squelch(60.0, 29.0)
 check("...and putting it back puts the squelch back", abs(float(r7.s["squelch"]) - -60.0) < 0.01, r7.s["squelch"])
+
+# --- the receiver stops delivering part-way through -----------------------------------------------
+# This happened for real: another copy of the program grabbed the receiver, the driver errored, and the sweep sat at
+# step 1 of 22 with the gain left at the bottom of its range - the radio deaf, and nothing on screen saying why.
+devw = Dev(knee=20.0)
+rw = radio(devw)
+rw.s["rf_gain"] = 33.3
+rw.gaincal_start(band="2 m")
+t = time.time()
+for _ in range(50):                                  # a few steps' worth of readings, then silence
+    t += 0.05
+    rw._gaincal_tick(np.full(256, devw.floor()), t)
+mid = rw.gcal["i"] if rw.gcal else None
+check("the sweep got going first", mid is not None and mid >= 2, mid)
+for _ in range(400):                                 # the loop keeps turning, but no samples arrive
+    if rw.gcal is None:
+        break
+    t += 0.05
+    rw._gcal_watch(t)
+check("a stalled sweep is given up on", rw.gcal is None, mid)
+check("...before it has waited an absurd length of time", t - time.time() < 30.0, round(t - time.time(), 1))
+stop = [v for k, v in rw.emitted if k == "gaincal" and v.get("running") is False]
+check("...and it says why on screen", stop and "stopped sending samples" in stop[-1].get("why", ""), stop[-1:])
+check("...and the gain goes back where it was", abs(devw.gain - 33.3) < 0.05, devw.gain)
+check("...and nothing is saved from a part-finished sweep", rw.gaincal_saved() == [], rw.gaincal_saved())
+dev2 = Dev(knee=20.0)
+r2 = radio(dev2)
+r2.gaincal_start(band="2 m")
+t = time.time()
+for _ in range(40):
+    t += 0.05
+    r2._gcal_watch(t)                                # called every pass of the loop, as the radio does
+    r2._gaincal_tick(np.full(256, dev2.floor()), t)
+check("...and keeps going", r2.gcal is not None and r2.gcal["i"] > 0, r2.gcal and r2.gcal["i"])
 
 print("FAILED " + str(fails) if fails else "ALL PASSED")
 sys.exit(1 if fails else 0)

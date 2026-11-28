@@ -754,10 +754,12 @@ html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spec
 [data-theme] .btn.sm { padding: 5px 12px; }
 
 /* page: controls card on the left, big spectrum + waterfall on the right, tables underneath */
-[data-theme] .wrap { display: grid; grid-template-columns: clamp(440px, 34vw, 660px) minmax(0, 1fr); grid-template-areas: "radio scope" "tabs tabs"; align-items: start; gap: 24px; padding: 24px; max-width: 2200px; margin: 0 auto; }
+[data-theme] .wrap { display: grid; grid-template-columns: clamp(440px, 34vw, 660px) minmax(0, 1fr); grid-template-areas: "radio scope" "rx2p rx2p" "tabs tabs"; align-items: start; gap: 24px; padding: 24px; max-width: 2200px; margin: 0 auto; }
 [data-theme] .wrap > .radio { grid-area: radio; width: auto; max-width: none; align-self: start; }
 [data-theme] .wrap > .scope { grid-area: scope; position: sticky; top: 84px; }
 [data-theme] .wrap > .tabs { grid-area: tabs; }
+/* The second receiver's panel needs a place of its own in this layout, or the grid has nowhere to put it. */
+[data-theme] .wrap > .rx2p { grid-area: rx2p; }
 @media (max-width: 1100px) {
   [data-theme] .wrap { grid-template-columns: 1fr; grid-template-areas: "scope" "radio" "tabs"; padding: 14px; gap: 16px; }
   [data-theme] .wrap > .scope { position: static; }
@@ -1615,3 +1617,8 @@ body.phone #tab-set .card { padding: 14px; }
 .rx2p-scope #rx2pWf { width: 100%; height: 60px; display: block; }
 @media (max-width: 760px) { .rx2p-body { grid-template-columns: minmax(0, 1fr); } }
 body.cr .rx2p { display: none; }           /* the control-room layout docks the Receiver 2 page instead */
+
+/* The gain test: a sweep that did not finish, and the ceiling a compressing front end puts on the gain. */
+.gcal-bad { border-left: 3px solid var(--warn, #e8a33d); padding-left: 10px; }
+.gcal-ceil { color: var(--warn, #e8a33d); }
+.gcal-ceil b { color: var(--warn, #e8a33d); }

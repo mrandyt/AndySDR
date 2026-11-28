@@ -351,6 +351,7 @@ class SatRx:
                       else f"Live view on {freq / 1e6:.3f} MHz for {self.preview_secs} s")
 
     # ------------------------------------------------------------------ finding the best gain for this dongle
+    GCAL_STUCK = 8.0           # no readings for this long means the dongle has stopped: give up on the sweep
     GCAL_SETTLE = 0.45
     GCAL_READ = 0.35
 
@@ -400,6 +401,16 @@ class SatRx:
             return
         self.radio._emit("satgaincal", {"running": True, "step": g["i"] + 1, "steps": len(g["gains"]),
                                         "gain": g["gains"][g["i"]]})
+
+    def _gcal_watch(self, now):
+        """Abandon a sweep that has stopped getting readings - see the same method in `engine`."""
+        g = self.gcal
+        if g is None or g["t"] <= 0.0 or now - g["t"] < self.GCAL_STUCK:
+            return
+        log.warning("second receiver gain test: no spectrum for %.1f s at step %d of %d - abandoning",
+                    now - g["t"], g["i"] + 1, len(g["gains"]))
+        self.gaincal_stop("the dongle stopped sending samples part-way through, so the test was abandoned and the gain "
+                          "put back. Worth checking no other program has it open, then trying again.")
 
     def _gcal_tick(self, spec_db, now):
         g = self.gcal
@@ -451,6 +462,8 @@ class SatRx:
                 self.discard = 2
 
     def end_job(self, why=None):
+        if self.gcal is not None:                    # the sweep lives inside a preview job: it cannot outlive it
+            self.gaincal_stop("the gain test ended early because the second receiver stopped - the gain was put back")
         with self.lock:
             job, self.job = self.job, None
             self.gen += 1
@@ -541,6 +554,7 @@ class SatRx:
                 log.exception("second receiver read")
                 x = np.zeros(0, np.complex64)
                 time.sleep(0.2)
+            self._gcal_watch(time.time())         # runs even when no samples arrive, which is the case it is for
             if len(x):
                 last_data = time.time()
             elif time.time() - last_data > 4.0:      # the dongle stopped delivering: try once more, then give up

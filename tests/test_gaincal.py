@@ -17,7 +17,7 @@ def check(n, ok, extra=""):
     fails += 0 if ok else 1
 
 
-def sweep(knee_db, lo=0.0, hi=49.6, n=25, noise=0.0, seed=1):
+def sweep(knee_db, lo=0.0, hi=49.6, n=25, noise=0.0, seed=1, compress_db=None):
     """(gain, floor) readings from a receiver whose antenna noise equals its own noise at `knee_db` of gain."""
     import random
     r = random.Random(seed)
@@ -27,6 +27,9 @@ def sweep(knee_db, lo=0.0, hi=49.6, n=25, noise=0.0, seed=1):
         ext = 10 ** ((g - knee_db) / 10.0)              # antenna noise, relative to the receiver's own
         f = 10 * math.log10(ext + 1.0) + g * 0 - 70.0   # dBFS, the receiver's own noise as the reference
         out.append((round(g, 1), round(f + r.uniform(-noise, noise), 2)))
+    if compress_db is not None:                         # above this the front end saturates: the floor stops rising
+        base = next(f for g, f in out if g >= compress_db)
+        out = [(g, f if g <= compress_db else round(base + 0.2 * (f - base), 2)) for g, f in out]
     return out
 
 
@@ -70,6 +73,29 @@ clean = gaincal.choose(sweep(20.0))["gain"]
 spread = [gaincal.choose(sweep(20.0, noise=0.8, seed=s))["gain"] for s in range(8)]
 check("a noisy sweep still lands in the same place", max(abs(g - clean) for g in spread) <= 6.0,
       (clean, spread))
+
+# --- a front end that starts to compress ------------------------------------------------------------------
+# This is the case that cost a real pass: a dongle behind a mast preamplifier, where the floor follows the gain from
+# the bottom and then stops following it near the top.  The bend at the top is the front end running out of headroom,
+# not the aerial going quiet, and gain past it loses strong signals for nothing.
+real = [(0.0, -70.0), (0.9, -67.6), (2.7, -63.0), (3.7, -61.4), (7.7, -58.6), (12.5, -56.2), (14.4, -56.5),
+        (15.7, -53.5), (19.7, -52.2), (20.7, -51.1), (22.9, -49.0), (28.0, -45.4), (29.7, -44.3), (32.8, -42.0),
+        (36.4, -39.5), (37.2, -38.7), (38.6, -38.1), (42.1, -37.0), (43.4, -36.7), (43.9, -36.0), (48.0, -35.7),
+        (49.6, -35.4)]                      # measured, Nooelec SMArt v5 on 137.900 MHz with a preamplifier
+c = gaincal.ceiling(real)
+check("a real compressing front end is spotted", c is not None and 34.0 <= c <= 42.0, c)
+r = gaincal.choose(real, keep=20.0)
+check("...and the reason says not to go above it", "compress" in r["why"] and "do not go above" in r["why"], r["why"])
+check("...and the gain in use is kept, being below it", r["gain"] == 20.0, r["gain"])
+check("...and the headroom is to the ceiling, not the top of the range", 10.0 <= r["headroom"] <= 24.0, r["headroom"])
+check("a sweep still climbing at the top has no ceiling", gaincal.ceiling(sweep(20.0)) is None)
+check("...nor does a quiet aerial that never moved", gaincal.ceiling([(g, -70.0) for g in range(0, 50, 4)]) is None)
+check("...nor does a noisy one", all(gaincal.ceiling(sweep(20.0, noise=0.8, seed=s)) is None for s in range(8)))
+sim = sweep(8.0, compress_db=36.0)
+c = gaincal.ceiling(sim)
+check("a simulated compressing sweep is spotted too", c is not None and 30.0 <= c <= 40.0, c)
+r = gaincal.choose(sim)
+check("...and the gain chosen is never above the ceiling", r["gain"] <= c + 0.01, (r["gain"], c))
 
 # --- the sweep plan ---------------------------------------------------------------------------------------
 p = gaincal.plan(0, 49.6)
