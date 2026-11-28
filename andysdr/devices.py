@@ -784,7 +784,7 @@ class SimDevice(BaseDevice):
         (98500000, "wfm", 0.2, 0.0),
         (153350000, "fsk", 0.04, 2.0),
         (446006250, "nfm_voice", 0.03, 3.5),
-        (8040000, "wefax", 0.05, 0.0),
+        (8038100, "wefax", 0.05, 0.0),
         (145437500, "dmr", 0.03, 6.0),       # DMR handset: 4FSK 4800 Bd, 30 ms TDMA bursts
         (144800000, "aprs", 0.03, 2.5),      # APRS AFSK 1200
         (145800000, "sstv", 0.04, 0.0),      # SSTV Robot 36 test card, repeating (like the ISS)

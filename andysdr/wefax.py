@@ -4,8 +4,8 @@ HF fax is sent in USB: 1500 Hz = black, 2300 Hz = white, 120 lines per minute, I
 Start tone = 300 Hz black/white alternation, stop tone = 450 Hz, followed by phasing lines
 (white pulse at line start) used to line the picture up.
 
-Tune 1.9 kHz BELOW the published (carrier) frequency in USB, e.g. Northwood 8040.0 kHz -> 8038.1 kHz,
-or simply tune the published frequency – the decoder automatically searches 1.5-2.3 kHz.
+Tune 1.9 kHz BELOW the published (assigned) frequency in USB, e.g. Northwood 8040.0 kHz -> 8038.1 kHz.
+The decoder does not search for the tones: the picture is only as good as the dial setting.
 """
 import os
 import struct

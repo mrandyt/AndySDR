@@ -170,6 +170,7 @@ class MemoryBank:
                 pass
         if not os.path.exists(self.path):
             self._seed()
+        self._fix_known_offsets()
         self.save()
 
     def _seed(self):
@@ -183,7 +184,7 @@ class MemoryBank:
             (118700000, "AM", "Airband sample", "Aviation"),
             (98500000, "WFM", "FM broadcast", "Broadcast"),
             (153350000, "DIG", "Pager sample", "Paging"),
-            (8040000, "USB", "WEFAX Northwood", "Weather"),
+            (8038100, "USB", "WEFAX Northwood", "Weather"),
             (137900000, "DIG25", "Meteor-M LRPT", "Weather Sat"),
         ]
         ch = {}
@@ -194,6 +195,21 @@ class MemoryBank:
                           "lockout": False, "delay": True, "description": "", "tone": ""}
         self.data["banks"]["0"]["channels"] = ch
         self.data["banks"]["0"]["name"] = "STARTER"
+
+    # Stations whose stored carrier was wrong in an earlier release. Matched on
+    # the channel name and the old frequency, so anything Andy has renamed or
+    # retuned himself is left alone.
+    KNOWN_FIXES = {"WEFAX Northwood": (8040000, 8038100)}
+
+    def _fix_known_offsets(self):
+        changed = False
+        for bank in self.data.get("banks", {}).values():
+            for ch in bank.get("channels", {}).values():
+                fix = self.KNOWN_FIXES.get(ch.get("name"))
+                if fix and ch.get("freq") == fix[0]:
+                    ch["freq"] = fix[1]
+                    changed = True
+        return changed
 
     def save(self):
         with self.lock:
