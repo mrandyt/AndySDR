@@ -770,6 +770,25 @@ class Radio:
             self._push_state(True)
         self.call(do)
 
+    def set_gain_with_squelch(self, g, was):
+        """Change the RF gain and carry the squelch with it.
+
+        Squelch is a level in dBFS, so it only means anything against a particular gain: drop the gain by 30 dB and
+        every signal drops 30 dB with it, leaving a squelch that nothing can open.  Moving the two together keeps the
+        radio behaving exactly as it did, with the same signals opening it.  -120 means wide open, so leave that alone.
+        """
+        try:
+            shift = float(g) - float(was)
+        except (TypeError, ValueError):
+            shift = 0.0
+        sq = float(self.s["squelch"])
+        moved = None
+        if abs(shift) >= 0.5 and sq > -119:
+            moved = max(-119.0, min(0.0, sq + shift))
+            self.set_squelch(moved)
+        self.set_gain(float(g))
+        return moved
+
     def set_gain(self, g):
         def do():
             self.s["rf_gain"] = float(g)
@@ -865,6 +884,14 @@ class Radio:
             return
         res.update(band=g["band"], freq=g["freq"], dev=g["dev"], when=int(time.time()), was=g["was"])
         self._gcal_save(res)
+        sq_was = float(self.s["squelch"])
+        res["squelch_was"] = sq_was
+        shift = float(res["gain"]) - float(g["was"])
+        if abs(shift) >= 0.5 and sq_was > -119:
+            res["squelch"] = max(-119.0, min(0.0, sq_was + shift))
+            self.s["squelch"] = res["squelch"]
+            if self.rx:
+                self.rx.squelch_db = res["squelch"]
         self.s["rf_gain"] = float(res["gain"])
         self.s.save()
         self.ag_cur = None
@@ -872,7 +899,10 @@ class Radio:
             self.dev.set_gain(float(res["gain"]))
         log.info("gain test: %.1f dB chosen at %.4f MHz (%s) - %s", res["gain"], g["freq"] / 1e6, g["band"] or "no band", res["why"])
         self._emit("gaincal", dict(res, running=False, done=True))
-        self._emit("event", {"level": "info", "text": f"RF gain set to {res['gain']:.0f} dB. {res['why']}"})
+        note = f"RF gain set to {res['gain']:.0f} dB."
+        if res.get("squelch") is not None:
+            note += f" Squelch moved with it, {sq_was:.0f} to {res['squelch']:.0f} dB, so the same signals still open it."
+        self._emit("event", {"level": "info", "text": note + " " + res["why"]})
         self._push_state(True)
 
     def _gcal_save(self, res):

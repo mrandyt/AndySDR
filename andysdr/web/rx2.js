@@ -311,3 +311,29 @@ function rx2OnEvent(d) {
 function rx2OnSchedule() { RX2.ctlKey = ""; rxStripRender(); rx2Render(); }
 rx2$("rx2AllPics").onclick = () => showTab("img");
 setInterval(() => { try { rxStripRender(); if (rx2Visible()) { RX2.ctlKey = RX2.ctlKey; rx2Render(); } } catch (e) { /* the screen must never break the app */ } }, 1000);
+
+/* ---------- find the best gain for the second receiver ---------- */
+function rx2GcalEvent(d) {
+  const run = !!d.running, R = (id) => rx2$(id);
+  if (!R("rx2GcalRun")) return;
+  R("rx2GcalRun").hidden = run; R("rx2GcalStop").hidden = !run;
+  R("rx2GcalProgress").hidden = !run;
+  if (run) {
+    R("rx2GcalBarFill").style.width = (d.steps ? Math.round(100 * d.step / d.steps) : 0) + "%";
+    R("rx2GcalStep").textContent = `Trying ${d.gain != null ? d.gain.toFixed(1) : "?"} dB \u2013 step ${d.step} of ${d.steps}`;
+    R("rx2GcalResult").hidden = true;
+    return;
+  }
+  if (!d.done) { if (d.why) toast("Gain test " + d.why); return; }
+  R("rx2GcalResult").hidden = false;
+  R("rx2GcalResult").innerHTML = `<div class="gcal-res"><b>${d.gain.toFixed(1)} dB</b> for the Meteor band` +
+    `<div class="small">${esc(d.why || "")}</div>` +
+    `<div class="small muted">Was ${Number(d.was).toFixed(1)} dB \u00b7 <a href="#" id="rx2GcalUndo">put it back</a></div></div>`;
+  const u = rx2$("rx2GcalUndo");
+  if (u) u.onclick = (e) => { e.preventDefault(); send({ cmd: "satrx_gain", gain: d.was }); toast("Gain put back to " + Number(d.was).toFixed(0) + " dB"); };
+}
+(function () {
+  const r = rx2$("rx2GcalRun"), st = rx2$("rx2GcalStop");
+  if (r) r.onclick = () => send({ cmd: "satrx_gain_cal" });
+  if (st) st.onclick = () => send({ cmd: "satrx_gain_cal", stop: true });
+})();

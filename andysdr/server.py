@@ -663,11 +663,21 @@ class Server:
                         self._reply(c, "event", {"level": "warn", "text": why})
             elif cmd == "gain_cal_use":
                 try:
-                    r.set_gain(float(m.get("gain")))
+                    r.set_gain_with_squelch(float(m.get("gain")), m.get("was", r.s["rf_gain"]))
                 except (TypeError, ValueError):
                     pass
             elif cmd == "gain_cal_list":
                 self._reply(c, "gaincal_saved", r.gaincal_saved())
+            elif cmd == "satrx_gain_cal":
+                rx = getattr(r, "satrx", None)
+                if rx is None:
+                    self._reply(c, "event", {"level": "warn", "text": "There is no second receiver."})
+                elif m.get("stop"):
+                    rx.gaincal_stop("stopped")
+                else:
+                    ok, why = rx.gaincal_start(m.get("freq"))
+                    if not ok:
+                        self._reply(c, "event", {"level": "warn", "text": why})
             elif cmd == "refresh_devices":
                 devs = await asyncio.get_running_loop().run_in_executor(None, r.refresh_devices)
                 self._reply(c, "devices", devs)

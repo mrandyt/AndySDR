@@ -47,7 +47,8 @@ class Dev:
 
 
 def radio(dev, job=None, scan="manual", agc=False):
-    r = types.SimpleNamespace(dev=dev, s={"rf_gain": 30.0, "agc": agc, "gain_cal": {}}, scan={"state": scan},
+    r = types.SimpleNamespace(dev=dev, s={"rf_gain": 30.0, "agc": agc, "gain_cal": {}, "squelch": -60.0},
+                              scan={"state": scan}, rx=None,
                               freq=137_900_000, job=job, job_gain=None, ag_cur=None, gcal=None, events=[], emitted=[])
     r.s = dict(r.s)
     r.s["save"] = None
@@ -61,7 +62,7 @@ def radio(dev, job=None, scan="manual", agc=False):
     r._emit = lambda k, v: r.emitted.append((k, v))
     r._push_state = lambda *a, **k: None
     for name in ("gaincal_start", "gaincal_stop", "_gcal_next", "_gaincal_tick", "_gcal_finish", "_gcal_save",
-                 "gaincal_saved"):
+                 "gaincal_saved", "set_gain_with_squelch"):
         setattr(r, name, getattr(E.Radio, name).__get__(r, E.Radio))
     r.GCAL_SETTLE = E.Radio.GCAL_SETTLE
     r.GCAL_READ = E.Radio.GCAL_READ
@@ -152,6 +153,42 @@ for _ in range(30):
 r4.gaincal_stop()
 check("stopping puts the old gain back", abs(dev4.gain - 31.0) < 0.05, dev4.gain)
 check("...and nothing is saved", r4.gaincal_saved() == [], r4.gaincal_saved())
+
+# --- the squelch follows the gain -------------------------------------------------------------------------
+# Squelch is a level in dBFS, so it only means anything against a particular gain.  A test that drops the gain 30 dB
+# and leaves the squelch where it was makes the scanner deaf: nothing is loud enough to open it any more.
+dev5 = Dev(knee=5.0)                      # a noisy band: the answer will be far below the 30 dB it started at
+r5 = radio(dev5)
+r5.s["squelch"] = -60.0
+r5.gaincal_start(band="Marine VHF")
+run(r5, dev5)
+res5 = [v for k, v in r5.emitted if k == "gaincal" and v.get("done")][0]
+drop = res5["gain"] - 30.0
+check("the test did lower the gain a lot", drop < -10, (res5["gain"], drop))
+check("the squelch moved by the same amount", abs((float(r5.s["squelch"]) - -60.0) - drop) < 0.01,
+      (r5.s["squelch"], drop))
+check("...and the result says so", res5.get("squelch") is not None and res5.get("squelch_was") == -60.0, res5.get("squelch"))
+check("...and so does the message", any(k == "event" and "Squelch moved" in v.get("text", "") for k, v in r5.emitted),
+      [v.get("text") for k, v in r5.emitted if k == "event"])
+
+# an open squelch is left open
+dev6 = Dev(knee=5.0)
+r6 = radio(dev6)
+r6.s["squelch"] = -120.0
+r6.gaincal_start()
+run(r6, dev6)
+check("a wide-open squelch is left wide open", float(r6.s["squelch"]) == -120.0, r6.s["squelch"])
+
+# putting the gain back puts the squelch back with it
+r7 = radio(Dev(knee=20.0))
+r7.s["squelch"] = -60.0
+r7.set_squelch = lambda db: r7.s.__setitem__("squelch", float(db))
+r7.set_gain = lambda g: r7.s.__setitem__("rf_gain", float(g))
+r7.set_gain_with_squelch = E.Radio.set_gain_with_squelch.__get__(r7, E.Radio)
+r7.set_gain_with_squelch(29.0, 60.0)
+check("using a saved gain carries the squelch", abs(float(r7.s["squelch"]) - -91.0) < 0.01, r7.s["squelch"])
+r7.set_gain_with_squelch(60.0, 29.0)
+check("...and putting it back puts the squelch back", abs(float(r7.s["squelch"]) - -60.0) < 0.01, r7.s["squelch"])
 
 print("FAILED " + str(fails) if fails else "ALL PASSED")
 sys.exit(1 if fails else 0)

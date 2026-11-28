@@ -691,6 +691,17 @@
           The main radio stops scanning for the few minutes the satellite is overhead.</div>
         <div class="small rx2-both-own" id="rx2BothOwn" hidden></div>
       </div>
+      <div class="card gcal-card" id="rx2GcalCard">
+        <div class="row wrapline"><b>🎚 Find the best RF gain for this dongle</b>
+          <span class="grow"></span>
+          <button class="btn sm primary" id="rx2GcalRun">Find the best gain</button>
+          <button class="btn sm" id="rx2GcalStop" hidden>Stop</button></div>
+        <p class="small muted">Opens the dongle on 137.900 MHz and turns the gain up step by step, watching the noise floor. While the
+          dongle's own noise is the louder of the two the floor barely moves; once the aerial's noise is louder it follows the gain one
+          for one. The bend between them is the best setting. About 20 seconds, and it will not run during a pass.</p>
+        <div id="rx2GcalProgress" hidden><div class="gcal-bar"><i id="rx2GcalBarFill"></i></div><span class="small muted" id="rx2GcalStep"></span></div>
+        <div id="rx2GcalResult" hidden></div>
+      </div>
       <div class="rx2-scopewrap">
         <canvas id="rx2Spec"></canvas>
         <canvas id="rx2Wf"></canvas>

@@ -14,7 +14,7 @@ import time
 
 import numpy as np
 
-from . import devices, passlog
+from . import devices, gaincal, passlog
 from .config import data_dir
 from .decoders import DecoderManager
 from .dsp import Receiver, Spectrum
@@ -56,6 +56,7 @@ class SatRx:
         self.dev = None
         self.rx = None
         self.spec = Spectrum(2048)
+        self.gcal = None          # a gain calibration sweep in progress
         self.thread = None
         self.gen = 0
         self.job = None
@@ -349,6 +350,85 @@ class SatRx:
         return True, (f"Live view on {freq / 1e6:.3f} MHz until you stop it" if self.preview_open
                       else f"Live view on {freq / 1e6:.3f} MHz for {self.preview_secs} s")
 
+    # ------------------------------------------------------------------ finding the best gain for this dongle
+    GCAL_SETTLE = 0.45
+    GCAL_READ = 0.35
+
+    def gaincal_start(self, freq=None):
+        """Sweep this dongle's gain at the Meteor frequency and find where the aerial, not the dongle, is the limit."""
+        if self.busy():
+            return False, "The second receiver is busy - try again when the pass or live view has finished."
+        ok, msg = self.begin_preview(freq or PREVIEW_FREQ, 100e3, 90)
+        if not ok:
+            return False, msg
+        lo, hi = self._gain_range
+        dev = self.dev
+        gains = gaincal.plan(lo, hi, getattr(dev, "gain_steps", None))
+        self.gcal = {"gains": gains, "i": -1, "t": 0.0, "pts": [], "buf": [],
+                     "was": float(self.s.get("satrx_gain", 38.0)), "freq": int(self.freq),
+                     "dev": getattr(dev, "key", "") or ""}
+        log.info("second receiver gain test: %d steps from %.1f to %.1f dB at %.4f MHz",
+                 len(gains), gains[0], gains[-1], self.freq / 1e6)
+        self._gcal_next(time.time())
+        return True, ""
+
+    def gaincal_stop(self, why="stopped"):
+        g, self.gcal = self.gcal, None
+        if g:
+            try:
+                self.set_gain(g["was"])
+            except Exception:                        # noqa: BLE001
+                pass
+            self.radio._emit("satgaincal", {"running": False, "why": why})
+            self.stop_preview()
+
+    def _gcal_next(self, now):
+        g = self.gcal
+        if g is None:
+            return
+        g["i"] += 1
+        if g["i"] >= len(g["gains"]):
+            self._gcal_finish()
+            return
+        g["t"] = now
+        g["buf"] = []
+        try:
+            self.set_gain(float(g["gains"][g["i"]]))
+        except Exception:                            # noqa: BLE001
+            log.exception("second receiver gain test")
+            self.gaincal_stop("the dongle would not change gain")
+            return
+        self.radio._emit("satgaincal", {"running": True, "step": g["i"] + 1, "steps": len(g["gains"]),
+                                        "gain": g["gains"][g["i"]]})
+
+    def _gcal_tick(self, spec_db, now):
+        g = self.gcal
+        if g is None:
+            return
+        if now - g["t"] < self.GCAL_SETTLE:
+            return
+        g["buf"].append(float(np.median(spec_db)))
+        if now - g["t"] < self.GCAL_SETTLE + self.GCAL_READ:
+            return
+        g["pts"].append((g["gains"][g["i"]], float(np.median(g["buf"])) if g["buf"] else None))
+        self._gcal_next(now)
+
+    def _gcal_finish(self):
+        g, self.gcal = self.gcal, None
+        res = gaincal.choose(g["pts"])
+        if not res:
+            self.set_gain(g["was"])
+            self.radio._emit("satgaincal", {"running": False, "why": "not enough readings to decide"})
+            self.stop_preview()
+            return
+        res.update(freq=g["freq"], dev=g["dev"], when=int(time.time()), was=g["was"], band="Meteor 137 MHz")
+        self.set_gain(float(res["gain"]))
+        log.info("second receiver gain test: %.1f dB chosen at %.4f MHz - %s", res["gain"], g["freq"] / 1e6, res["why"])
+        self.radio._emit("satgaincal", dict(res, running=False, done=True))
+        self.radio._emit("event", {"level": "info",
+                                   "text": f"Second receiver RF gain set to {res['gain']:.0f} dB. {res['why']}"})
+        self.stop_preview()
+
     def stop_preview(self):
         if self.job is not None and self.job.get("preview"):
             self.end_job("live view stopped")
@@ -498,6 +578,8 @@ class SatRx:
                     if self._blk % SPEC_EVERY == 0:
                         q = np.clip((spec_db - SPEC_MIN_DB) / (SPEC_MAX_DB - SPEC_MIN_DB) * 255, 0, 255).astype(np.uint8)
                         self.radio._emit("satspec", {"center": dev.center, "fs": fs, "freq": self.freq, "data": q.tobytes()})
+                if spec_db is not None and self.gcal is not None:
+                    self._gcal_tick(spec_db, now)
                 m = self.pass_meter
                 if spec_db is not None and (m is not None or preview) and now - self._live_snr_t >= (0.25 if preview else 1.0):
                     self._live_snr_t = now
