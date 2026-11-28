@@ -107,6 +107,9 @@ class Scheduler:
             self.s["schedule"] = lst
             self.s.save()
         if j["enabled"]:
+            dup = [x for x in self.redundant() if x["id"] == j["id"]]
+            if dup:                                      # the moment it is created is the cheapest time to think again
+                self.radio._emit("event", {"level": "warn", "text": dup[0]["text"]})
             mine = [c for c in self.conflicts() if j["id"] in (c["a_id"], c["b_id"])]
             if mine:
                 self.radio._emit("event", {"level": "warn", "text": f"Schedule clash: {mine[0]['text']}"
@@ -226,6 +229,48 @@ class Scheduler:
             c["text"] = (f"{c['a']} and {c['b']} overlap by {c['mins']} min on {c['at']} - {c['rule']}"
                          + (f" (and {c['more']} more time{'s' if c['more'] > 1 else ''})" if c["more"] else ""))
             out.append(c)
+        return out
+
+    REDUNDANT_HZ = 30000        # a timed capture this close to a satellite's frequency is aimed at the same thing
+
+    def redundant(self):
+        """Timed captures that are doing a job AndySDR already does by tracking the satellite.
+
+        This is worse than an ordinary clash and reads differently, so it is reported separately. A daily capture
+        on 137.900 for twenty-five minutes is not competing with the Meteor pass inside it - it is trying to do the
+        same thing, blind, and winning, because it starts first and holds the radio. It cannot steer with the
+        satellite, it records the quiet minutes either side, and the pass it swallows is the one that would have
+        been tracked properly. The honest answer is almost always to switch the timed capture off, so say so and
+        offer the button rather than only warning that something will be missed.
+        """
+        try:
+            cfg = self.sats.cfg()
+        except Exception:                                # noqa: BLE001
+            return []
+        out = []
+        for job in self.jobs():
+            if not job.get("enabled", True):
+                continue
+            hits = []
+            for sid, d in SATELLITES.items():
+                c = cfg.get(sid) or {}
+                if not c.get("enabled"):
+                    continue                             # a satellite that is not tracked is not being duplicated
+                if job.get("action") != d.get("action"):
+                    continue
+                freqs = list(d.get("freqs") or [])
+                if c.get("freq"):
+                    freqs.append(int(c["freq"]))
+                if any(abs(int(job["freq"]) - int(f)) <= self.REDUNDANT_HZ for f in freqs):
+                    hits.append(d["name"])
+            if hits:
+                names = ", ".join(sorted(set(hits)))
+                out.append({"id": job["id"], "name": job["name"], "sats": sorted(set(hits)),
+                            "text": f"\u201c{job['name']}\u201d records {job['freq'] / 1e6:.3f} MHz on a timer, which is "
+                                    f"what AndySDR already does properly by tracking {names}. The timed capture holds "
+                                    f"the radio whether or not anything is overhead, cannot follow the satellite, and "
+                                    f"takes the pass away from the tracking that would have followed it. Switching it "
+                                    f"off loses nothing."})
         return out
 
     def _best(self, now):
@@ -445,7 +490,8 @@ class Scheduler:
             rows.sort(key=lambda x: x.get("start") or 0, reverse=True)
             rows = rows[:20]
         return {"jobs": self.jobs(), "running": r, "running2": r2, "next": self.next_runs(),
-                "presets": PRESETS, "actions": ACTIONS, "conflicts": self.conflicts(), "now": dt.datetime.now().strftime("%H:%M"),
+                "presets": PRESETS, "actions": ACTIONS, "conflicts": self.conflicts(), "redundant": self.redundant(),
+                "now": dt.datetime.now().strftime("%H:%M"),
                 "sats": self._sat_status(), "pass_log": rows, "satrx": self._satrx_status(rx)}
 
     def _satrx_status(self, rx):
