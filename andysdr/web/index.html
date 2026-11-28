@@ -187,7 +187,7 @@
 <!-- ====================== SPECTRUM / WATERFALL ====================== -->
 <section class="panel scope" data-help="scope">
   <div class="scope-bar">
-    <span class="scope-title">SPECTRUM · WATERFALL</span>
+    <span class="scope-title">RECEIVER 1</span><b class="rx2p-name" id="rx1Name">–</b>
     <span id="scopeInfo" class="muted"></span>
     <span class="grow"></span>
     <span class="zoombar" data-help="zoom"><button class="btn mini" id="zoomOut" title="Zoom out">−</button><span id="zoomTxt" class="zoomtxt">Full</span><button class="btn mini" id="zoomIn" title="Zoom in">+</button><button class="btn mini" id="zoomFit" title="Show the whole span">Fit</button><label class="mini"><input type="checkbox" id="zoomFollow" checked> Follow</label></span>
@@ -213,6 +213,26 @@
 </section>
 
 <!-- ====================== TABS ====================== -->
+<!-- ====================== SECOND RECEIVER (always on screen) ====================== -->
+<section class="panel rx2p" id="rx2Panel" data-help="rx2panel" hidden>
+  <div class="scope-bar">
+    <span class="scope-title">RECEIVER 2</span>
+    <b class="rx2p-name" id="rx2pName">–</b>
+    <span class="grow"></span>
+    <span class="rx2p-dot off" id="rx2pDot"></span><span class="muted small" id="rx2pState">–</span>
+    <button class="btn sm" id="rx2pOpen">Open its page</button>
+  </div>
+  <div class="rx2p-body">
+    <div class="rx2p-facts">
+      <div><small>NEXT</small><b id="rx2pNext">–</b></div>
+      <div><small>SIGNAL</small><b id="rx2pSig">–</b></div>
+      <div><small>RF GAIN</small><b id="rx2pGain">–</b></div>
+      <div><small>ELEVATION</small><b id="rx2pEl">–</b></div>
+    </div>
+    <div class="rx2p-scope"><canvas id="rx2pSpec"></canvas><canvas id="rx2pWf"></canvas></div>
+  </div>
+</section>
+
 <section class="panel tabs">
   <nav class="tabbar">
     <button class="tab active" data-tab="mem">MEMORY</button>

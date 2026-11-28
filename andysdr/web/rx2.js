@@ -173,6 +173,7 @@ function rx2Render() {
   rx2Pics(lv);
   rx2Passes();
   rx2LogRender();
+  rx2PanelShow();
 }
 
 /* ---------- aiming tone: the pitch rises with the signal (needs the Tone box ticked; only ever plays while a live view is on) ---------- */
@@ -255,12 +256,15 @@ function rx2LogRender() {
 /* ---------- live spectrum + waterfall (frames arrive only while the dongle is working) ---------- */
 function rx2OnSpec(center, fs, freq, data) {
   RX2.spec = { center, fs, freq, data };
-  if (!rx2Visible()) return;
   const ts = performance.now(); if (ts - RX2.lastDraw < 90) return; RX2.lastDraw = ts;
+  rx2DrawScope("rx2pSpec", "rx2pWf", RX2P);   // the panel that is always on screen
+  if (!rx2Visible()) return;
   rx2DrawScope();
 }
-function rx2DrawScope() {
-  const sp = RX2.spec, c = rx2$("rx2Spec"), wc = rx2$("rx2Wf"); if (!sp || !c) return;
+function rx2DrawScope(specId, wfId, st) {
+  specId = specId || "rx2Spec"; wfId = wfId || "rx2Wf"; st = st || RX2;
+  const sp = RX2.spec, c = rx2$(specId), wc = rx2$(wfId); if (!sp || !c || !wc) return;
+  if (!c.clientWidth || !c.clientHeight) return;              // not on screen (a hidden tab): nothing to draw
   const dpr = window.devicePixelRatio || 1, W = Math.floor(c.clientWidth * dpr), H = Math.floor(c.clientHeight * dpr), WH = Math.floor(wc.clientHeight * dpr);
   if (!W) return;
   if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
@@ -273,8 +277,8 @@ function rx2DrawScope() {
     col[x] = -130 + m / 255 * 120;
   }
   const sorted = Array.from(col).sort((a, b) => a - b), floor = sorted[Math.floor(W / 2)];
-  RX2.lo = RX2.lo == null ? floor - 6 : RX2.lo * 0.9 + (floor - 6) * 0.1;
-  const lo = RX2.lo, hi = lo + 45, g = c.getContext("2d");
+  st.lo = st.lo == null ? floor - 6 : st.lo * 0.9 + (floor - 6) * 0.1;
+  const lo = st.lo, hi = lo + 45, g = c.getContext("2d");
   g.fillStyle = "#07090b"; g.fillRect(0, 0, W, H);
   const bw = (RX2.live && RX2.live.bw) || 60e3, xa = (freq - bw - f0) / span * W, xb = (freq + bw - f0) / span * W;
   g.fillStyle = "rgba(255,60,60,0.14)"; g.fillRect(xa, 0, xb - xa, H);
@@ -296,6 +300,47 @@ function rx2DrawScope() {
   for (let j = 0; j < k; j++) w.putImageData(row, 0, j);
 }
 
+/* ---------- the always-visible second-receiver panel ---------- */
+const RX2P = { lo: null };
+
+// Everything the panel shows comes from the same state the Receiver 2 page uses; it is only laid out smaller.
+function rx2PanelShow() {
+  const r = SCH && SCH.satrx, box = rx2$("rx2Panel");
+  if (!box) return;
+  if (!r) { box.hidden = true; return; }
+  box.hidden = false;
+  const live = RX2.live && RX2.live.on ? RX2.live : null;
+  const set = (id, t) => { const e = rx2$(id); if (e && e.textContent !== t) e.textContent = t; };
+  set("rx2pName", r.using || r.device || "no receiver chosen");
+  let state = "Off", cls = "off";
+  if (!r.enabled) { state = "Off"; cls = "off"; }
+  else if (live && live.preview) { state = "Live view"; cls = "live"; }
+  else if (live) { state = "Recording " + (live.name || "a pass"); cls = "rec"; }
+  else if (!r.ready) { state = r.error ? "Not ready" : "Starting"; cls = "off"; }
+  else { state = "Ready – asleep until the next pass"; cls = "idle"; }
+  set("rx2pState", state);
+  const chip = rx2$("rx2pDot"); if (chip) chip.className = "rx2p-dot " + cls;
+  const nx = (r.next && r.next[0]) || null;
+  set("rx2pNext", live ? (live.freq ? fmtMHz(live.freq, 3) + " MHz" : "")
+    : nx ? `${nx.name} · ${fmtClock(nx.aos)} · up to ${Math.round(nx.max_el)}°` : "no pass due");
+  set("rx2pSig", live && live.snr != null ? live.snr.toFixed(1) + " dB" : "–");
+  set("rx2pGain", (live && live.gain != null ? live.gain : r.gain) != null
+    ? Number(live && live.gain != null ? live.gain : r.gain).toFixed(0) + " dB" : "–");
+  const el = rx2$("rx2pEl");
+  if (el) el.textContent = live && live.el != null ? live.el.toFixed(0) + "°" : "–";
+}
+function fmtClock(ts) {
+  try { return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); } catch (e) { return ""; }
+}
+(function () {
+  const b = rx2$("rx2pOpen");
+  if (b) b.onclick = () => {
+    showTab("satellites");
+    const t = document.querySelector('button.tab[data-tab="rx2"]');
+    if (t) t.click();
+  };
+})();
+
 /* ---------- hooks used by app.js ---------- */
 function rx2OnLive(d) {
   const was = RX2.live && RX2.live.on;
@@ -304,13 +349,15 @@ function rx2OnLive(d) {
   if (d.on && !was) { RX2.ctlKey = ""; }
   if (rx2Visible()) { if (d.on !== was) rx2Render(); else { rx2Meter(); const st = rx2State(); rx2$("rx2Title").textContent = st.title; rx2$("rx2Sub").textContent = st.sub; rx2$("rx2LiveNote").textContent = d.on ? `${fmtMHz(d.freq, 4)} MHz · gain ${d.gain != null ? Number(d.gain).toFixed(1) : "–"} dB` : ""; } }
   rxStripRender();
+  rx2PanelShow();
+  if (!d.on && was) { const c = rx2$("rx2pWf"); if (c) { RX2P.lo = null; c.getContext("2d").clearRect(0, 0, c.width, c.height); } }
 }
 function rx2OnEvent(d) {
   if (d && (d.rx2 || /^Second receiver/.test(d.text || ""))) { RX2.log.unshift({ t: Date.now(), text: d.text, level: d.level }); RX2.log.length = Math.min(RX2.log.length, 12); if (rx2Visible()) rx2LogRender(); }
 }
-function rx2OnSchedule() { RX2.ctlKey = ""; rxStripRender(); rx2Render(); }
+function rx2OnSchedule() { RX2.ctlKey = ""; rxStripRender(); rx2PanelShow(); rx2Render(); }
 rx2$("rx2AllPics").onclick = () => showTab("img");
-setInterval(() => { try { rxStripRender(); if (rx2Visible()) { RX2.ctlKey = RX2.ctlKey; rx2Render(); } } catch (e) { /* the screen must never break the app */ } }, 1000);
+setInterval(() => { try { rxStripRender(); rx2PanelShow(); if (rx2Visible()) { RX2.ctlKey = RX2.ctlKey; rx2Render(); } } catch (e) { /* the screen must never break the app */ } }, 1000);
 
 /* ---------- find the best gain for the second receiver ---------- */
 function rx2GcalEvent(d) {

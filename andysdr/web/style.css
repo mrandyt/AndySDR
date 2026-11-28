@@ -1595,3 +1595,23 @@ body.phone #tab-set .card { padding: 14px; }
 .gcal-list td, .gcal-list th { padding: 3px 6px; text-align: left; border-bottom: 1px solid rgba(125,160,200,.14); }
 .gcal-list th { font-weight: 600; opacity: .7; }
 .rx2-both-own { margin-top: 6px; padding: 6px 8px; border-radius: 6px; background: rgba(240,180,60,.14); }
+
+/* The second receiver, always on screen beside the main radio */
+.rx2p .scope-bar { display: flex; align-items: center; gap: 8px; }
+.rx2p-name { font-weight: 600; letter-spacing: .2px; }
+.rx2p-dot { width: 9px; height: 9px; border-radius: 50%; background: #666; flex: 0 0 auto; }
+.rx2p-dot.idle { background: #4ddb7a; }
+.rx2p-dot.rec { background: #ff5c5c; animation: rx2pPulse 1.2s ease-in-out infinite; }
+.rx2p-dot.live { background: #4da3ff; animation: rx2pPulse 1.2s ease-in-out infinite; }
+.rx2p-dot.off { background: #777; }
+@keyframes rx2pPulse { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
+.rx2p-body { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 10px; padding: 10px; }
+.rx2p-facts { display: grid; grid-template-rows: repeat(4, auto); gap: 6px; align-content: start; }
+.rx2p-facts > div { display: flex; flex-direction: column; }
+.rx2p-facts small { font-size: 10px; letter-spacing: 1px; opacity: .6; }
+.rx2p-facts b { font-size: 13px; }
+.rx2p-scope { display: flex; flex-direction: column; min-width: 0; border-radius: 6px; overflow: hidden; background: #07090b; }
+.rx2p-scope #rx2pSpec { width: 100%; height: 90px; display: block; }
+.rx2p-scope #rx2pWf { width: 100%; height: 60px; display: block; }
+@media (max-width: 760px) { .rx2p-body { grid-template-columns: minmax(0, 1fr); } }
+body.cr .rx2p { display: none; }           /* the control-room layout docks the Receiver 2 page instead */
