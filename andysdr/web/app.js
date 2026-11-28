@@ -112,6 +112,8 @@ function onJSON(m) {
     case "gaincal": gcalEvent(d); break;
     case "satgaincal": rx2GcalEvent(d); break;
     case "gaincal_saved": gcalSaved(d); break;
+    case "trunk": trunkRender(d); break;
+    case "trunk_list": trunkList(d); break;
     case "autostart": showAutostart(d); break;
     case "state": S = d; renderState(); adsbStat(); break;
     case "memory": MEM = d; renderMemory(); break;
@@ -1545,6 +1547,10 @@ function renderDecoders() {
 }
 $("decOff").onclick = () => send({ cmd: "decoder", id: "" });
 $("decClear").onclick = () => { $("decLog").textContent = ""; decLen = 0; };
+$("trunkWhich").onchange = () => send({ cmd: "trunk_list", which: $("trunkWhich").value });
+$("trunkSave").onclick = () => send({ cmd: "trunk_save", which: $("trunkWhich").value, text: $("trunkText").value });
+$("trunkBox").addEventListener("toggle", () => { if ($("trunkBox").open) trunkAsk(); });
+setInterval(() => { if ($("trunkBox") && $("trunkBox").open) send({ cmd: "trunk_status" }); }, 2000);
 $("decFetch").onclick = () => { decLine("Downloading missing decoder programs from GitHub …"); send({ cmd: "fetch_decoders" }); };
 $("dsdSub").onchange = () => { if (S.decoder === "dsd") send({ cmd: "decoder", id: "dsd", sub: $("dsdSub").value }); };
 let decLen = 0;
@@ -2969,6 +2975,48 @@ function gcalEvent(d) {
   };
   send({ cmd: "gain_cal_list" });
 }
+/* ---------- trunking ----------
+   DSD-FME reads the control channel and works out which frequency each call has gone to; it then asks a rigctl
+   server to retune. AndySDR is that server, so a call grant moves the radio - and inside the slice the receiver is
+   already capturing, that is just a change of which part is being listened to, with nothing lost and no delay. */
+const TRUNK_HINTS = {
+  channels: "One line per channel: the number the system uses, then the frequency. 451200000 and 451.2 both work. Most DMR Tier III, Capacity+ and Connect+ systems need this, because the control channel talks in channel numbers.",
+  groups: "Optional. Talkgroup number, name, mode – so the log says who is talking rather than a number.",
+};
+let TRUNK = null;
+function trunkRender(d) {
+  TRUNK = d || null;
+  const box = $("trunkState"); if (!box || !d) return;
+  const r = d.rigctl || {};
+  const on = !!r.on;
+  const trunked = /_trunk$/.test(d.sub || "");
+  const bits = [];
+  bits.push(`<div><b>${on ? "Ready" : "Off"}</b> <span class="muted small">${on ? `listening on port ${r.port} for the decoder` : "starts when you choose a trunked sub-mode"}</span></div>`);
+  if (r.error) bits.push(`<div class="warn small">${esc(r.error)}</div>`);
+  if (on) {
+    bits.push(`<div class="small">${r.clients ? "Decoder connected" : "Waiting for the decoder to connect"}` +
+      ` · <b>${r.tunes || 0}</b> call${r.tunes === 1 ? "" : "s"} followed` +
+      (r.last ? ` · last ${fmtMHz(r.last.freq, 4)} MHz, ${Math.round(r.last.ago)} s ago` : "") + `</div>`);
+    if ((r.not_understood || []).length)
+      bits.push(`<div class="warn small">The decoder asked for ${r.not_understood.map(esc).join(", ")}, which AndySDR does not answer yet – worth reporting.</div>`);
+  }
+  bits.push(`<div class="small muted">Channel map: <b>${d.channels || 0}</b> channel${d.channels === 1 ? "" : "s"}` +
+    ` · talkgroup names: <b>${d.groups || 0}</b></div>`);
+  if (trunked && !d.channels)
+    bits.push(`<div class="warn small">No channel map yet. The control channel will still be decoded, but calls cannot be followed until the channel numbers it uses can be turned into frequencies.</div>`);
+  box.innerHTML = bits.join("");
+  const chip = $("trunkChip");
+  if (chip) chip.textContent = on ? (r.tunes ? `· ${r.tunes} followed` : "· ready") : "";
+}
+function trunkList(d) {
+  if (!d || $("trunkWhich").value !== d.which) return;
+  $("trunkText").value = d.text || "";
+  $("trunkHint").textContent = TRUNK_HINTS[d.which] || "";
+}
+function trunkAsk() {
+  send({ cmd: "trunk_status" });
+  send({ cmd: "trunk_list", which: $("trunkWhich").value });
+}
 function gcalSaved(list) {
   const el = $("gcalSaved");
   if (!el) return;
@@ -3985,6 +4033,7 @@ const HELP = {
   meshsdr: ["MeshCore with just the SDR", "Receive-only MeshCore using your SDR – no LoRa board. Press Start listening (UK/EU narrow is 869.618 MHz, 62.5 kHz, SF8). NODES lists every repeater, room server, companion and sensor heard advertising, with its position (click it for a map). MESSAGES shows channel messages for the Public channel and any #hashtag channel you add (or a 32-digit key). PACKET LOG lists everything heard including encrypted direct messages (which cannot be read) and damaged frames. Needs a decent 869 MHz antenna; the SDR must run at 250 kS/s or more."],
   qtog: ["Audio & step buttons", "AGC – automatic RF gain. MUTE – silences this screen without touching the VOLUME knob. MONITOR – holds the squelch open so you can hear the background noise and set up the antenna or gain; press again to return to your squelch setting. STEP − / STEP + – smaller or larger tuning step (shown on the LCD)."],
   rx2panel: ["Receiver 2", "The second receiver, kept on screen whether or not it is doing anything, so you can see both radios at once. It is named after the actual hardware rather than a number. The coloured dot says what it is doing: grey off, green awake and waiting, blue a live view you started, red recording a pass. NEXT is the pass it is waiting for and how high it will climb, or the frequency while it is working. SIGNAL is how far the satellite stands above the noise right now, RF GAIN what the dongle is amplifying by, and ELEVATION how high the satellite is as it crosses. The trace and waterfall below only move while the dongle is open - the rest of the time it is asleep to leave the USB alone. 'Open its page' goes to the full Receiver 2 screen, with the live view, the gain test and the pictures from each pass."],
+  trunking: ["Trunking – following a trunked system", "On a trunked system the conversation is not on the frequency you are listening to. One frequency, the control channel, carries a steady stream of signalling, and when somebody presses the key the system says in effect 'this call is on channel 17 for the next half minute'. A scanner that sits on the control channel hears nothing but data; one that sits on a voice channel hears one call in ten. To follow a conversation you have to move to the channel each call is given and come back afterwards, within a fraction of a second. Leave the radio on the control channel, choose one of the Trunked sub-modes, and AndySDR does that for you: the decoder reads the grants and asks AndySDR to retune, and AndySDR obliges. Where the call lands inside the slice of spectrum the receiver is already capturing, nothing is retuned at all - the radio simply listens to a different part of what it already has, which takes no time and misses nothing. That is where a wide receiver earns its keep: an RSP2 at 7.2 MS/s can hold a whole trunked site at once. A narrower receiver still works, it just has to move its hardware, which takes a moment and can clip the start of a call. Most DMR systems need a channel map, because the control channel talks in channel numbers rather than frequencies: put one line per channel in the Channel map box, the number first and then the frequency (451200000 and 451.2 both work). Without it the control channel is still decoded and you will see the grants go by, but AndySDR cannot know where to go. P25 systems usually need no map, because they broadcast the frequencies themselves. The talkgroup list is optional and only puts names to numbers in the log. The panel shows how many calls have been followed and where the last one was, which is the quickest way to tell whether a map is right. One caution: while trunking is on, anything that can reach the tuning port can retune the radio, so it only listens to this machine and only runs while a trunked sub-mode is selected."],
   gaincal: ["Find the best RF gain", "There is no single right RF gain: it depends on the aerial, the band and what else is on the air, so AndySDR can measure it. Press Find the best gain and it turns the gain up step by step, watching the noise floor. While the receiver's own noise is the louder of the two the floor barely moves; once the aerial's noise is the louder it follows the gain one dB for one dB. The bend between them is the answer, and the gain chosen is just above it – the point where you are hearing the aerial rather than the receiver, and the receiver is costing you under half a decibel. More gain than that improves nothing and only loses headroom before strong signals start to distort. The test takes about 15 seconds, needs the radio to stay on one frequency, and will not run while a scheduled capture is going or while scanning. If the receiver reports it is being overloaded part way up, the test stops below that point and says so. There is often a second bend near the top, where the floor stops following the gain again: that is not the aerial going quiet, it is the front end starting to compress, and it is common when there is a preamplifier at the mast. The test spots it and tells you the gain not to go above, because past that point every dB costs you the strong signals and buys nothing. If the receiver stops sending samples part way through - another program has it open, or the lead has been knocked - the test gives up, puts the gain back where it was and says so on screen, rather than leaving the radio deaf at whatever gain it was trying. If the noise floor barely moves at all, either the aerial is very quiet or nothing is reaching the receiver – worth checking the lead. Each answer is remembered against the band and the receiver it was measured on, and the list underneath lets you put any of them back with one press. Run it again whenever you change the aerial, and once per band: the right gain at 137 MHz with a satellite aerial is nothing like the right gain next to a broadcast FM transmitter. Squelch is a level, so it only means anything against a particular gain: when the test changes the gain it moves the squelch by the same amount, and the same signals go on opening it. 'Ease RF gain down on strong signals' still works on top of this – this sets the resting gain, that one backs off from it when something loud appears."],
   updates: ["Updates", "AndySDR looks for a newer version on its GitHub releases page when it starts and every 12 hours. When one is found a pop-up shows what is new and asks what to do: Download & install, Remind me later, or Skip this version. After the download (checked against GitHub's SHA-256) AndySDR asks again before it installs and restarts itself. 'Check for updates now' looks straight away, even for a version you skipped. Tick 'Download new versions in the background' to have the file ready so installing takes seconds. If AndySDR was installed with the Setup program the installer runs quietly in the background; a portable (unzipped) copy copies the new files over the old ones; a copy run from Python source just opens the releases page. Your settings, memories and pictures in %APPDATA%\\AndySDR are never touched. Updating restarts the radio PC's program, so remote screens reconnect by themselves a few seconds later. 'Start AndySDR when I sign in to Windows' adds AndySDR to the list of programs Windows starts at sign-in, so a restart in the night (a Windows update, a power cut) does not leave the program closed and the morning's satellite passes unrecorded. It is a per-user setting, needs no administrator rights, and unticking it removes the entry again. It only appears in the installed AndySDR, and the PC has to reach the sign-in - a PC sitting at the lock screen with nobody signed in does not start it."],
   adsbshare: ["Share aircraft feed", "Tick to let other programs on your network use AndySDR as an ADS-B receiver: SBS/BaseStation messages on TCP port 30003 and raw AVR (*8D…;) on port 30002. Point Virtual Radar Server, tar1090/readsb, PlanePlotter or a flight-tracking-site feeder at this PC and those ports. The second box turns the daily CSV position log on or off."],
@@ -4011,7 +4060,7 @@ function openHelp() {
   <h3>QUICK BUTTONS (under the display)</h3>${ctl(["qmode", "qbw", "qband", "qhot", "qdigi", "qdec", "qnotch", "qlock", "qtog", "qfiles", "replay"])}
   <h3>FUNCTION KEYS</h3>${ctl(["k_skip", "k_scan", "k_man", "k_srch", "k_pgm", "k_lo", "k_pri", "k_mode", "k_step", "k_bank", "k_dly", "k_rec", "k_dec", "k_arrows", "k_typefreq"])}
   <p class="small">Keyboard: digits and <code>.</code> type, <code>Enter</code> tunes, <code>↑ ↓</code> step, <code>S</code> scan, <code>M</code> manual, <code>P</code> program, <code>L</code> lockout, <code>I</code> skip 10 min, <code>H</code> help, <code>Esc</code> clear. Click the big frequency to type one with the mouse or on a touch screen.</p>
-  <h3>SCREENS</h3>${ctl(["scope", "zoom", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "satauto", "satrx", "passreport", "antennamap", "phonelayout", "gps", "acars", "sonde", "ft8tab", "morsebox", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "settings", "updates", "receiver", "remote", "theme", "conn"])}
+  <h3>SCREENS</h3>${ctl(["scope", "zoom", "vfo", "autoid", "bandmap", "bandplan", "bptab", "bppick", "sched", "satauto", "satrx", "passreport", "antennamap", "phonelayout", "gps", "acars", "sonde", "ft8tab", "morsebox", "banks", "import", "search", "decoders", "pager", "adsb", "adsbopts", "adsbmap", "adsbtable", "adsbshare", "settings", "updates", "receiver", "remote", "theme", "conn", "trunking"])}
   <h3>DECODER PROGRAMS</h3>
   <p>AndySDR has WEFAX and SSTV built in (SSTV: Martin, Scottie, Robot and PD modes – ISS 145.800 NFM, 2 m 144.500 NFM, 20 m 14.230 USB). DSD-FME, multimon-ng and SatDump now come bundled in the <code>decoders</code> folder next to <code>AndySDR.exe</code>. If one shows ✖ in <b>⚙ SETTINGS › Decoders</b>, press <b>⬇ Download missing decoders</b> and AndySDR fetches it from GitHub into <code>%APPDATA%\\AndySDR\\decoders</code>. You can also unzip your own copy into either folder (any sub-folder is fine – AndySDR finds the .exe):</p>
   <dl><dt>DSD-FME</dt><dd>github.com/lwvmobile/dsd-fme – DMR, P25 1/2, NXDN, dPMR, YSF, M17. AndySDR feeds it like SDR++'s network sink (TCP 127.0.0.1:7355, 48 kHz); DSD-FME plays decoded voice on your speakers itself (AndySDR starts the PulseAudio sound server that comes with it).</dd>

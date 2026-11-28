@@ -27,7 +27,7 @@ from .dsp import (AUDIO_RATE, BLOCK_SECONDS, MODES, Receiver, Spectrum, find_pea
 from .memory import MemoryBank
 from .scheduler import Scheduler
 from .biasmon import BiasMonitor, judge
-from . import framesnr, gaincal, passlog
+from . import framesnr, gaincal, passlog, rigctl
 from .sstv import SstvDecoder
 
 log = logging.getLogger("andysdr.engine")
@@ -64,6 +64,12 @@ class Radio:
         self.decoders.adsb = self.adsb
         self.meshsdr = MeshSdr(settings, self._emit)
         self.decoders.meshsdr = self.meshsdr
+        # Lets a trunking decoder retune AndySDR to follow a call onto its voice channel and back again. Inside the
+        # slice already being captured that costs nothing: `_tune` just moves which part of it is listened to.
+        self.rigctl = rigctl.RigctlServer(lambda: self.freq, self.set_frequency,
+                                          log_cb=lambda t: self.decoders.log(t),
+                                          get_mode=lambda: self.mode)
+        self.decoders.rigctl = self.rigctl
         self.ism = IsmSensors(self._emit, freq_fn=lambda: self.freq, on_new=lambda row, text: self.decoders.log(text))
         self.decoders.ism = self.ism
         self.decoders.freq_fn = lambda: self.freq
@@ -212,6 +218,7 @@ class Radio:
         if self.thread:
             self.thread.join(timeout=3)
         self.decoders.stop()
+        self.rigctl.stop()
         self.adsb.shutdown()
         self.meshsdr.shutdown()
         from .decoders import stop_pulse

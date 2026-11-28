@@ -62,6 +62,14 @@ DSD_MODES = {
     "dmr_inv": ["-fs", "-xr"], "dpmr_inv": ["-fm", "-xd"],   # inverted-polarity DMR / dPMR (some radios and RTL dongles)
 }
 
+# Trunk following. These sub-modes add DSD-FME's -T, which makes it read the control channel and chase each call
+# onto the channel it has been given. It needs something to retune, and that something is AndySDR's own rigctl
+# server (see andysdr.rigctl): -U is the port it connects to. The channel map, where the system needs one, is added
+# at launch because its path is only known then.
+DSD_TRUNK = {"dmr_trunk": ["-fs"], "p25_trunk": ["-f1"], "p25p2_trunk": ["-f2"], "nxdn48_trunk": ["-fi"]}
+TRUNK_NAMES = {"dmr_trunk": "DMR trunked (Tier III, Capacity+, Connect+)", "p25_trunk": "P25 trunked",
+               "p25p2_trunk": "P25 Phase 2 trunked", "nxdn48_trunk": "NXDN trunked"}
+
 DECODERS = {
     "dsd":    {"name": "Digital voice (DSD-FME)", "exe": "dsd-fme",
                "help": "DMR, P25, NXDN, dPMR, YSF, M17, D-STAR. Pick the sub-mode or Auto. Use the Inverted entries if a DMR/dPMR signal shows sync but garbage."},
@@ -306,6 +314,7 @@ class DecoderManager:
         self.rate_fn = lambda: 2400000   # set by the radio: current receiver sample rate
         self._watch_stop = True
         self.adsb = None           # set by the radio: the ADS-B engine (takes IQ, not audio)
+        self.rigctl = None         # set by the radio: the tuning server a trunking decoder drives
         self.meshsdr = None        # set by the radio: the SDR-only MeshCore receiver (takes IQ)
         self.ism = None            # set by the radio: the ISM sensor table (IsmSensors) that rtl_433's output fills
 
@@ -461,6 +470,13 @@ class DecoderManager:
                         self.dsd_try = idx
                         first = self.DSD_CYCLE[idx]
                         self.log("DSD-FME: this frequency locked on " + " ".join(first) + " before - trying that first")
+                if sub in DSD_TRUNK and getattr(self, "rigctl", None) is not None:
+                    ok, why = self.rigctl.start()       # must be listening before DSD-FME tries to connect
+                    if not ok:
+                        self.log("Trunking: " + why + " - calls will be decoded but not followed")
+                    else:
+                        self.log(TRUNK_NAMES.get(sub, "Trunked") + ": following calls from the control channel. "
+                                 "Leave the radio on the control channel; AndySDR retunes itself for each call.")
                 self._launch_dsd(sub, first)
                 if sub == "auto":
                     threading.Thread(target=self._dsd_cycle, args=(self.dsd_gen,), name="dsd-cycle", daemon=True).start()
@@ -843,6 +859,8 @@ class DecoderManager:
                 pass
         self.tcp.backlog = list(self.dsd_ring)
         flags = args if args is not None else DSD_MODES.get(sub, ["-ft"])
+        if args is None and sub in DSD_TRUNK:
+            flags = self._trunk_flags(sub)
         argv = [self.dsd_exe, "-i", "tcp:127.0.0.1:7355"] + flags
         extra = self.settings.get("dsd_extra_args", "")
         if extra:
@@ -856,6 +874,33 @@ class DecoderManager:
         self.proc = _popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
         _Reader(self.proc.stdout, self.log, self._dsd_filter).start()
         self.log("DSD-FME started: " + " ".join(os.path.basename(a) for a in argv))
+
+    def _trunk_flags(self, sub):
+        """DSD-FME's arguments for following a trunked system: the modulation, -T, and where to ask for a retune."""
+        flags = list(DSD_TRUNK.get(sub, ["-fs"])) + ["-T"]
+        rig = getattr(self, "rigctl", None)
+        if rig is not None:
+            flags += ["-U", str(rig.port)]
+        chans = self.trunk_file("trunk_channels.csv")
+        if chans:
+            flags += ["-C", chans]
+        else:
+            self.log("Trunking: no channel map yet. Most DMR systems need one - Decoders > Trunking to add it. "
+                     "The control channel will still be decoded meanwhile.")
+        groups = self.trunk_file("trunk_groups.csv")
+        if groups:
+            flags += ["-G", groups]
+        return flags
+
+    def trunk_file(self, name):
+        """The path of a trunking list, if it exists and has more than its heading line in it."""
+        try:
+            p = os.path.join(data_dir(), name)
+            with open(p, encoding="utf-8", errors="replace") as fh:
+                rows = [ln for ln in fh.read().splitlines() if ln.strip()]
+            return p if len(rows) > 1 else None
+        except OSError:
+            return None
 
     DSD_MEMORY_MAX = 300
 
@@ -1034,6 +1079,8 @@ class DecoderManager:
             self.udp = None
         self.tetra_demod = None
         self.tetrapol_demod = None
+        if self.rigctl is not None and self.rigctl.alive:
+            self.rigctl.stop()                          # nothing may retune the radio once trunking has stopped
         if self.active == "adsb" and self.adsb:
             self.adsb.stop()
         if self.active == "meshsdr" and self.meshsdr:

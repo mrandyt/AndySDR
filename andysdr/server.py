@@ -73,6 +73,68 @@ class Client:
         self.q.put_nowait(item)
 
 
+# ----------------------------------------------------------------------- trunking lists
+# DSD-FME reads two CSVs when following a trunked system: a channel map, turning the channel numbers the control
+# channel talks about into frequencies, and an optional list of talkgroup names. They are plain files in the data
+# folder so they can also be edited outside AndySDR, or dropped in from RadioReference.
+TRUNK_FILES = {
+    "channels": ("trunk_channels.csv", "Channel,Frequency",
+                 "One line per channel: the number the system uses, then the frequency in Hz or MHz. "
+                 "Most DMR Tier III and Connect+ systems need this - the control channel talks in channel "
+                 "numbers, not frequencies."),
+    "groups": ("trunk_groups.csv", "Talkgroup,Name,Mode",
+               "Optional: names for the talkgroups, so the log says who is talking rather than a number."),
+}
+
+
+def _trunk_path(which):
+    name = TRUNK_FILES.get(which, TRUNK_FILES["channels"])[0]
+    return os.path.join(data_dir(), name)
+
+
+def _trunk_read(which):
+    try:
+        with open(_trunk_path(which), encoding="utf-8", errors="replace") as fh:
+            return fh.read()
+    except OSError:
+        return TRUNK_FILES.get(which, TRUNK_FILES["channels"])[1] + "\n"
+
+
+def _trunk_write(which, text):
+    """Save a trunking list. The heading line is kept whatever the user does, because DSD-FME skips it."""
+    if which not in TRUNK_FILES:
+        return False, "Unknown list"
+    head = TRUNK_FILES[which][1]
+    lines = [ln.rstrip() for ln in str(text or "").replace("\r\n", "\n").split("\n")]
+    while lines and not lines[-1].strip():
+        lines.pop()
+    if not lines or "," not in lines[0] or lines[0].strip()[0].isdigit():
+        lines.insert(0, head)                     # the first line is data, so it has lost its heading: put it back
+    body = "\n".join(lines) + "\n"
+    if len(body) > 400000:
+        return False, "That list is too long"
+    try:
+        with open(_trunk_path(which), "w", encoding="utf-8") as fh:
+            fh.write(body)
+    except OSError as e:
+        return False, f"Could not save: {e}"
+    n = max(0, len(lines) - 1)
+    return True, f"Saved {n} line{'' if n == 1 else 's'}. Restart the decoder to use it."
+
+
+def _trunk_state(radio):
+    rig = getattr(radio, "rigctl", None)
+    out = {"rigctl": rig.status() if rig else None, "sub": None, "active": None}
+    dec = getattr(radio, "decoders", None)
+    if dec is not None:
+        out["active"] = dec.active
+        out["sub"] = getattr(dec, "sub", None)
+    for key in TRUNK_FILES:
+        txt = _trunk_read(key)
+        out[key] = max(0, len([ln for ln in txt.splitlines() if ln.strip()]) - 1)
+    return out
+
+
 def downloads_dir():
     """The user's Downloads folder (follows Windows' own setting, e.g. when moved to OneDrive)."""
     if sys.platform.startswith("win"):
@@ -668,6 +730,16 @@ class Server:
                     pass
             elif cmd == "gain_cal_list":
                 self._reply(c, "gaincal_saved", r.gaincal_saved())
+            elif cmd == "trunk_status":
+                self._reply(c, "trunk", _trunk_state(r))
+            elif cmd == "trunk_list":
+                self._reply(c, "trunk_list", {"which": m.get("which", "channels"),
+                                              "text": _trunk_read(m.get("which", "channels"))})
+            elif cmd == "trunk_save":
+                ok, why = _trunk_write(m.get("which", "channels"), m.get("text", ""))
+                self._reply(c, "event", {"level": "info" if ok else "warn",
+                                         "text": why or "Saved. Restart the decoder to use the new list."})
+                self._reply(c, "trunk", _trunk_state(r))
             elif cmd == "satrx_gain_cal":
                 rx = getattr(r, "satrx", None)
                 if rx is None:

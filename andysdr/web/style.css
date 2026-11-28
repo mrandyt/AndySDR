@@ -1622,3 +1622,8 @@ body.cr .rx2p { display: none; }           /* the control-room layout docks the 
 .gcal-bad { border-left: 3px solid var(--warn, #e8a33d); padding-left: 10px; }
 .gcal-ceil { color: var(--warn, #e8a33d); }
 .gcal-ceil b { color: var(--warn, #e8a33d); }
+
+/* Trunking: following a trunked system from its control channel. */
+.trunkcard { margin-top: 8px; }
+.trunk-state { display: flex; flex-direction: column; gap: 3px; }
+.trunk-state .warn { color: var(--warn, #e8a33d); }

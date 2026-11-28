@@ -323,11 +323,28 @@
         <option value="dpmr">dPMR</option><option value="ysf">YSF / C4FM</option>
         <option value="m17">M17</option><option value="dstar">D-STAR</option>
         <option value="dmr_inv">DMR (inverted)</option><option value="dpmr_inv">dPMR (inverted)</option><option value="provoice">ProVoice</option><option value="x2tdma">X2-TDMA</option>
+        <optgroup label="Trunked – follows each call onto its own channel">
+          <option value="dmr_trunk">DMR trunked (Tier III / Capacity+ / Connect+)</option>
+          <option value="p25_trunk">P25 trunked</option>
+          <option value="p25p2_trunk">P25 Phase 2 trunked</option>
+          <option value="nxdn48_trunk">NXDN trunked</option>
+        </optgroup>
       </select></label>
       <button class="btn" id="decOff">Decoder OFF</button>
       <button class="btn" id="decClear">Clear log</button>
       
     </div>
+    <details class="card trunkcard" id="trunkBox" data-help="trunking">
+      <summary><b>📡 Trunking</b> <span class="muted small">follow a trunked system from its control channel</span> <span id="trunkChip" class="muted small"></span></summary>
+      <div class="small muted" style="margin:6px 0">On a trunked system the talking is not on the frequency you are listening to: a control channel says which channel each call has gone to. Leave the radio on the control channel, pick one of the <b>Trunked</b> sub-modes, and AndySDR moves itself to each call and back. Inside the slice the receiver is already capturing that costs nothing and loses nothing – a wide receiver like the RSP2 can hold a whole site at once.</div>
+      <div id="trunkState" class="trunk-state"></div>
+      <div class="row wrapline" style="margin-top:8px">
+        <label>List <select id="trunkWhich" class="inp"><option value="channels">Channel map</option><option value="groups">Talkgroup names</option></select></label>
+        <span id="trunkHint" class="muted small grow"></span>
+        <button class="btn sm" id="trunkSave">Save list</button>
+      </div>
+      <textarea id="trunkText" class="inp" rows="8" spellcheck="false" style="width:100%;font-family:Consolas,monospace;margin-top:6px"></textarea>
+    </details>
     <div class="row wrapline dec-hint"><span id="sigNow" class="sig-chip" hidden></span><span class="muted small">Auto-identify, noise muting and the decoder programs are in <a href="#" class="setlink" data-settings="decoders">⚙ Settings › Decoders</a>.</span></div>
     <pre class="console decwin" id="decLog"></pre>
     <div class="card lhcard" data-help="lastheard">
