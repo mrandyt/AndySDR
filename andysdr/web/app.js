@@ -1165,6 +1165,7 @@ function renderLegend() {
 renderLegend();
 function renderBandPlan() {
   const q = $("bpFind").value.trim().toLowerCase(), cat = $("bpCat").value, stat = $("bpStat").value, sub = $("bpSub").checked;
+  BP_OBSERVER = adsRef();
   const qf = parseFloat(q.replace(/\s*mhz$/, ""));
   const list = BANDPLAN.filter((b) => {
     if (cat && b.cat !== cat) return false;

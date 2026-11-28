@@ -305,12 +305,18 @@ const BANDPLAN = [
   start: Math.round(a * 1e6), stop: Math.round(b * 1e6), name, cat, level, mode, step, note: note || "",
   point: a === b,
 }));
+/* Geostationary L-band weather channels. Each sits on the horizon for some UK sites; bpStatus checks the
+   elevation from the receiver's position (set in the ADS-B settings). Elektro-L frequency is approximate. */
+[[1.6941, 1.6941, "GOES HRIT 1694.1 MHz (GEO)", "satellite", 1, "DIG25", 100000, "GOES-19 at 75.2°W, GOES-18 at 137°W – needs a dish"],
+ [1.6910, 1.6910, "Elektro-L LRIT 1691 MHz (GEO)", "satellite", 1, "DIG25", 100000, "Elektro-L at 76°E, approximate frequency – needs a dish"]].forEach(([a, b, name, cat, level, mode, step, note]) => BANDPLAN.push({
+  start: Math.round(a * 1e6), stop: Math.round(b * 1e6), name, cat, level, mode, step, note, point: a === b }));
 BANDPLAN.sort((x, y) => x.start - y.start || x.level - y.level);
 const BANDPLAN_ALL = BANDPLAN.slice();
 
 /* What AndySDR can do with each entry. Rules run in order and the first match wins;
    a category default covers anything no rule names. Shown in the band plan table. */
 const BP_STATUS = {
+  low:       { short: "Too low",     label: "Too low to receive from here",     color: "#6b7280", why: "Below 5° elevation from your position: the signal is blocked by the horizon, hills or buildings." },
   decoded:   { short: "Decoded",      label: "Decoded in AndySDR",               color: "#3ccf6e", why: "A built-in or installed decoder handles this signal." },
   hardware:  { short: "Needs antenna", label: "Decoder ready, needs an antenna",  color: "#f39a33", why: "AndySDR decodes it, but the antenna it needs is not fitted yet." },
   voice:     { short: "Listen",       label: "Listen only (voice / analogue)",   color: "#5b8cff", why: "Voice or analogue traffic: tune in and listen. No decoder needed." },
@@ -321,6 +327,7 @@ const BP_RULES = [
   [(b) => /^Airwave TETRA/.test(b.name), "encrypted"],
   [(b) => /TETRA/.test(b.name), "detect"],
   [(b) => /WEFAX/.test(b.name), "hardware"],
+  [(b) => /GOES HRIT|Elektro-L LRIT/.test(b.name), "hardware"],
   [(b) => /Weather satellites \(HRPT\)/.test(b.name), "hardware"],
   [(b) => /ADS-B \/ Mode S|^ACARS \d|APRS|UK pager|Paging \(POCSAG\)|^FT[48] |Meteor-M LRPT|Weather & polar satellites|Met aids|ISS/.test(b.name + " " + b.note), "decoded"],
   [(b) => /VDL|NAVTEX|AIS |DSC|GSM-R|Cospas|Inmarsat|Iridium|GNSS|Globalstar|Radio astronomy|MSF|DME|NDB|VOR|ILS|ISM|SRD|RFID|IoT|LoRa|[Mm]odel control|alarm|meters|[Rr]adar|Car keys/.test(b.name + " " + b.note), "detect"],
@@ -329,7 +336,27 @@ const BP_RULES = [
 const BP_CAT_DEFAULT = { broadcast: "voice", aviation: "voice", marine: "voice", pmr: "voice", military: "voice",
   amateur: "voice", cb: "voice", licfree: "voice", nav: "detect", science: "detect", satellite: "detect",
   emergency: "detect", cellular: "detect" };
+/* Receiver position [lat, lon] in degrees, set by the app from the ADS-B settings; null = unknown. */
+let BP_OBSERVER = null;
+const BP_MIN_ELEVATION = 5;
+const BP_GEO = [
+  { re: /GOES HRIT/, lon: -75.2, sat: "GOES-19" },
+  { re: /Elektro-L/, lon: 76, sat: "Elektro-L" },
+];
+/* Elevation in degrees of a geostationary satellite at longitude lon, seen from obs [lat, lon]. */
+function bpElevation(lon, obs) {
+  const r = Math.PI / 180, lat = obs[0] * r, dl = (lon - obs[1]) * r;
+  const cg = Math.cos(lat) * Math.cos(dl);                  // cosine of the central angle
+  const sg = Math.sqrt(Math.max(0, 1 - cg * cg));
+  const k = 6378.137 / (6378.137 + 35786);                  // Earth radius over orbit radius
+  return Math.atan2(cg - k, sg) / r;
+}
 function bpStatus(b) {
+  const g = BP_GEO.find((x) => x.re.test(b.name));
+  if (g && BP_OBSERVER) {
+    const el = bpElevation(g.lon, BP_OBSERVER);
+    if (el < BP_MIN_ELEVATION) return { key: "low", ...BP_STATUS.low, why: `${g.sat} is ${el.toFixed(1)}° above the horizon from your position. Under ${BP_MIN_ELEVATION}° it is not usable.` };
+  }
   let key = null;
   for (const [test, k] of BP_RULES) if (test(b)) { key = k; break; }
   if (!key) key = BP_CAT_DEFAULT[b.cat] || "detect";

@@ -15,9 +15,10 @@ js = r"""
 const fs = require("fs"), vm = require("vm");
 const ctx = {};
 vm.createContext(ctx);
-vm.runInContext(fs.readFileSync(process.argv[1], "utf8") + "\n;globalThis.__o = {BANDPLAN, bpStatus, BP_STATUS};", ctx);
+const obs = process.argv[2] === "none" ? "null" : "[" + process.argv[2] + "]";
+vm.runInContext(fs.readFileSync(process.argv[1], "utf8") + "\n;BP_OBSERVER = " + obs + ";\n;globalThis.__o = {BANDPLAN, bpStatus, BP_STATUS};", ctx);
 const { BANDPLAN, bpStatus, BP_STATUS } = ctx.__o;
-const names = process.argv.slice(2);
+const names = process.argv.slice(3);
 const out = {};
 for (const n of names) { const b = BANDPLAN.find((x) => x.name.startsWith(n)); out[n] = b ? bpStatus(b).key : null; }
 const counts = {}; for (const b of BANDPLAN) { const k = bpStatus(b).key; counts[k] = (counts[k] || 0) + 1; }
@@ -43,8 +44,13 @@ expect = {
     "VDL Mode 2": "detect",
     "NAVTEX 490": "detect",
     "Met aids": "decoded",
+    "GOES HRIT 1694.1": "low",
+    "Elektro-L LRIT": "low",
+    "Inmarsat": "detect",
 }
-r = subprocess.run([node, "-e", js, os.path.join(WEB, "bandplan.js")] + list(expect), capture_output=True, text=True)
+r = subprocess.run([node, "-e", js, os.path.join(WEB, "bandplan.js"), "52.668,-2.472"] + list(expect), capture_output=True, text=True)
+r_none = subprocess.run([node, "-e", js, os.path.join(WEB, "bandplan.js"), "none", "GOES HRIT"], capture_output=True, text=True)
+check("no receiver position: GEO satellite not marked too low", json.loads(r_none.stdout)["GOES HRIT"] == "hardware", r_none.stdout + r_none.stderr[-200:])
 check("node loads bandplan.js", r.returncode == 0, r.stderr[-400:])
 got = json.loads(r.stdout) if r.returncode == 0 else {}
 for name, want in expect.items():
