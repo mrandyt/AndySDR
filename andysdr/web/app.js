@@ -1147,6 +1147,7 @@ function renderVfo() {
 
 /* ----- band plan tab ----- */
 $("bpCat").insertAdjacentHTML("beforeend", Object.entries(BANDPLAN_CATS).map(([k, c]) => `<option value="${k}">${esc(c.label)}</option>`).join(""));
+$("bpStat").insertAdjacentHTML("beforeend", Object.entries(BP_STATUS).map(([k, c]) => `<option value="${k}">${esc(c.label)}</option>`).join(""));
 $("bpLegend").innerHTML = Object.entries(BANDPLAN_CATS).map(([k, c]) =>
   `<button class="bp-leg" data-cat="${k}"><span class="bp-dot" style="background:${c.color}"></span>${esc(c.label)}</button>`).join("");
 $("bpLegend").querySelectorAll("[data-cat]").forEach((b) => b.onclick = () => {
@@ -1163,10 +1164,11 @@ function renderLegend() {
 }
 renderLegend();
 function renderBandPlan() {
-  const q = $("bpFind").value.trim().toLowerCase(), cat = $("bpCat").value, sub = $("bpSub").checked;
+  const q = $("bpFind").value.trim().toLowerCase(), cat = $("bpCat").value, stat = $("bpStat").value, sub = $("bpSub").checked;
   const qf = parseFloat(q.replace(/\s*mhz$/, ""));
   const list = BANDPLAN.filter((b) => {
     if (cat && b.cat !== cat) return false;
+    if (stat && bpStatus(b).key !== stat) return false;
     if (!sub && (b.level || b.point)) return false;
     if (!q) return true;
     if (/^[\d.]+(\s*mhz)?$/.test(q) && qf > 0) { const f = qf * 1e6; return b.point ? Math.abs(b.start - f) < 5000 : f >= b.start && f <= b.stop; }
@@ -1177,10 +1179,10 @@ function renderBandPlan() {
     const i = BANDPLAN.indexOf(b);
     return `<tr data-i="${i}" class="${b.level || b.point ? "bp-sub" : ""}"><td><span class="bp-dot" style="background:${bpColor(b)}"></span></td>
       <td class="f" data-act="tune">${fmtMHz(b.start, b.start < 3e7 ? 4 : 3)}</td><td class="muted">${b.point ? "" : fmtMHz(b.stop, b.stop < 3e7 ? 4 : 3)}</td>
-      <td>${esc(b.name)}</td><td>${b.mode}</td><td class="muted">${b.step >= 1e6 ? b.step / 1e6 + " MHz" : b.step >= 1000 ? b.step / 1000 + " kHz" : b.step + " Hz"}</td>
+      <td>${esc(b.name)}</td><td><span class="bp-stat" title="${esc(bpStatus(b).why)}" style="color:${bpStatus(b).color};border:1px solid ${bpStatus(b).color}">${esc(bpStatus(b).short)}</span></td><td>${b.mode}</td><td class="muted">${b.step >= 1e6 ? b.step / 1e6 + " MHz" : b.step >= 1000 ? b.step / 1000 + " kHz" : b.step + " Hz"}</td>
       <td class="muted small">${esc(b.note)}</td>
       <td><button class="btn sm" data-act="tune">Tune</button>${b.point ? "" : ' <button class="btn sm" data-act="search">Search</button>'}</td></tr>`;
-  }).join("") || '<tr><td colspan="8" class="muted">Nothing matches.</td></tr>';
+  }).join("") || '<tr><td colspan="9" class="muted">Nothing matches.</td></tr>';
   $("bpTable").querySelectorAll("tr[data-i]").forEach((tr) => {
     const b = BANDPLAN[+tr.dataset.i];
     tr.querySelectorAll("[data-act=tune]").forEach((el) => el.onclick = () => tuneBand(b));
@@ -1197,7 +1199,7 @@ function markBpRows() {
     tr.classList.toggle("playing", b.point ? Math.abs(f - b.start) <= 2500 : f >= b.start && f <= b.stop);
   });
 }
-$("bpFind").oninput = renderBandPlan; $("bpCat").onchange = renderBandPlan; $("bpSub").onchange = renderBandPlan;
+$("bpFind").oninput = renderBandPlan; $("bpCat").onchange = renderBandPlan; $("bpStat").onchange = renderBandPlan; $("bpSub").onchange = renderBandPlan;
 $("bpHere").onclick = () => {
   $("bpFind").value = fmtMHz(S.freq || 0, 4); $("bpCat").value = ""; $("bpSub").checked = true; renderBandPlan();
   const here = S.freq ? bandsAt(S.freq) : [];

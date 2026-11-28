@@ -308,6 +308,34 @@ const BANDPLAN = [
 BANDPLAN.sort((x, y) => x.start - y.start || x.level - y.level);
 const BANDPLAN_ALL = BANDPLAN.slice();
 
+/* What AndySDR can do with each entry. Rules run in order and the first match wins;
+   a category default covers anything no rule names. Shown in the band plan table. */
+const BP_STATUS = {
+  decoded:   { short: "Decoded",      label: "Decoded in AndySDR",               color: "#3ccf6e", why: "A built-in or installed decoder handles this signal." },
+  hardware:  { short: "Needs antenna", label: "Decoder ready, needs an antenna",  color: "#f39a33", why: "AndySDR decodes it, but the antenna it needs is not fitted yet." },
+  voice:     { short: "Listen",       label: "Listen only (voice / analogue)",   color: "#5b8cff", why: "Voice or analogue traffic: tune in and listen. No decoder needed." },
+  detect:    { short: "Detect only",  label: "Detected only, no decoder",        color: "#9fb4c8", why: "The receiver can tune it and show the signal, but AndySDR does not decode the content." },
+  encrypted: { short: "Encrypted",    label: "Encrypted, activity only",         color: "#ef4b4b", why: "A decoder exists, but the content is encrypted, so only the signal and activity can be seen." },
+};
+const BP_RULES = [
+  [(b) => /^Airwave TETRA/.test(b.name), "encrypted"],
+  [(b) => /TETRA/.test(b.name), "detect"],
+  [(b) => /WEFAX/.test(b.name), "hardware"],
+  [(b) => /Weather satellites \(HRPT\)/.test(b.name), "hardware"],
+  [(b) => /ADS-B \/ Mode S|^ACARS \d|APRS|UK pager|Paging \(POCSAG\)|^FT[48] |Meteor-M LRPT|Weather & polar satellites|Met aids|ISS/.test(b.name + " " + b.note), "decoded"],
+  [(b) => /VDL|NAVTEX|AIS |DSC|GSM-R|Cospas|Inmarsat|Iridium|GNSS|Globalstar|Radio astronomy|MSF|DME|NDB|VOR|ILS|ISM|SRD|RFID|IoT|LoRa|[Mm]odel control|alarm|meters|[Rr]adar|Car keys/.test(b.name + " " + b.note), "detect"],
+  [(b) => /DIG/.test(b.mode), "detect"],
+];
+const BP_CAT_DEFAULT = { broadcast: "voice", aviation: "voice", marine: "voice", pmr: "voice", military: "voice",
+  amateur: "voice", cb: "voice", licfree: "voice", nav: "detect", science: "detect", satellite: "detect",
+  emergency: "detect", cellular: "detect" };
+function bpStatus(b) {
+  let key = null;
+  for (const [test, k] of BP_RULES) if (test(b)) { key = k; break; }
+  if (!key) key = BP_CAT_DEFAULT[b.cat] || "detect";
+  return { key, ...BP_STATUS[key] };
+}
+
 /* Show only what the selected receiver can actually tune (e.g. SDRplay RSP2 Pro: 1 kHz – 2 GHz).
    Works in place, so everything that already uses BANDPLAN sees the shorter list. Returns true if the list changed. */
 function limitBandplan(minHz, maxHz) {

@@ -240,6 +240,7 @@ button, select, input { font-family: inherit; font-size: 13px; }
 .vfo-band { font-size: 13px; }
 .vfo-hint { display: flex; gap: 6px; align-items: center; }
 .bp-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.bp-stat { display: inline-block; padding: 0 6px; border-radius: 3px; font-size: 11px; white-space: nowrap; }
 #bandmap { width: 100%; height: 34px; display: block; cursor: pointer; border-radius: 6px; background: #07090b; margin-bottom: 4px; }
 .sig-chip { border-radius: 5px; padding: 2px 8px; font-size: 12.5px; font-weight: 600; white-space: nowrap; border: 1px solid; }
 .sig-chip.dig { color: #7ff0a6; border-color: #2d8a52; background: rgba(40,160,90,.14); }
