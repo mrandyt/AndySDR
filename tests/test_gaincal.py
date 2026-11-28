@@ -93,6 +93,18 @@ check("...nor does a quiet aerial that never moved", gaincal.ceiling([(g, -70.0)
 check("...nor does a noisy one", all(gaincal.ceiling(sweep(20.0, noise=0.8, seed=s)) is None for s in range(8)))
 sim = sweep(8.0, compress_db=36.0)
 c = gaincal.ceiling(sim)
+# A real RSP2 sweep, which goes haywire above the gain where it reported overload: the floor drops 40 dB, climbs
+# back, and ends higher than it started.  None of that is a measurement, so none of it may set a ceiling.
+rsp = [(0.0, -99.0), (4.8, -99.3), (9.5, -98.3), (14.3, -98.2), (19.0, -98.6), (23.8, -98.0), (28.6, -97.1),
+       (33.3, -89.9), (38.1, -88.3), (42.9, -79.9), (47.6, -78.4), (52.4, -76.8), (57.1, -72.7), (61.9, -70.0),
+       (66.7, -68.5), (71.4, -62.5), (76.2, -60.5), (81.0, -58.6), (85.7, -97.0), (90.5, -98.1), (95.2, -60.0),
+       (100.0, -40.1)]                     # measured, SDRplay RSP2 on 159.725 MHz
+r = gaincal.choose(rsp, overload_from=85.7)
+check("an overloading receiver gets no invented ceiling", r["ceiling"] is None, r["ceiling"])
+check("...and the gain is still the one at the bend", 32.0 <= r["gain"] <= 35.0, r["gain"])
+check("...and the headroom stops at the overload point, not the top of the dial", 48.0 <= r["headroom"] <= 52.0,
+      r["headroom"])
+
 check("a simulated compressing sweep is spotted too", c is not None and 30.0 <= c <= 40.0, c)
 r = gaincal.choose(sim)
 check("...and the gain chosen is never above the ceiling", r["gain"] <= c + 0.01, (r["gain"], c))

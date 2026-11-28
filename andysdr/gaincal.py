@@ -103,7 +103,9 @@ def choose(points, overload_from=None, want=WANT_SLOPE, keep=None):
         return None
     lo, hi = pts[0][0], pts[-1][0]
     top = hi if overload_from is None else max(lo, min(hi, float(overload_from) - 2.0))
-    ceil = ceiling(pts)
+    # Readings taken above the gain where the receiver said it was overloading are not to be trusted - a real RSP2
+    # sweep has the floor collapsing 40 dB there and then leaping back - so look for the ceiling below that only.
+    ceil = ceiling([p for p in pts if p[0] <= top + 1e-9])
     if ceil is not None:
         top = max(lo, min(top, ceil))                   # never recommend a gain the front end cannot take
     slopes = [(g, _slope_at(pts, i)) for i, (g, _f) in enumerate(pts)]
@@ -149,5 +151,5 @@ def choose(points, overload_from=None, want=WANT_SLOPE, keep=None):
                 "compress - do not go above that on this aerial." % ceil)
     at = min(slopes, key=lambda s: abs(s[0] - pick))[1]      # `keep` can land between two measured points
     return {"gain": round(pick, 1), "why": why, "slope": round(at, 2), "ceiling": ceil,
-            "headroom": round((ceil if ceil is not None else hi) - pick, 1),
+            "headroom": round(max(0.0, top - pick), 1),   # what is left before the ceiling or the overload point
             "points": [[round(g, 1), round(f, 1)] for g, f in pts]}
