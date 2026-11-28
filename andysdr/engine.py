@@ -36,11 +36,23 @@ SPEC_MIN_DB, SPEC_MAX_DB = -130.0, -10.0
 AG_HIGH_DB = -45.0       # auto RF gain: a signal stronger than this (in the channel, dB from full scale) is eased down
 AG_BLOCKS = 6            # ... if it stays that strong for this many 50 ms blocks
 AG_SETTLE_S = 1.0        # ... and then waits this long for the radio to settle before the next step
-AG_STEP_FRAC = 0.06      # each step lowers the gain by this fraction of the receiver's gain range
+AG_STEP_FRAC = 0.06      # each step lowers the gain by this fraction of the receiver's gain range ...
+AG_STEP_MAX_DB = 3.0     # ... but never more than this, or a wide-range receiver moves in huge jumps
 AG_MAX_DROP = 0.35       # ... but never by more than this fraction of the range in total
 AG_QUIET_DB = 10.0       # auto RF gain: the channel is "quiet" when it is this far below the strong-signal level ...
 AG_RECOVER_S = 6.0       # ... for this long: the gain then climbs back one step (so a weak caller after a strong one is still heard)
 AG_OVL_DROP = 0.5        # when the receiver itself reports ADC overload, the gain may be eased down this fraction of the range
+AG_DROP_MAX_DB = 20.0    # ... and whatever the fractions work out at, never further down than this in total
+
+# Decoders the automatic gain must leave alone. Two kinds. Those that are handed raw IQ (ADS-B, MeshCore, the
+# sensor bands, AERO, the satellites) have no VFO channel worth measuring, so the level the automatic gain reads is
+# not the signal it thinks it is - and ADS-B has no gain of its own, so every step taken here is a step off its
+# range. And those where the amplitude *is* the information: ACARS is AM, a weather fax or an SSTV picture is drawn
+# by amplitude, so moving the gain mid-message corrupts the thing being decoded rather than rescuing it. What is
+# left - FM voice, pagers, packet - is what the automatic gain was written for, where only the frequency carries
+# meaning and backing off a distorting signal genuinely helps.
+AG_STEADY = frozenset({"adsb", "meshsdr", "ism", "aero", "goes", "metop", "lrpt", "acars", "wefax", "sstv",
+                       "vdl2", "ft8", "sonde"})
 AG_HOLD_S = 60.0         # ... but not for this long after a strong signal pushed it down again soon after a climb
 MUTE_WHEN_DECODING = ("dsd", "tetra", "tetrapol", "pager", "data")
 REPLAY_MAX_S = 120                    # the replay buffer remembers up to two minutes of what you heard
@@ -967,6 +979,16 @@ class Radio:
         except Exception:                                 # noqa: BLE001
             return []
 
+    @staticmethod
+    def _ag_step(span):
+        """How far one automatic-gain step moves, in dB.
+
+        A fraction of the receiver's range alone is wrong: the SDRplay's range is 0-100, so six per cent of it is a
+        6 dB jump, which is audible on voice and is enough on its own to throw a decoder. Capped so a wide-range
+        receiver steps as gently as a narrow one.
+        """
+        return max(1.0, min(AG_STEP_FRAC * span, AG_STEP_MAX_DB))
+
     def _autogain_tick(self, now):
         """Auto RF gain (optional): the RF GAIN knob is the most gain you want. When a signal in the channel is so strong that it
         distorts (a digital decoder will not lock on a distorted signal), ease the gain down a step at a time; going to another
@@ -975,7 +997,9 @@ class Radio:
         if dev is None:
             return
         ceiling = self._knob()
-        if not self.s.get("auto_gain") or self.job_gain is not None or self.s["agc"] or getattr(dev, "agc", False) or self.scan["state"] != "manual":
+        steady = getattr(getattr(self, "decoders", None), "active", None) in AG_STEADY
+        if not self.s.get("auto_gain") or self.job_gain is not None or self.s["agc"] or getattr(dev, "agc", False) \
+                or self.scan["state"] != "manual" or steady:
             if self.ag_cur is not None:                  # switched off or not applicable: the knob's value comes back
                 self.ag_cur = None
                 dev.set_gain(ceiling)
@@ -1001,7 +1025,7 @@ class Radio:
             if self.ag_quiet_t is None:
                 self.ag_quiet_t = now
             if now - self.ag_quiet_t >= AG_RECOVER_S and now >= self.ag_hold_t and now - self.ag_t >= AG_SETTLE_S:
-                self.ag_cur = min(ceiling, self.ag_cur + max(1.0, AG_STEP_FRAC * span))
+                self.ag_cur = min(ceiling, self.ag_cur + self._ag_step(span))
                 self.ag_t = self.ag_raised_t = now
                 self.ag_quiet_t = now
                 dev.set_gain(self.ag_cur)
@@ -1012,10 +1036,11 @@ class Radio:
             return
         if now - self.ag_raised_t < 20.0:                # it was pushed down again soon after climbing: stop trying for a while
             self.ag_hold_t = now + AG_HOLD_S
-        floor = max(float(lo), ceiling - (AG_OVL_DROP if overloaded else AG_MAX_DROP) * span)
+        drop = min((AG_OVL_DROP if overloaded else AG_MAX_DROP) * span, AG_DROP_MAX_DB)
+        floor = max(float(lo), ceiling - drop)
         if self.ag_cur <= floor:
             return
-        self.ag_cur = max(floor, self.ag_cur - max(1.0, AG_STEP_FRAC * span))
+        self.ag_cur = max(floor, self.ag_cur - self._ag_step(span))
         self.ag_t = now
         self.ag_over = 0
         dev.set_gain(self.ag_cur)
