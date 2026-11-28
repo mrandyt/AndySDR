@@ -460,6 +460,15 @@ class Scheduler:
                            for p in self.sats.upcoming(now) if p["sat"] in lrpt and p["los"] > now][:4]
         except Exception:                            # noqa: BLE001
             out["next"] = []
+        # Which satellites have been given their own answer to "use both receivers".  Their own tick wins, and the one
+        # on this screen does not apply to them - without saying so, the screen looks as though it has changed itself.
+        try:
+            cfg = self.sats.cfg()
+            out["both_own"] = [x["name"] for x in self.sats.status()["sats"]
+                               if x["action"] in satrx.ACTIONS and x["kind"] != "geo"
+                               and (cfg.get(x["id"]) or {}).get("both") is not None]
+        except Exception:                            # noqa: BLE001
+            out["both_own"] = []
         return out
 
     def _sat_status(self):

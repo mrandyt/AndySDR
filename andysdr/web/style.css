@@ -1594,3 +1594,4 @@ body.phone #tab-set .card { padding: 14px; }
 .gcal-list table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .gcal-list td, .gcal-list th { padding: 3px 6px; text-align: left; border-bottom: 1px solid rgba(125,160,200,.14); }
 .gcal-list th { font-weight: 600; opacity: .7; }
+.rx2-both-own { margin-top: 6px; padding: 6px 8px; border-radius: 6px; background: rgba(240,180,60,.14); }

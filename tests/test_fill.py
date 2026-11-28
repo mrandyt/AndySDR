@@ -27,6 +27,7 @@ pct, lines = imgcheck.scanline_fill(os.path.join(d, "msu_mr_rgb_MSA.png"))
 check("fill counts only the lines between the first and last with data", lines == 940 and abs(pct - 80.9) < 0.2, (pct, lines))
 ff = imgcheck.folder_fill(d)
 check("a folder's figure ignores map and corrected pictures", ff and abs(ff["pct"] - 80.9) < 0.2, ff)
+check("...and says how many pictures are worth keeping", ff and ff["good"] == 1 and ff["n"] == 1, ff)
 b = smooth(a.shape)
 Image.fromarray(b).save(os.path.join(d, "msu_mr_rgb_MSA.png"))
 check("a complete picture is 100%", imgcheck.scanline_fill(os.path.join(d, "msu_mr_rgb_MSA.png"))[0] == 100.0)
@@ -35,6 +36,14 @@ Image.fromarray(n).save(os.path.join(d, "msu_mr_rgb_NOISY.png"))
 pn, ln = imgcheck.scanline_fill(os.path.join(d, "msu_mr_rgb_NOISY.png"))
 check("static does not count as picture", abs(pn - 40.4) < 1.0 and ln == 940, (pn, ln))
 check("an empty folder has no figure", imgcheck.folder_fill(tempfile.mkdtemp()) is None)
+# a folder with one good picture and two poor ones: the count is what tells you the pass was thin
+d2 = tempfile.mkdtemp()
+Image.fromarray(smooth((1000, 300, 3))).save(os.path.join(d2, "msu_mr_rgb_A.png"))
+for nm in ("msu_mr_rgb_B.png", "msu_mr_rgb_C.png"):
+    poor = smooth((1000, 300, 3)); poor[150:850] = 0          # mostly missing
+    Image.fromarray(poor).save(os.path.join(d2, nm))
+f2 = imgcheck.folder_fill(d2)
+check("1 of 3 pictures worth keeping is reported as such", f2 and f2["good"] == 1 and f2["n"] == 3, f2)
 Image.fromarray(np.zeros((1000, 300, 3), np.uint8)).save(os.path.join(d, "msu_mr_rgb_EMPTY.png"))
 check("an all-black picture is 0%, not an error", imgcheck.scanline_fill(os.path.join(d, "msu_mr_rgb_EMPTY.png"))[0] == 0.0)
 

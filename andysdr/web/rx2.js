@@ -84,6 +84,16 @@ function rx2GainSet(v, final) {
 function rx2BothShow() {
   const r = SCH && SCH.satrx, b = rx2$("rx2Both"); if (!r || !b) return;
   if (document.activeElement !== b) b.checked = !!r.both;
+  // A satellite that has been given its own answer on the Scheduler ignores this tick.  Without saying so, this box
+  // looks as though it has changed itself whenever the two disagree.
+  const own = r.both_own || [], note = rx2$("rx2BothOwn");
+  if (!note) return;
+  note.hidden = !own.length;
+  if (own.length) {
+    note.innerHTML = "\u26a0 <b>" + own.map((n) => n.replace(/\s*\(.*$/, "")).join("</b> and <b>") + "</b> " +
+      (own.length === 1 ? "has its own" : "have their own") + " <b>Both receivers</b> tick on the Scheduler, which wins. " +
+      "This one only applies to satellites that have not been given an answer of their own.";
+  }
 }
 function rx2GainShow() {
   const r = SCH && SCH.satrx, rg = rx2$("rx2GRange"); if (!r || !rg) return;

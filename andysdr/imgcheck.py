@@ -55,6 +55,7 @@ def rotate_180(path):
 
 
 # --------------------------------------------------------------------------- how filled-in a satellite picture is
+GOOD_FILL = 50.0          # a picture at least this filled in is worth keeping
 _SKIP = ("map", "corrected", "project", "false_color", "composite_")
 
 
@@ -102,9 +103,12 @@ def folder_fill(out_dir):
         if name.startswith("rgb") or "_rgb_" in name or "msu" in name:
             if not any(w in name for w in _SKIP):
                 files.append(f)
-    vals = [v for v in (scanline_fill(f) for f in files[:12]) if v is not None and v[1] > 0]
+    vals = [v for v in (scanline_fill(f) for f in sorted(files)[:24]) if v is not None and v[1] > 0]
     if not vals:
         return None
     vals.sort()
     pct, lines = vals[len(vals) // 2]
-    return {"pct": pct, "lines": lines}
+    # One median figure says how the pass went on average; what you want to know is how many pictures are worth
+    # keeping.  A picture under GOOD_FILL is mostly black bands and static.
+    good = sum(1 for p, _ln in vals if p >= GOOD_FILL)
+    return {"pct": pct, "lines": lines, "good": good, "n": len(vals)}

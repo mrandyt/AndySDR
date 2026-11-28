@@ -162,6 +162,8 @@ class PassLog:
                 r["decoded"] = True
                 if fill and fill.get("pct") is not None:
                     r["fill"] = fill["pct"]              # % of scan lines with data (between first and last line)
+                    if fill.get("n"):
+                        r["fill_good"], r["fill_n"] = int(fill.get("good") or 0), int(fill["n"])
                     if fill.get("poor"):
                         r["poor"] = True                  # the pictures were set aside, not shown in the gallery
                 if note:
@@ -213,7 +215,8 @@ class PassLog:
                         "max_el": r.get("max_el"), "gain": r.get("gain"), "gain_mode": r.get("gain_mode"),
                         "snr": r.get("snr_peak"), "score": r.get("score"), "samples": r.get("samples", 0),
                         "result": self.result(r, now), "images": r.get("images", 0), "stopped": r.get("stopped"),
-                        "fill": r.get("fill"), "merged_fill": (r.get("merged") or {}).get("fill"),
+                        "fill": r.get("fill"), "fill_good": r.get("fill_good"), "fill_n": r.get("fill_n"),
+                        "merged_fill": (r.get("merged") or {}).get("fill"),
                         "user_note": r.get("user_note")})
         return out
 
