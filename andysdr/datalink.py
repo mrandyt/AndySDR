@@ -11,6 +11,8 @@ import os
 import threading
 import time
 
+from . import acarsdecode
+from .acarsinfo import _NOT_APT
 from .config import data_dir
 from .radiosonde import bearing_distance
 
@@ -48,6 +50,7 @@ class DatalinkStore:
             rec = dict(m, id=self.next_id, ts=round(now, 1), freq=int(freq or 0),
                        date=time.strftime("%Y-%m-%d", time.localtime(now)), t=time.strftime("%H:%M:%S", time.localtime(now)),
                        label_name=_label_name(m["label"]))
+            rec["dec"] = self._read_body(m.get("text") or "")        # position, route, waypoints, what it is for
             rec.pop("t_", None)
             self.next_id += 1
             self.acars.append(rec)
@@ -59,6 +62,19 @@ class DatalinkStore:
             rec["date"])
         self.emit("acars", rec)
         return rec
+
+    def _read_body(self, text):
+        """What can be read out of the message body itself (see acarsdecode)."""
+        try:
+            lat, lon = self.s.get("adsb_lat"), self.s.get("adsb_lon")
+            near = (float(lat), float(lon)) if lat is not None and lon is not None else None
+        except (TypeError, ValueError):
+            near = None
+        try:
+            return acarsdecode.decode(text, near=near, not_apt=_NOT_APT)
+        except Exception:                                            # noqa: BLE001 - never lose a message over this
+            log.exception("reading an ACARS body")
+            return {}
 
     # ------------------------------------------------------------------ radiosondes
     def add_sonde(self, r, freq=0):

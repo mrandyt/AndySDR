@@ -331,7 +331,9 @@ function renderState() {
   $("muteDig").checked = S.mute_digital_audio !== false;
   $("dsdGate").checked = !!S.dsd_gate;
   $("devname").textContent = S.device ? `· ${S.device}` : "";
-  $("listeners").textContent = S.listeners ? `· ${S.listeners} connected` : "";
+  // How many screens are looking at this radio - not how many receivers it has (the receiver strip shows those).
+  $("listeners").textContent = S.listeners ? `· ${S.listeners} ${S.listeners === 1 ? "screen" : "screens"}` : "";
+  $("listeners").title = S.listeners ? `${S.listeners} screen${S.listeners === 1 ? "" : "s"} open on this radio (this PC, phones, other computers)` : "";
   if (!knobs.sq.dragging) knobs.sq.set(S.squelch, false);
   if (!knobs.gain.dragging) knobs.gain.set(S.gain, false);
   knobs.gain.render();
@@ -1657,13 +1659,28 @@ function dlStatus(d) {
 function acarsMatch(m) {
   if ($("acarsHideEmpty").checked && !m.text) return false;
   const q = $("acarsSearch").value.trim().toLowerCase();
-  return !q || [m.reg, m.flight, m.label, m.label_name, m.text].join(" ").toLowerCase().includes(q);
+  const d = m.dec || {};
+  const extra = [d.from, d.to, d.what, ...(d.waypoints || []).map((w) => w[0])].filter(Boolean).join(" ");
+  return !q || [m.reg, m.flight, m.label, m.label_name, m.text, extra].join(" ").toLowerCase().includes(q);
 }
 function acarsRow(m, isNew) {
   const f = m.freq ? `<td class="f" data-f="${m.freq}" title="Tune here">${fmtMHz(m.freq, 3)}</td>` : "<td>—</td>";
   return `<tr class="${isNew ? "new" : ""}" data-id="${m.id}" title="Click for details about this aircraft and message"><td class="t">${esc(m.t)}</td>${f}<td><b>${esc(m.reg || "—")}</b>${m.via ? `<span class='muted via' title='Heard on the ${m.via === "AERO" ? "Inmarsat AERO satellite link" : "VDL2 digital link"}${m.icao ? ", aircraft address " + m.icao : ""}'>${esc(m.via)}</span>` : ""}</td><td>${esc(m.flight || "")}</td>` +
     `<td class="lbl" title="${esc(m.label_name || "")}">${esc(m.label)}${m.down ? "" : " <span class='muted' title='Sent from a ground station to the aircraft'>→a/c</span>"}</td>` +
-    `<td class="msg">${m.text ? esc(m.text) : '<span class="muted">(no text)</span>'}${m.more ? ' <span class="muted">…more</span>' : ""}</td></tr>`;
+    `<td class="msg">${m.text ? esc(m.text) : '<span class="muted">(no text)</span>'}${m.more ? ' <span class="muted">…more</span>' : ""}${acarsChips(m)}</td></tr>`;
+}
+// What AndySDR could read out of the body: shown as small chips under the raw text.
+function acarsChips(m) {
+  const d = m.dec || {};
+  const out = [];
+  if (d.lat != null) out.push(`<span class="ac-chip pos" title="Position reported in this message">📍 ${fmtLatLon(d.lat, d.lon)}</span>`);
+  if (d.from) out.push(`<span class="ac-chip" title="Where the flight is going">${esc(d.from)} → ${esc(d.to)}</span>`);
+  (d.waypoints || []).slice(0, 3).forEach(([n, t]) =>
+    out.push(`<span class="ac-chip wpt" title="Navigation point named in this message">${esc(n)}${t ? " " + esc(t) : ""}</span>`));
+  return out.length ? `<div class="ac-chips">${out.join("")}</div>` : "";
+}
+function fmtLatLon(lat, lon) {
+  return `${Math.abs(lat).toFixed(3)}°${lat < 0 ? "S" : "N"} ${Math.abs(lon).toFixed(3)}°${lon < 0 ? "W" : "E"}`;
 }
 function acarsCount(n) {
   const st = (S.decoder === "vdl2" ? DL.status.vdl2 : DL.status.acars) || {};
@@ -1740,6 +1757,22 @@ function acarsInfoOpen(id) {
   $("acarsModal").hidden = false;
   send({ cmd: "acars_info", id });
 }
+// The parts of the body AndySDR can read, laid out, above the raw text.
+function acarsReadHtml(m) {
+  const d = m.dec || {}, bits = [];
+  if (d.lat != null) {
+    const map = `https://www.openstreetmap.org/?mlat=${d.lat}&mlon=${d.lon}#map=8/${d.lat}/${d.lon}`;
+    bits.push(`<span>Position</span><span><b>${fmtLatLon(d.lat, d.lon)}</b> <a href="${map}" target="_blank" rel="noopener">show on a map</a></span>`);
+  }
+  if (d.from) bits.push(`<span>Flying</span><span><b>${esc(d.from)}</b> to <b>${esc(d.to)}</b></span>`);
+  if (d.waypoints && d.waypoints.length)
+    bits.push(`<span>Navigation points</span><span>${d.waypoints.map(([n, t]) => esc(n) + (t ? ` <span class="muted">${esc(t)}</span>` : "")).join(", ")}</span>`);
+  const body = (m.text || "").split(/\s*\|\s*|\n/).map((x) => x.trim()).filter(Boolean);
+  const laid = body.length > 1 ? `<pre class="ai-raw">${body.map(esc).join("\n")}</pre>` : "";
+  if (!bits.length && !laid) return "";
+  return `<div class="ai-read"><h4>What AndySDR could read in it</h4>${bits.length ? `<div class="ai-grid">${bits.join("")}</div>` : ""}${laid}</div>`;
+}
+
 function acarsInfoShow(d) {
   if (!d || d.id !== ACARS_INFO_ID || $("acarsModal").hidden) return;
   const m = DL.acars.find((x) => x.id === d.id); if (!m) return;
@@ -1759,7 +1792,8 @@ function acarsInfoHtml(m, d) {
     ${row("Sent", d ? esc(d.direction) : (m.down ? "from the aircraft" : "from the ground to the aircraft"))}
     ${row("Type", `<b>${esc(lbl.code || "–")}</b> ${esc(lbl.name || "")}`)}
     ${row("What it is", esc(lbl.what || ""))}
-    </div>${m.text ? `<pre class="ai-raw">${esc(m.text)}</pre>` : '<p class="muted">This message has no text.</p>'}</div>`;
+    ${row("Sent by", esc(((m.dec || {}).what) || ""))}
+    </div>${acarsReadHtml(m)}${m.text ? `<pre class="ai-raw">${esc(m.text)}</pre>` : '<p class="muted">This message has no text.</p>'}</div>`;
   // the aircraft
   const typ = [a.maker && a.type && !a.type.toLowerCase().includes(a.maker.toLowerCase()) ? a.maker : "", a.type].filter(Boolean).join(" ");
   h += `<div class="ai-sec"><h3>The aircraft</h3><div class="ai-plane">
