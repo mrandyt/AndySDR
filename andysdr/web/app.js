@@ -109,6 +109,7 @@ function onJSON(m) {
       break;
     case "hello": onHello(d); break;
     case "hidden_buttons": custRemote(d); break;
+    case "autostart": showAutostart(d); break;
     case "state": S = d; renderState(); adsbStat(); break;
     case "memory": MEM = d; renderMemory(); break;
     case "activity": renderActivity(d); break;
@@ -206,6 +207,7 @@ function onHello(h) {
   $("alPass").checked = st.alert_pass !== false; $("alWatch").checked = st.alert_watch !== false; watchSet(st.watch_list);
   $("tidyFill").value = st.tidy_min_fill || 0;
   $("updAuto").checked = st.update_check !== false; $("updDl").checked = !!st.update_auto_download;
+  showAutostart(h.autostart, st.start_with_windows);
   if (h.update) onUpdate(h.update, true);
   $("setDelay").value = st.scan_delay; $("setDwell").value = st.scan_dwell;
   $("setDeemph").value = String(st.deemphasis_us || 50);
@@ -2869,6 +2871,16 @@ $("updClose").onclick = () => { sessionStorage.setItem("andysdr_upd_later", UPD.
 $("updSkip").onclick = () => { send({ cmd: "update_skip" }); $("updateModal").hidden = true; toast(`Version ${UPD.latest} skipped. Check for updates now brings it back.`); };
 $("updCheck").onclick = () => send({ cmd: "update_check" });
 $("updShow").onclick = () => { renderUpdateModal(); };
+function showAutostart(a, saved) {
+  const box = $("startWin"), why = $("startWinWhy");
+  if (!box) return;
+  a = a || {};
+  box.checked = a.on !== undefined ? !!a.on : !!saved;
+  box.disabled = a.available === false;
+  if (a.available === false && a.why) why.textContent = a.why;
+  else why.textContent = "Keeps recording satellite passes after a restart \u2013 a pass is only recorded while AndySDR is running.";
+}
+$("startWin").onchange = () => send({ cmd: "settings", values: { start_with_windows: $("startWin").checked } });
 $("updAuto").onchange = () => send({ cmd: "settings", values: { update_check: $("updAuto").checked }, quiet: true });
 $("tidyFill").onchange = () => send({ cmd: "settings", values: { tidy_min_fill: $("tidyFill").value }, quiet: true });
 $("updDl").onchange = () => send({ cmd: "settings", values: { update_auto_download: $("updDl").checked }, quiet: true });
@@ -3853,7 +3865,7 @@ const HELP = {
   qfiles: ["Files buttons", "IMAGES – shows the WEATHER IMAGES tab: every received picture (WEFAX charts, SSTV, satellite images) with the satellite or station name, frequency and time, and a Download button that saves it to the device you are using. RECORDINGS – shows the RECORDINGS tab: your sound recordings with Play and Download buttons. Both work the same on the radio PC and on remote PCs, tablets and phones."],
   meshsdr: ["MeshCore with just the SDR", "Receive-only MeshCore using your SDR – no LoRa board. Press Start listening (UK/EU narrow is 869.618 MHz, 62.5 kHz, SF8). NODES lists every repeater, room server, companion and sensor heard advertising, with its position (click it for a map). MESSAGES shows channel messages for the Public channel and any #hashtag channel you add (or a 32-digit key). PACKET LOG lists everything heard including encrypted direct messages (which cannot be read) and damaged frames. Needs a decent 869 MHz antenna; the SDR must run at 250 kS/s or more."],
   qtog: ["Audio & step buttons", "AGC – automatic RF gain. MUTE – silences this screen without touching the VOLUME knob. MONITOR – holds the squelch open so you can hear the background noise and set up the antenna or gain; press again to return to your squelch setting. STEP − / STEP + – smaller or larger tuning step (shown on the LCD)."],
-  updates: ["Updates", "AndySDR looks for a newer version on its GitHub releases page when it starts and every 12 hours. When one is found a pop-up shows what is new and asks what to do: Download & install, Remind me later, or Skip this version. After the download (checked against GitHub's SHA-256) AndySDR asks again before it installs and restarts itself. 'Check for updates now' looks straight away, even for a version you skipped. Tick 'Download new versions in the background' to have the file ready so installing takes seconds. If AndySDR was installed with the Setup program the installer runs quietly in the background; a portable (unzipped) copy copies the new files over the old ones; a copy run from Python source just opens the releases page. Your settings, memories and pictures in %APPDATA%\\AndySDR are never touched. Updating restarts the radio PC's program, so remote screens reconnect by themselves a few seconds later."],
+  updates: ["Updates", "AndySDR looks for a newer version on its GitHub releases page when it starts and every 12 hours. When one is found a pop-up shows what is new and asks what to do: Download & install, Remind me later, or Skip this version. After the download (checked against GitHub's SHA-256) AndySDR asks again before it installs and restarts itself. 'Check for updates now' looks straight away, even for a version you skipped. Tick 'Download new versions in the background' to have the file ready so installing takes seconds. If AndySDR was installed with the Setup program the installer runs quietly in the background; a portable (unzipped) copy copies the new files over the old ones; a copy run from Python source just opens the releases page. Your settings, memories and pictures in %APPDATA%\\AndySDR are never touched. Updating restarts the radio PC's program, so remote screens reconnect by themselves a few seconds later. 'Start AndySDR when I sign in to Windows' adds AndySDR to the list of programs Windows starts at sign-in, so a restart in the night (a Windows update, a power cut) does not leave the program closed and the morning's satellite passes unrecorded. It is a per-user setting, needs no administrator rights, and unticking it removes the entry again. It only appears in the installed AndySDR, and the PC has to reach the sign-in - a PC sitting at the lock screen with nobody signed in does not start it."],
   adsbshare: ["Share aircraft feed", "Tick to let other programs on your network use AndySDR as an ADS-B receiver: SBS/BaseStation messages on TCP port 30003 and raw AVR (*8D…;) on port 30002. Point Virtual Radar Server, tar1090/readsb, PlanePlotter or a flight-tracking-site feeder at this PC and those ports. The second box turns the daily CSV position log on or off."],
   adsbtable: ["Aircraft list", "One row per aircraft heard in the last two minutes (faded = not heard for 30 s). Click a column title to sort, click a row to highlight it on the map. Callsign and airline come from the aircraft's own identification message, so a new aircraft may show only its hex address for a few seconds. Share the live feed with other programs (Virtual Radar Server, tar1090, PlanePlotter …) from REMOTE & SETTINGS; a dump1090-style aircraft.json is at /api/aircraft.json?token=<password>."],
   pager: ["Pager messages", "Every POCSAG and FLEX page decoded by the pager decoder appears here as a row, newest at the top: time, frequency, protocol and speed, capcode (the pager's address, with the POCSAG function number), your name for it, the type (Alpha text, Numeric or Tone only) and the message. Click ☆ to highlight a capcode – its rows are coloured and a notice pops up whenever it is paged. Click + name to give a capcode a name, click a capcode to show only that one, click a frequency to tune there. Search and the filters narrow the list. Export CSV saves the list; every message is also logged to a CSV file per day in %APPDATA%\\AndySDR\\pager. The same page repeated within a minute is shown once. The tab shows a count of new messages while you are on another tab."],

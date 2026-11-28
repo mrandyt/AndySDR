@@ -6,7 +6,7 @@ import sys
 import threading
 
 APP_NAME = "AndySDR"
-VERSION = "1.26.6"
+VERSION = "1.26.7"
 GITHUB_REPO = "mrandyt/AndySDR"   # where updates are published (GitHub Releases)
 
 
@@ -53,6 +53,7 @@ DEFAULTS = {
     "satrx_gain_mode": "fixed",   # fixed | auto (learn the best)
     "satrx_bias": False,          # bias-T (powers an LNA through the coax)
     "satrx_ppm": 0,
+    "start_with_windows": False,  # put AndySDR in Windows' sign-in start list so a restart cannot cost a pass
     "keep_iq": False,             # keep the raw Meteor IQ recording after SatDump has made the pictures (large files)
     "hotspot_name": "My hotspot", "hotspot_freq": 438800000, "hotspot_cc": 1, "hotspot_ts": 2, "hotspot_tg": "",   # saved DMR hotspot
     "notch_on": False, "notch_hz": 1000, "notch_q": 20, "auto_notch": False,   # audio notch filters

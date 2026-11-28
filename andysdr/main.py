@@ -16,6 +16,7 @@ import threading
 import time
 import webbrowser
 
+from . import autostart
 from .config import APP_NAME, VERSION, Settings, data_dir
 from .engine import Radio
 from .server import Server, lan_addresses
@@ -123,6 +124,8 @@ def main():
         if not args.server:
             webbrowser.open(f"http://127.0.0.1:{settings['server_port']}/")
         return
+
+    autostart.sync(settings)        # keep Windows' sign-in start list agreeing with the setting
 
     radio = Radio(settings)
     server = Server(radio, settings)

@@ -22,7 +22,7 @@ import threading
 import time
 import urllib.parse
 
-from . import acarsinfo, capturemeta
+from . import acarsinfo, autostart, capturemeta
 from .alerts import Alerts, KINDS as ALERT_KINDS, clean_watch_list
 from . import diagnose
 from . import repeaters
@@ -456,7 +456,8 @@ class Server:
                                                  "deemphasis_us", "theme",
                                                  "update_check", "update_auto_download", "hidden_buttons", "tidy_min_fill",
                                                  "alert_pager", "alert_emergency", "alert_priority", "alert_capture", "alert_watch", "alert_pass",
-                                                 "watch_list", "dmr_db_auto")},
+                                                 "watch_list", "dmr_db_auto", "start_with_windows")},
+            "autostart": autostart.status(),
             "server": {"addresses": lan_addresses(), "port": self.s["server_port"],
                        "password": self.s["password"] if self._is_local(c.peer) else "",
                        "host": socket.gethostname()},
@@ -706,14 +707,26 @@ class Server:
                            "password": str, "mute_digital_audio": bool, "auto_gain": bool, "dsd_gate": bool, "update_check": bool, "update_auto_download": bool,
                            "alert_pager": bool, "alert_emergency": bool, "alert_priority": bool, "alert_capture": bool, "alert_pass": bool,
                            "alert_watch": bool, "watch_list": clean_watch_list,
-                           "dmr_db_auto": bool, "tidy_min_fill": lambda v: max(0, min(95, int(float(v))))}
+                           "dmr_db_auto": bool, "start_with_windows": bool, "tidy_min_fill": lambda v: max(0, min(95, int(float(v))))}
                 for k, v in m.get("values", {}).items():
                     if k in allowed:
                         if k == "password" and (not self._is_local(c.peer) or len(str(v)) < 4):
                             continue
                         self.s[k] = allowed[k](v)
                 self.s.save()
-                if not m.get("quiet"):
+                if "start_with_windows" in m.get("values", {}):
+                    want = bool(self.s["start_with_windows"])
+                    ok, why = autostart.apply(want)
+                    if not ok:
+                        self.s["start_with_windows"] = False
+                        self.s.save()
+                        self._reply(c, "event", {"level": "warn", "text": why or "That could not be changed"})
+                    else:
+                        self._reply(c, "event", {"level": "info", "text":
+                                                 "AndySDR will start when you sign in to Windows" if want else
+                                                 "AndySDR will no longer start by itself"})
+                    self._broadcast("autostart", autostart.status())
+                elif not m.get("quiet"):
                     self._reply(c, "event", {"level": "info", "text": "Settings saved"})
             elif cmd == "replay_save":
                 name = r.replay_save(m.get("secs") or 30)
