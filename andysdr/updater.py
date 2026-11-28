@@ -396,16 +396,29 @@ def _certifi_context():
         return None
 
 
+_USE_BUNDLED_CA = False          # set once the PC's own certificate store has been shown not to verify GitHub
+
+
 def _urlopen(req, timeout):
     """urllib.request.urlopen, but if the PC's own certificate store cannot verify GitHub (seen with some
-    frozen builds, antivirus or old Windows root stores) retry once with the bundled CA list."""
+    frozen builds, antivirus or old Windows root stores) retry once with the bundled CA list.
+
+    Once that has happened the bundled list is used first for the rest of the session: on a PC whose store never
+    verifies GitHub, every check and every download was otherwise making a doomed connection first."""
+    global _USE_BUNDLED_CA
+    if _USE_BUNDLED_CA:
+        ctx = _certifi_context()
+        if ctx is not None:
+            return urllib.request.urlopen(req, timeout=timeout, context=ctx)
+        _USE_BUNDLED_CA = False
     try:
         return urllib.request.urlopen(req, timeout=timeout)
     except urllib.error.URLError as e:
         if "CERTIFICATE_VERIFY" in str(e) or isinstance(getattr(e, "reason", None), ssl.SSLCertVerificationError):
             ctx = _certifi_context()
             if ctx is not None:
-                log.info("system certificates failed - retrying with the bundled CA list")
+                log.info("system certificates failed - using the bundled CA list from now on")
+                _USE_BUNDLED_CA = True
                 return urllib.request.urlopen(req, timeout=timeout, context=ctx)
         raise
 
@@ -426,6 +439,11 @@ def _redirect_target(req, timeout=20):
             if 300 <= e.code < 400:
                 return e.headers.get("Location", "")
             raise
+    global _USE_BUNDLED_CA
+    if _USE_BUNDLED_CA:
+        ctx = _certifi_context()
+        if ctx is not None:
+            return attempt(ctx)
     try:
         return attempt(None)
     except urllib.error.HTTPError:
@@ -434,6 +452,8 @@ def _redirect_target(req, timeout=20):
         if "CERTIFICATE_VERIFY" in str(e) or isinstance(getattr(e, "reason", None), ssl.SSLCertVerificationError):
             ctx = _certifi_context()
             if ctx is not None:
+                log.info("system certificates failed - using the bundled CA list from now on")
+                _USE_BUNDLED_CA = True
                 return attempt(ctx)
         raise
 

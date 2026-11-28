@@ -50,6 +50,22 @@ for nm, gen, want in (("FM", G.fm_voice, "NFM"), ("AM", G.am_voice, "AM"), ("USB
     c = collections.Counter(read(gen, 24, 5000 + t)[1] for t in range(12))
     check(f"{nm} voice at 24 dB names mode {want}", c[want] >= 11, dict(c))
 
+# 3b. a steady tone on FM (a test tone, a pip, a sub-tone idling, hum) is not a digital signal.  A sine wave has a
+# discriminator kurtosis of exactly 1.5, which is flatter than speech, so it used to be read as a 2FSK pager.
+tone_bad = []
+rng_t = np.random.default_rng(11)
+for hz in (400, 1000, 1500, 2200):
+    for dev in (1500.0, 3000.0, 5000.0):
+        for snr in (14, 22, 30):
+            n = G.N
+            t = np.arange(n) / G.FS
+            ph = 2 * np.pi * dev / G.FS * np.cumsum(np.sin(2 * np.pi * hz * t))
+            iq = (10 ** (snr / 20) * np.exp(1j * ph) + G._noise(rng_t, n)).astype(np.complex64)
+            r = SignalClassifier().classify(iq, np.sin(2 * np.pi * hz * t).astype(np.float32), "NFM", 165e6)
+            if r and r["kind"] in DIGITAL and r["kind"] not in ("DTMF",):
+                tone_bad.append((hz, dev, snr, r["kind"], r.get("baud")))
+check("a steady tone on FM is not read as a digital signal (36 runs)", not tone_bad, tone_bad[:4])
+
 # 4. a carrier with nobody talking is never given a mode (it could be FM or AM)
 rng = np.random.default_rng(7)
 for label, mk in (("steady carrier", lambda: np.exp(1j * 2 * np.pi * 300 * np.arange(G.N) / G.FS)),

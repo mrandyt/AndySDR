@@ -44,14 +44,22 @@ def band_snr(spec_db, center, fs, f_sig, half_bw):
     p = np.asarray(spec_db[lo:hi], dtype=np.float64)
     if len(p) < 2:
         return None
-    sig = 10.0 * math.log10(float(np.mean(10.0 ** (p / 10.0))) + 1e-30)
+    sig_lin = float(np.mean(10.0 ** (p / 10.0)))
     edge = int(n * 0.08)                                   # the filter roll-off at both ends is not noise
-    guard = 3 * w
-    out = np.concatenate((np.asarray(spec_db[edge:max(edge, k - guard)], dtype=np.float64),
-                          np.asarray(spec_db[min(n - edge, k + guard):n - edge], dtype=np.float64)))
-    if len(out) < 16:
+    out = None
+    for guard in (3 * w, 2 * w, w + 2):                    # a wide channel in a narrow span leaves no room for a wide guard
+        lo_s = np.asarray(spec_db[edge:max(edge, k - guard)], dtype=np.float64)
+        hi_s = np.asarray(spec_db[min(n - edge, k + guard):n - edge], dtype=np.float64)
+        cand = np.concatenate((lo_s, hi_s))
+        if len(cand) >= 16:
+            out = cand
+            break
+    if out is None:
         return None
-    return float(sig - np.median(out))
+    noise_lin = float(np.median(10.0 ** (out / 10.0)))
+    # The channel holds signal AND noise, so the noise has to come off before the two are compared: without that a
+    # channel with nothing in it still reads +2 to +3 dB, and every weak signal is flattered by a few dB.
+    return float(10.0 * math.log10(max(sig_lin - noise_lin, noise_lin * 0.02) / (noise_lin + 1e-30)))
 
 
 class PassMeter:

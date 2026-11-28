@@ -29,7 +29,17 @@ w = int(60e3 / (fs / n))
 spec[k - w:k + w + 1] += 14
 s = passlog.band_snr(spec, center, fs, f_sig, 60e3)
 check("band_snr sees a 14 dB signal", s is not None and 12.5 < s < 15.5, round(s or 0, 1))
-check("band_snr of plain noise is about 0", abs(passlog.band_snr(-80 + rng.normal(0, 1, n), center, fs, f_sig, 60e3)) < 1.5)
+nz = passlog.band_snr(-80 + rng.normal(0, 1, n), center, fs, f_sig, 60e3)
+check("band_snr of plain noise reads well below 0 (nothing there)", nz < -4, round(nz, 1))
+spec3 = -80 + rng.normal(0, 1.0, n)
+spec3[k - w:k + w + 1] += 10 * np.log10(1 + 10 ** (3.0 / 10))      # a true 3 dB signal (signal + noise in the channel)
+s3 = passlog.band_snr(spec3, center, fs, f_sig, 60e3)
+check("a weak signal is not flattered: 3 dB reads as 3 dB", 2.0 < s3 < 4.5, round(s3, 1))
+# a channel wider than the guard band used to leave no bins to measure the noise in, and read as nothing at all
+narrow = -80 + rng.normal(0, 1.0, n)
+kn = int((f_sig - (137.9e6 - 240e3 / 2)) / (240e3 / n))
+narrow[max(0, kn - int(60e3 / (240e3 / n))):kn + int(60e3 / (240e3 / n)) + 1] += 14
+check("a wide channel in a narrow view still gives a figure", passlog.band_snr(narrow, 137.9e6, 240e3, f_sig, 60e3) is not None)
 check("band_snr outside the view is None", passlog.band_snr(spec, center, fs, 150e6, 60e3) is None)
 spec2 = -80 + rng.normal(0, 1.0, n)
 spec2[100:140] += 30                                     # a strong signal elsewhere must not raise the noise floor

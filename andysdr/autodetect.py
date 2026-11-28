@@ -64,6 +64,31 @@ def _levels(d):
     return len(pk)
 
 
+def _tone_dominance(d):
+    """How much of the FM discriminator's power sits in its two strongest narrow lines.
+
+    A steady tone - a test tone, a pip, a paging alert, a sub-tone idling, mains hum - puts nearly all of it there
+    (0.99), while real data spreads it out (DMR 0.01, POCSAG 0.03-0.17) and so does speech (0.02, or 0.35 when a
+    sub-tone is the only thing on the channel).  A sine wave is flatter-topped than speech, so without this test a
+    plain tone measures like 2FSK and gets read as a pager.
+    """
+    x = np.asarray(d, dtype=np.float64)
+    if len(x) < 256:
+        return 0.0
+    x = x - x.mean()
+    X = np.abs(np.fft.rfft(x * np.hanning(len(x)))) ** 2
+    X = X[1:]                                     # DC is not a tone
+    tot = float(X.sum())
+    if tot <= 0:
+        return 0.0
+    took = 0.0
+    for _ in range(2):
+        i = int(np.argmax(X))
+        took += float(X[max(0, i - 3):i + 4].sum())
+        X[max(0, i - 3):i + 4] = 0.0
+    return took / tot
+
+
 def _kurtosis(d):
     d = d - d.mean()
     v = np.mean(d ** 2) + 1e-20
@@ -170,6 +195,7 @@ class SignalClassifier:
         dfull = np.where(m, d, 0.0)[100:]
         d = d[m][100:] if m.sum() > 4000 else d[100:]
 
+        pure_tone = _tone_dominance(dfull) > 0.6      # one steady whistle, not data: never a digital system
         info = {"snr": round(snr, 1), "bw": round(bw / 1000, 1), "duty": round(duty, 2), "cv": round(env_cv, 2)}
 
         def R(kind, label, decoder="", sub="auto", dmode=None, conf=0.7, **extra):
@@ -184,7 +210,7 @@ class SignalClassifier:
 
         # ---- TETRAPOL: GMSK 8000 Bd in 12.5 kHz (constant envelope).  A cheap 8000 Bd line test first, then the
         # real proof: the frame-sync pattern that repeats every 20 ms (tetrapol.probe).
-        if not wide and snr > 12 and env_cv < 0.35 and mode not in ("AM", "USB", "LSB", "CW") and len(dfull) > 8000:
+        if not wide and snr > 12 and env_cv < 0.35 and not pure_tone and mode not in ("AM", "USB", "LSB", "CW") and len(dfull) > 8000:
             if _line_strength(np.diff(dfull) ** 2, [8000])[8000] > 40:
                 tp = tetrapol.probe(iq)
                 if tp:
@@ -201,7 +227,7 @@ class SignalClassifier:
             return R("Morse (CW)", "Morse (CW)", conf=0.5)
 
         # ---- FSK digital: symbol rate lines + discriminator levels
-        if env_cv < 0.35 and mode not in ("USB", "LSB"):
+        if env_cv < 0.35 and not pure_tone and mode not in ("USB", "LSB"):
             dd = np.diff(dfull) ** 2
             lines = _line_strength(dd, [512, 1200, 1600, 2400, 3200, 4800])
             best = max(lines, key=lines.get)
@@ -231,9 +257,9 @@ class SignalClassifier:
                     if 446.0e6 <= freq <= 446.2e6:
                         return R("dPMR", "dPMR446 (4FSK 2400 Bd)", "dsd", "dpmr", "DIG", 0.85)
                     return R("NXDN / dPMR", "NXDN 4800 or dPMR (4FSK 2400 Bd)", "dsd", "nxdn48", "DIG", 0.75)
-                # a 2FSK pager has a very flat discriminator (kurtosis about 1.25); a noisy 4FSK that happens to show two
-            # clusters (dPMR, NXDN) measures 2 or more
-            if best in (512, 1200, 2400, 1600, 3200) and k < 1.75:
+                # a 2FSK pager has a very flat discriminator (kurtosis about 1.25); a noisy 4FSK that happens to show
+                # two clusters (dPMR, NXDN) measures 2 or more
+                if best in (512, 1200, 2400, 1600, 3200) and k < 1.75:
                     name = "FLEX" if best in (1600, 3200) else f"POCSAG {best}"
                     return R("Pager", f"Pager – {name} (2FSK {best} Bd)", "pager", "auto", None, 0.85)
         # ---- analogue voice: FM, AM or single sideband, judged from the signal itself (not from the mode that happens
