@@ -27,7 +27,7 @@ from .dsp import (AUDIO_RATE, BLOCK_SECONDS, MODES, Receiver, Spectrum, find_pea
 from .memory import MemoryBank
 from .scheduler import Scheduler
 from .biasmon import BiasMonitor, judge
-from . import passlog
+from . import gaincal, passlog
 from .sstv import SstvDecoder
 
 log = logging.getLogger("andysdr.engine")
@@ -96,6 +96,7 @@ class Radio:
         self._last_state = 0
         self.level_db = -120.0
         self.ag_cur = None        # auto RF gain: the gain actually in use (None = the knob's value)
+        self.gcal = None          # a gain calibration sweep in progress (see gaincal)
         self.ag_freq = None
         self.ag_over = 0
         self.ag_t = 0.0
@@ -781,6 +782,119 @@ class Radio:
     def _knob(self):
         """The RF gain that applies now: the knob, or the gain picked for a satellite pass."""
         return float(self.job_gain) if self.job_gain is not None else float(self.s["rf_gain"])
+
+    # ------------------------------------------------------------------ finding the best gain
+    GCAL_SETTLE = 0.45        # seconds to let the receiver settle after a gain change
+    GCAL_READ = 0.35          # ...then this long collecting noise-floor readings
+
+    def gaincal_start(self, band=""):
+        """Sweep the RF gain and find the lowest setting at which the aerial, not the receiver, is what you hear."""
+        dev = self.dev
+        if dev is None:
+            return False, "No receiver is open."
+        if self.job is not None:
+            return False, "A scheduled capture is running - try again when it has finished."
+        if self.scan["state"] != "manual":
+            return False, "Stop scanning or searching first: the gain test needs the radio to stay on one frequency."
+        if self.s["agc"] or getattr(dev, "agc", False):
+            return False, "Turn the receiver's hardware AGC off first, or it will undo the test."
+        if self.gcal is not None:
+            return False, "The gain test is already running."
+        lo, hi = dev.gain_range()
+        gains = gaincal.plan(lo, hi, getattr(dev, "gain_steps", None))
+        self.gcal = {"gains": gains, "i": -1, "t": 0.0, "pts": [], "buf": [], "band": str(band or ""),
+                     "freq": int(self.freq), "was": self._knob(), "ovl0": int(getattr(dev, "overloads", 0) or 0),
+                     "ovl_from": None, "dev": getattr(dev, "key", "") or "", "started": time.time()}
+        log.info("gain test: %d steps from %.1f to %.1f dB at %.4f MHz", len(gains), gains[0], gains[-1], self.freq / 1e6)
+        self._gcal_next(time.time())
+        return True, ""
+
+    def gaincal_stop(self, why="stopped"):
+        g, self.gcal = self.gcal, None
+        if g and self.dev:
+            try:
+                self.dev.set_gain(float(g["was"]))        # put the knob back where it was
+            except Exception:                             # noqa: BLE001
+                pass
+        if g:
+            self._emit("gaincal", {"running": False, "why": why})
+            self._push_state(True)
+
+    def _gcal_next(self, now):
+        g = self.gcal
+        g["i"] += 1
+        if g["i"] >= len(g["gains"]):
+            self._gcal_finish()
+            return
+        g["t"] = now
+        g["buf"] = []
+        try:
+            self.dev.set_gain(float(g["gains"][g["i"]]))
+        except Exception:                                 # noqa: BLE001
+            log.exception("gain test")
+            self.gaincal_stop("the receiver would not change gain")
+            return
+        self._emit("gaincal", {"running": True, "step": g["i"] + 1, "steps": len(g["gains"]),
+                               "gain": g["gains"][g["i"]]})
+
+    def _gaincal_tick(self, spec_db, now):
+        g = self.gcal
+        if g is None or spec_db is None or self.dev is None:
+            return
+        if now - g["t"] < self.GCAL_SETTLE:
+            return
+        g["buf"].append(float(np.median(spec_db)))        # the noise floor: the middle of the spectrum, ignoring signals
+        if now - g["t"] < self.GCAL_SETTLE + self.GCAL_READ:
+            return
+        floor = float(np.median(g["buf"])) if g["buf"] else None
+        g["pts"].append((g["gains"][g["i"]], floor))
+        ovl = int(getattr(self.dev, "overloads", 0) or 0)
+        if ovl > g["ovl0"] and g["ovl_from"] is None:
+            g["ovl_from"] = g["gains"][g["i"]]
+        g["ovl0"] = ovl
+        self._gcal_next(now)
+
+    def _gcal_finish(self):
+        g, self.gcal = self.gcal, None
+        res = gaincal.choose(g["pts"], overload_from=g["ovl_from"])
+        if not res:
+            if self.dev:
+                self.dev.set_gain(float(g["was"]))
+            self._emit("gaincal", {"running": False, "why": "not enough readings to decide"})
+            self._push_state(True)
+            return
+        res.update(band=g["band"], freq=g["freq"], dev=g["dev"], when=int(time.time()), was=g["was"])
+        self._gcal_save(res)
+        self.s["rf_gain"] = float(res["gain"])
+        self.s.save()
+        self.ag_cur = None
+        if self.dev:
+            self.dev.set_gain(float(res["gain"]))
+        log.info("gain test: %.1f dB chosen at %.4f MHz (%s) - %s", res["gain"], g["freq"] / 1e6, g["band"] or "no band", res["why"])
+        self._emit("gaincal", dict(res, running=False, done=True))
+        self._emit("event", {"level": "info", "text": f"RF gain set to {res['gain']:.0f} dB. {res['why']}"})
+        self._push_state(True)
+
+    def _gcal_save(self, res):
+        """Remember the answer for this band and receiver, so it can be put back when you come here again."""
+        try:
+            saved = dict(self.s.get("gain_cal") or {})
+        except Exception:                                 # noqa: BLE001
+            saved = {}
+        key = f"{res['dev']}|{res['band'] or round(res['freq'] / 1e6, 1)}"
+        saved[key] = {k: res[k] for k in ("gain", "band", "freq", "dev", "when", "why", "slope")}
+        if len(saved) > 60:
+            for k in sorted(saved, key=lambda k: saved[k].get("when", 0))[:len(saved) - 60]:
+                saved.pop(k, None)
+        self.s["gain_cal"] = saved
+        self.s.save()
+
+    def gaincal_saved(self):
+        try:
+            return sorted((dict(v, key=k) for k, v in (self.s.get("gain_cal") or {}).items()),
+                          key=lambda v: v.get("when", 0), reverse=True)
+        except Exception:                                 # noqa: BLE001
+            return []
 
     def _autogain_tick(self, now):
         """Auto RF gain (optional): the RF GAIN knob is the most gain you want. When a signal in the channel is so strong that it
@@ -1643,6 +1757,7 @@ class Radio:
             if self.pass_meter is not None:
                 self._pass_tick(spec_db, fs, time.time())
             self._bias_tick(spec_db, time.time())
+            self._gaincal_tick(spec_db, time.time())
             q = np.clip((spec_db - SPEC_MIN_DB) / (SPEC_MAX_DB - SPEC_MIN_DB) * 255, 0, 255).astype(np.uint8)
             self._emit("spectrum", {"center": self.dev.center, "fs": fs, "freq": self.freq,
                                     "data": q.tobytes(), "min": SPEC_MIN_DB, "max": SPEC_MAX_DB})

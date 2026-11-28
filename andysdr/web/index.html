@@ -831,6 +831,20 @@
       <label title="Keeps RF GAIN as the most gain you want, and eases it down by itself when a signal is strong enough to distort (digital decoders will not lock on a distorted signal). Going to another frequency starts again from the knob."><input type="checkbox" id="autoGain"> Ease RF gain down on strong signals</label>
       <span class="muted small" id="autoGainInfo"></span>
     </div>
+    <div class="card gcal-card" id="gcalCard" data-help="gaincal" data-find="automatic gain calibration best rf gain per band noise floor knee sweep optimum">
+      <div class="row wrapline"><b>🎚 Find the best RF gain</b>
+        <span class="muted small" id="gcalWhere">for the band you are tuned to</span>
+        <span class="grow"></span>
+        <button class="btn sm primary" id="gcalRun">Find the best gain</button>
+        <button class="btn sm" id="gcalStop" hidden>Stop</button></div>
+      <p class="small muted" id="gcalExplain">Turns the gain up step by step and watches the noise floor. While the receiver's own
+        noise is the louder of the two the floor barely moves; once the aerial's noise is louder it follows the gain one for one.
+        The bend between them is the best setting – any more gain only loses headroom. Takes about 15 seconds and needs the radio
+        to stay on one frequency.</p>
+      <div id="gcalProgress" hidden><div class="gcal-bar"><i id="gcalBarFill"></i></div><span class="small muted" id="gcalStep"></span></div>
+      <div id="gcalResult" hidden></div>
+      <div id="gcalSaved"></div>
+    </div>
     <div class="devsettings" id="devSettings"></div>
     <div class="card bias-card" id="biasCard" data-help="biaspanel" hidden>
       <div class="row wrapline"><b>Bias-T</b> <span class="sig-chip" id="biasChip">–</span>

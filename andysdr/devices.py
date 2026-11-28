@@ -643,6 +643,12 @@ class RtlNativeDevice(BaseDevice):
             return (self._gains[0] / 10.0, self._gains[-1] / 10.0)
         return (0.0, 49.6)
 
+
+    @property
+    def gain_steps(self):
+        """The gains this tuner actually has, in dB (the R820T2 has 29 of them)."""
+        return [g / 10.0 for g in self._gains] if self._gains else None
+
     def sample_rates(self):
         return list(self.RATES)
 

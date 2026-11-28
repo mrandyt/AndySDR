@@ -458,6 +458,7 @@ class Server:
                                                  "alert_pager", "alert_emergency", "alert_priority", "alert_capture", "alert_watch", "alert_pass",
                                                  "watch_list", "dmr_db_auto", "start_with_windows")},
             "autostart": autostart.status(),
+            "gaincal": r.gaincal_saved(),
             "server": {"addresses": lan_addresses(), "port": self.s["server_port"],
                        "password": self.s["password"] if self._is_local(c.peer) else "",
                        "host": socket.gethostname()},
@@ -653,6 +654,20 @@ class Server:
                 r.bias_test()
             elif cmd == "device_setting":
                 r.device_setting(m["key"], m["value"])
+            elif cmd == "gain_cal":
+                if m.get("stop"):
+                    r.gaincal_stop("stopped")
+                else:
+                    ok, why = r.gaincal_start(m.get("band") or "")
+                    if not ok:
+                        self._reply(c, "event", {"level": "warn", "text": why})
+            elif cmd == "gain_cal_use":
+                try:
+                    r.set_gain(float(m.get("gain")))
+                except (TypeError, ValueError):
+                    pass
+            elif cmd == "gain_cal_list":
+                self._reply(c, "gaincal_saved", r.gaincal_saved())
             elif cmd == "refresh_devices":
                 devs = await asyncio.get_running_loop().run_in_executor(None, r.refresh_devices)
                 self._reply(c, "devices", devs)

@@ -109,6 +109,8 @@ function onJSON(m) {
       break;
     case "hello": onHello(d); break;
     case "hidden_buttons": custRemote(d); break;
+    case "gaincal": gcalEvent(d); break;
+    case "gaincal_saved": gcalSaved(d); break;
     case "autostart": showAutostart(d); break;
     case "state": S = d; renderState(); adsbStat(); break;
     case "memory": MEM = d; renderMemory(); break;
@@ -208,6 +210,7 @@ function onHello(h) {
   $("tidyFill").value = st.tidy_min_fill || 0;
   $("updAuto").checked = st.update_check !== false; $("updDl").checked = !!st.update_auto_download;
   showAutostart(h.autostart, st.start_with_windows);
+  gcalSaved(h.gaincal); gcalWhere();
   if (h.update) onUpdate(h.update, true);
   $("setDelay").value = st.scan_delay; $("setDwell").value = st.scan_dwell;
   $("setDeemph").value = String(st.deemphasis_us || 50);
@@ -2914,6 +2917,56 @@ function showAutostart(a, saved) {
   if (a.available === false && a.why) why.textContent = a.why;
   else why.textContent = "Keeps recording satellite passes after a restart \u2013 a pass is only recorded while AndySDR is running.";
 }
+// ---- finding the best RF gain for the band -------------------------------------------------------
+function gcalBand() {
+  const here = S.freq ? bandsAt(S.freq).filter((b) => !b.point) : [];
+  return here.length ? here[here.length - 1].name : "";
+}
+function gcalWhere() {
+  const b = gcalBand();
+  $("gcalWhere").textContent = b ? `for ${b} on this receiver` : "for the frequency you are tuned to";
+}
+function gcalEvent(d) {
+  const run = !!d.running;
+  $("gcalRun").hidden = run; $("gcalStop").hidden = !run;
+  $("gcalProgress").hidden = !run;
+  if (run) {
+    const pc = d.steps ? Math.round(100 * d.step / d.steps) : 0;
+    $("gcalBarFill").style.width = pc + "%";
+    $("gcalStep").textContent = `Trying ${d.gain != null ? d.gain.toFixed(1) : "?"} dB – step ${d.step} of ${d.steps}`;
+    $("gcalResult").hidden = true;
+    return;
+  }
+  if (!d.done) {
+    if (d.why) toast("Gain test " + d.why);
+    return;
+  }
+  $("gcalResult").hidden = false;
+  $("gcalResult").innerHTML = `<div class="gcal-res"><b>${d.gain.toFixed(1)} dB</b>` +
+    (d.band ? ` for <b>${esc(d.band)}</b>` : "") +
+    `<div class="small">${esc(d.why || "")}</div>` +
+    `<div class="small muted">Was ${Number(d.was).toFixed(1)} dB · ${d.headroom.toFixed(0)} dB of gain left in hand` +
+    ` · <a href="#" id="gcalUndo">put it back</a></div></div>`;
+  const u = $("gcalUndo");
+  if (u) u.onclick = (e) => { e.preventDefault(); send({ cmd: "gain_cal_use", gain: d.was }); toast("RF gain put back to " + Number(d.was).toFixed(0) + " dB"); };
+  send({ cmd: "gain_cal_list" });
+}
+function gcalSaved(list) {
+  const el = $("gcalSaved");
+  if (!el) return;
+  if (!list || !list.length) { el.innerHTML = ""; return; }
+  el.innerHTML = `<div class="gcal-list"><table><tr><th>Band</th><th>Gain</th><th>Measured</th><th></th></tr>` +
+    list.slice(0, 12).map((v) => `<tr><td>${esc(v.band || (v.freq / 1e6).toFixed(3) + " MHz")}</td>` +
+      `<td><b>${Number(v.gain).toFixed(1)} dB</b></td><td class="muted">${v.when ? fmtLocal(v.when) : ""}</td>` +
+      `<td><button class="btn sm" data-g="${v.gain}">Use</button></td></tr>`).join("") + "</table></div>";
+  el.querySelectorAll("button[data-g]").forEach((b) => (b.onclick = () => {
+    send({ cmd: "gain_cal_use", gain: +b.dataset.g });
+    toast("RF gain set to " + Number(b.dataset.g).toFixed(0) + " dB");
+  }));
+}
+$("gcalRun").onclick = () => { gcalWhere(); send({ cmd: "gain_cal", band: gcalBand() }); };
+$("gcalStop").onclick = () => send({ cmd: "gain_cal", stop: true });
+
 $("startWin").onchange = () => send({ cmd: "settings", values: { start_with_windows: $("startWin").checked } });
 $("updAuto").onchange = () => send({ cmd: "settings", values: { update_check: $("updAuto").checked }, quiet: true });
 $("tidyFill").onchange = () => send({ cmd: "settings", values: { tidy_min_fill: $("tidyFill").value }, quiet: true });
@@ -3899,6 +3952,7 @@ const HELP = {
   qfiles: ["Files buttons", "IMAGES – shows the WEATHER IMAGES tab: every received picture (WEFAX charts, SSTV, satellite images) with the satellite or station name, frequency and time, and a Download button that saves it to the device you are using. RECORDINGS – shows the RECORDINGS tab: your sound recordings with Play and Download buttons. Both work the same on the radio PC and on remote PCs, tablets and phones."],
   meshsdr: ["MeshCore with just the SDR", "Receive-only MeshCore using your SDR – no LoRa board. Press Start listening (UK/EU narrow is 869.618 MHz, 62.5 kHz, SF8). NODES lists every repeater, room server, companion and sensor heard advertising, with its position (click it for a map). MESSAGES shows channel messages for the Public channel and any #hashtag channel you add (or a 32-digit key). PACKET LOG lists everything heard including encrypted direct messages (which cannot be read) and damaged frames. Needs a decent 869 MHz antenna; the SDR must run at 250 kS/s or more."],
   qtog: ["Audio & step buttons", "AGC – automatic RF gain. MUTE – silences this screen without touching the VOLUME knob. MONITOR – holds the squelch open so you can hear the background noise and set up the antenna or gain; press again to return to your squelch setting. STEP − / STEP + – smaller or larger tuning step (shown on the LCD)."],
+  gaincal: ["Find the best RF gain", "There is no single right RF gain: it depends on the aerial, the band and what else is on the air, so AndySDR can measure it. Press Find the best gain and it turns the gain up step by step, watching the noise floor. While the receiver's own noise is the louder of the two the floor barely moves; once the aerial's noise is the louder it follows the gain one dB for one dB. The bend between them is the answer, and the gain chosen is just above it – the point where you are hearing the aerial rather than the receiver, and the receiver is costing you under half a decibel. More gain than that improves nothing and only loses headroom before strong signals start to distort. The test takes about 15 seconds, needs the radio to stay on one frequency, and will not run while a scheduled capture is going or while scanning. If the receiver reports it is being overloaded part way up, the test stops below that point and says so. If the noise floor barely moves at all, either the aerial is very quiet or nothing is reaching the receiver – worth checking the lead. Each answer is remembered against the band and the receiver it was measured on, and the list underneath lets you put any of them back with one press. Run it again whenever you change the aerial, and once per band: the right gain at 137 MHz with a satellite aerial is nothing like the right gain next to a broadcast FM transmitter. 'Ease RF gain down on strong signals' still works on top of this – this sets the ceiling, that one backs off from it when something loud appears."],
   updates: ["Updates", "AndySDR looks for a newer version on its GitHub releases page when it starts and every 12 hours. When one is found a pop-up shows what is new and asks what to do: Download & install, Remind me later, or Skip this version. After the download (checked against GitHub's SHA-256) AndySDR asks again before it installs and restarts itself. 'Check for updates now' looks straight away, even for a version you skipped. Tick 'Download new versions in the background' to have the file ready so installing takes seconds. If AndySDR was installed with the Setup program the installer runs quietly in the background; a portable (unzipped) copy copies the new files over the old ones; a copy run from Python source just opens the releases page. Your settings, memories and pictures in %APPDATA%\\AndySDR are never touched. Updating restarts the radio PC's program, so remote screens reconnect by themselves a few seconds later. 'Start AndySDR when I sign in to Windows' adds AndySDR to the list of programs Windows starts at sign-in, so a restart in the night (a Windows update, a power cut) does not leave the program closed and the morning's satellite passes unrecorded. It is a per-user setting, needs no administrator rights, and unticking it removes the entry again. It only appears in the installed AndySDR, and the PC has to reach the sign-in - a PC sitting at the lock screen with nobody signed in does not start it."],
   adsbshare: ["Share aircraft feed", "Tick to let other programs on your network use AndySDR as an ADS-B receiver: SBS/BaseStation messages on TCP port 30003 and raw AVR (*8D…;) on port 30002. Point Virtual Radar Server, tar1090/readsb, PlanePlotter or a flight-tracking-site feeder at this PC and those ports. The second box turns the daily CSV position log on or off."],
   adsbtable: ["Aircraft list", "One row per aircraft heard in the last two minutes (faded = not heard for 30 s). Click a column title to sort, click a row to highlight it on the map. Callsign and airline come from the aircraft's own identification message, so a new aircraft may show only its hex address for a few seconds. Share the live feed with other programs (Virtual Radar Server, tar1090, PlanePlotter …) from REMOTE & SETTINGS; a dump1090-style aircraft.json is at /api/aircraft.json?token=<password>."],

@@ -1584,3 +1584,13 @@ body.phone #tab-set .card { padding: 14px; }
 .ac-chip.wpt { background: rgba(125,160,200,.12); opacity: .9; }
 .ai-read { margin-top: 10px; }
 .ai-read h4 { margin: 0 0 6px; font-size: 13px; opacity: .85; }
+
+/* Finding the best RF gain */
+.gcal-bar { height: 6px; border-radius: 3px; background: rgba(125,160,200,.20); overflow: hidden; margin: 6px 0 4px; }
+.gcal-bar > i { display: block; height: 100%; width: 0; background: var(--accent, #4da3ff); transition: width .2s; }
+.gcal-res { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: rgba(77,219,122,.12); }
+.gcal-res b { font-size: 15px; }
+.gcal-list { margin-top: 8px; }
+.gcal-list table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.gcal-list td, .gcal-list th { padding: 3px 6px; text-align: left; border-bottom: 1px solid rgba(125,160,200,.14); }
+.gcal-list th { font-weight: 600; opacity: .7; }
