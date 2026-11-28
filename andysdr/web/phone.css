@@ -106,12 +106,12 @@ body.phone .toasts { left: 8px; right: 8px; bottom: calc(72px + env(safe-area-in
 body.phone .toast { max-width: none; }
 
 /* the desktop grid puts the spectrum first below 1100px; on a phone the radio leads */
-body.phone[data-theme] .wrap, body.phone .wrap { grid-template-columns: minmax(0, 1fr); grid-template-areas: "radio" "scope" "tabs"; grid-template-rows: none; padding: 8px; gap: 10px; }
+body.phone[data-theme] .wrap, body.phone .wrap { grid-template-columns: minmax(0, 1fr); grid-template-areas: "radio" "scope" "rx2p" "tabs"; grid-template-rows: none; padding: 8px; gap: 10px; }
 body.phone[data-theme] .wrap > .scope { position: static; }
 
 /* sideways: radio on the left, spectrum on the right (must come after the one-column rule above) */
 body.phone-land[data-pp="radio"][data-theme] main.wrap, body.phone-land[data-pp="radio"] main.wrap {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "radio scope"; align-items: start; gap: 10px; }
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "radio scope" "rx2p rx2p" "tabs tabs"; align-items: start; gap: 10px; }
 body.phone-land[data-pp="radio"][data-theme] .wrap > .scope { position: sticky; top: 8px; max-height: calc(100vh - 76px); overflow-y: auto; }
 body.phone-land[data-pp="radio"] .top-status { display: none; }
 body.phone-land[data-pp="radio"] .lcd .lcd-keys, body.phone-land[data-pp="radio"] .lcd .keyrow { gap: 4px; }

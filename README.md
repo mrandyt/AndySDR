@@ -5,7 +5,9 @@ spectrum/waterfall, 1000 memory channels, a band search that finds every live tr
 RadioReference UK CSV import, digital/analogue decoding, weather pictures, and a built-in
 network server so any other PC, laptop, tablet or phone in the house can use the radio.
 
-**Latest: 1.32.1** – **the band plan knows which geostationary satellites are too low from your position.** GOES HRIT (1694.1 MHz) and Elektro-L (1691 MHz) are marked *Too low to receive* when they sit under 5° elevation from the receiver position set in the ADS-B settings. Elevation is worked out from the satellite's longitude, so it needs no internet. From Shropshire that is GOES-19 at about 1.7° and Elektro-L at about −1.7°.
+**Latest: 1.32.2** – **the phone Radio screen was empty.** The phone layout lists its panels by name, but it left out the RECEIVER 2 panel, so the display and controls were squeezed to a few pixels. The phone layout now includes that panel, and the layout test checks the phone stylesheet as well.
+
+**Before that: 1.32.1** – **the band plan knows which geostationary satellites are too low from your position.** GOES HRIT (1694.1 MHz) and Elektro-L (1691 MHz) are marked *Too low to receive* when they sit under 5° elevation from the receiver position set in the ADS-B settings. Elevation is worked out from the satellite's longitude, so it needs no internet. From Shropshire that is GOES-19 at about 1.7° and Elektro-L at about −1.7°.
 
 **Before that: 1.32.0** – **the band plan now says what AndySDR can do with each entry.** A new *Status* column and filter show whether an entry is **decoded** (a decoder handles it now), **needs an antenna** (decoder ready, antenna missing – the HF wire for WEFAX, for example), **listen** (voice or analogue, no decoder needed), **detect only** (the signal can be seen, content not decoded – AIS, NAVTEX, VDL2, GSM-R), or **encrypted** (Airwave TETRA). Hover a status for the reason. Rules are in `bandplan.js`; the test is `tests/test_bandplan_status.py`.
 

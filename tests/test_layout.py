@@ -26,6 +26,7 @@ def check(name, ok, extra=""):
 
 
 css = open(os.path.join(WEB, "style.css"), encoding="utf-8").read()
+phone_css = open(os.path.join(WEB, "phone.css"), encoding="utf-8").read()
 html = open(os.path.join(WEB, "index.html"), encoding="utf-8").read()
 
 # --- what the children of .wrap ask to be placed in --------------------------------------------------------
@@ -36,7 +37,7 @@ check("...the second receiver's panel among them", "rx2p" in areas_wanted, sorte
 
 # --- every .wrap layout must name every one of them -----------------------------------------------------------
 layouts = []
-for m in re.finditer(r"\.wrap\s*\{([^}]*)\}", css):
+for m in re.finditer(r"\.wrap\s*\{([^}]*)\}", css + "\n" + phone_css):
     body = m.group(1)
     g = re.search(r"grid-template-areas:\s*([^;]+);", body)
     if g:
