@@ -13,7 +13,11 @@ def check(n, ok, extra=""):
 
 d = tempfile.mkdtemp()
 rng = np.random.default_rng(1)
-a = (rng.random((1000, 300, 3)) * 200 + 20).astype(np.uint8)
+def smooth(shape):                          # a picture-like image: neighbouring pixels look alike
+    base = np.cumsum(rng.normal(0, 6, shape[:2]), axis=1)
+    base = (base - base.min(axis=1, keepdims=True)) / (np.ptp(base, axis=1, keepdims=True) + 1e-9) * 200 + 20
+    return np.repeat(base[:, :, None], 3, axis=2).astype(np.uint8)
+a = smooth((1000, 300, 3))
 a[:30] = 0; a[970:] = 0                      # the weak start and end of a pass: not counted
 a[100:160] = 0; a[400:520] = 0               # 180 lines missed in the middle
 Image.fromarray(a).save(os.path.join(d, "msu_mr_rgb_MSA.png"))
@@ -23,9 +27,13 @@ pct, lines = imgcheck.scanline_fill(os.path.join(d, "msu_mr_rgb_MSA.png"))
 check("fill counts only the lines between the first and last with data", lines == 940 and abs(pct - 80.9) < 0.2, (pct, lines))
 ff = imgcheck.folder_fill(d)
 check("a folder's figure ignores map and corrected pictures", ff and abs(ff["pct"] - 80.9) < 0.2, ff)
-b = a.copy(); b[:] = (rng.random(b.shape) * 200 + 20).astype(np.uint8)
+b = smooth(a.shape)
 Image.fromarray(b).save(os.path.join(d, "msu_mr_rgb_MSA.png"))
 check("a complete picture is 100%", imgcheck.scanline_fill(os.path.join(d, "msu_mr_rgb_MSA.png"))[0] == 100.0)
+n = a.copy(); n[200:700] = (rng.random(n[200:700].shape) * 255).astype(np.uint8)   # 500 lines of static
+Image.fromarray(n).save(os.path.join(d, "msu_mr_rgb_NOISY.png"))
+pn, ln = imgcheck.scanline_fill(os.path.join(d, "msu_mr_rgb_NOISY.png"))
+check("static does not count as picture", abs(pn - 40.4) < 1.0 and ln == 940, (pn, ln))
 check("an empty folder has no figure", imgcheck.folder_fill(tempfile.mkdtemp()) is None)
 Image.fromarray(np.zeros((1000, 300, 3), np.uint8)).save(os.path.join(d, "msu_mr_rgb_EMPTY.png"))
 check("an all-black picture is 0%, not an error", imgcheck.scanline_fill(os.path.join(d, "msu_mr_rgb_EMPTY.png"))[0] == 0.0)

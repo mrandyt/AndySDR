@@ -78,7 +78,15 @@ def scanline_fill(path):
     have = np.flatnonzero(~black)
     if have.size < 10:
         return 0.0, 0
-    span = black[have[0]:have[-1] + 1]
+    # Static is not a picture: a receiver that lost the signal still fills the lines with random speckle.
+    # Real scan lines are smooth along the row (a pixel looks like its neighbour); noise is not.
+    g = a.astype(np.float32).mean(axis=2)
+    x0 = g[:, :-1] - g[:, :-1].mean(axis=1, keepdims=True)
+    x1 = g[:, 1:] - g[:, 1:].mean(axis=1, keepdims=True)
+    corr = (x0 * x1).sum(axis=1) / (np.sqrt((x0 ** 2).sum(axis=1) * (x1 ** 2).sum(axis=1)) + 1e-9)
+    noisy = (g.std(axis=1) > 8) & (corr < 0.4)
+    bad = black | noisy
+    span = bad[have[0]:have[-1] + 1]
     return round(100.0 * (1.0 - float(span.mean())), 1), int(span.size)
 
 
