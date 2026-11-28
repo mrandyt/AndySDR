@@ -254,7 +254,7 @@ class PassLog:
                         "result": self.result(r, now), "images": r.get("images", 0), "stopped": r.get("stopped"),
                         "fill": r.get("fill"), "fill_good": r.get("fill_good"), "fill_n": r.get("fill_n"),
                         "merged_fill": (r.get("merged") or {}).get("fill"),
-                        "rx_frames": r.get("rx_frames"), "rx": r.get("rx"),
+                        "rx_frames": r.get("rx_frames"), "rx": r.get("rx"), "freq_check": r.get("freq_check"),
                         "user_note": r.get("user_note")})
         return out
 

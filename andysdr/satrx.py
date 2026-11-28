@@ -14,7 +14,7 @@ import time
 
 import numpy as np
 
-from . import devices, framesnr, gaincal, passlog
+from . import devices, framesnr, freqcheck, gaincal, passlog
 from .config import data_dir
 from .decoders import DecoderManager
 from .dsp import Receiver, Spectrum
@@ -65,6 +65,7 @@ class SatRx:
         self.discard = 0
         self.pass_el = None
         self.pass_meter = None
+        self.freq_check = None    # whether this receiver is really on the frequency the orbit says
         self.job_gain = None
         self.pass_images = 0
         self.snr = None
@@ -253,6 +254,8 @@ class SatRx:
             self.pass_images = 0
             self.job_gain = float(dev.gain)
             self.pass_meter = passlog.PassMeter(self.pass_el)
+            self.freq_check = freqcheck.Tracker(self._nominal_freq(job), "rx2")
+            self._fc_t = 0.0
             self.passlog.open_key = job.get("id")
             self.decoders.pass_key = job.get("id")
             self.decoders.pass_northbound = bool(job.get("northbound"))
@@ -351,6 +354,7 @@ class SatRx:
                       else f"Live view on {freq / 1e6:.3f} MHz for {self.preview_secs} s")
 
     # ------------------------------------------------------------------ finding the best gain for this dongle
+    FREQ_CHECK_EVERY_S = 6.0   # how often to check where the carrier really is during a pass
     GCAL_STUCK = 8.0           # no readings for this long means the dongle has stopped: give up on the sweep
     GCAL_SETTLE = 0.45
     GCAL_READ = 0.35
@@ -472,6 +476,7 @@ class SatRx:
             th.join(timeout=4)
         with self.lock:
             meter, self.pass_meter = self.pass_meter, None
+            fc, self.freq_check = self.freq_check, None
             self.passlog.open_key = None
             had_gain, self.job_gain = self.job_gain, None
             info = None
@@ -507,6 +512,12 @@ class SatRx:
             rec = {"key": job["id"], "sat": job["sat"], "name": str(job["name"]).split(" pass")[0], "action": job.get("action"),
                    "start": int(meter.t0), "end": int(time.time()), "max_el": job.get("max_el"), "gain_mode": job.get("gain_mode"),
                    "stopped": why, "images": self.pass_images, "rx": "rx2", **sm}
+            fres = fc.result() if fc is not None else None
+            if fres:
+                rec["freq_check"] = {k: fres[k] for k in ("median", "ppm", "spread", "n", "verdict")}
+                log.info("%s", freqcheck.sentence(fres))
+                if fres["verdict"] in ("oscillator", "orbit"):
+                    self._event("warn", freqcheck.sentence(fres))
             if rec.get("gain") is None and had_gain is not None:
                 rec["gain"] = round(had_gain, 1)
             if info and info["wall_s"] > 5:
@@ -517,6 +528,13 @@ class SatRx:
             log.info("second receiver pass report: %s peak %s deg, gain %s, SNR peak %s / typical %s dB (score %s, %d samples), %s",
                      rec["name"], rec.get("max_el"), rec.get("gain"), rec.get("snr_peak"), rec.get("snr_med"), rec.get("score"),
                      rec.get("samples", 0), self.passlog.result(rec))
+
+    def _nominal_freq(self, job):
+        """The satellite's own frequency, before Doppler - what the error is measured against."""
+        try:
+            return float(self.radio.scheduler.sats.cfg()[job["sat"]]["freq"])
+        except Exception:                                # noqa: BLE001
+            return float(job.get("freq") or 0.0)
 
     def _pass_images_done(self, key, shown, total, note="", out_dir=None, fill=None):
         self.passlog.set_images(key, shown, total, note, fill)
@@ -603,7 +621,17 @@ class SatRx:
                 m = self.pass_meter
                 if spec_db is not None and (m is not None or preview) and now - self._live_snr_t >= (0.25 if preview else 1.0):
                     self._live_snr_t = now
-                    snr = passlog.band_snr(spec_db, dev.center, fs, self.freq, self.view_bw if preview else passlog.BAND_HALF_HZ.get("lrpt", 60e3))
+                    half = self.view_bw if preview else passlog.BAND_HALF_HZ.get("lrpt", 60e3)
+                    snr = passlog.band_snr(spec_db, dev.center, fs, self.freq, half)
+                    fc = self.freq_check
+                    if fc is not None and not preview and now - getattr(self, "_fc_t", 0.0) >= self.FREQ_CHECK_EVERY_S:
+                        self._fc_t = now
+                        try:
+                            off = freqcheck.carrier_offset(spec_db, dev.center, fs, self.freq, half)
+                            fc.add(now - self.t_start, off, el=self.pass_el,
+                                   doppler=(self.freq - fc.freq) if fc.freq else None)
+                        except Exception:                # noqa: BLE001
+                            log.exception("second receiver frequency check")
                     self.snr = None if snr is None else round(snr, 1)
                     if snr is not None:
                         self.snr_hist = (self.snr_hist + [self.snr])[-240:]

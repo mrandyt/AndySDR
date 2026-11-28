@@ -3487,6 +3487,17 @@ $("satMore").onclick = () => { SAT_ALL = !SAT_ALL; renderSats(); };
 // Of the frames the satellite sent while it was in reach, how many arrived - and, when it could be worked out,
 // the weakest signal that was still producing them. That last figure is the one worth collecting: it is the real
 // threshold for this receiver and this aerial, measured rather than guessed at from whether pictures came out.
+// A pass is the one time the true frequency of a signal is known in advance, so it is the one time a receiver can
+// be checked against something rather than against itself.
+function freqCheckHtml(r) {
+  const f = r.freq_check;
+  if (!f || f.verdict === "good" || f.verdict === "unsteady") return "";
+  const cls = f.verdict === "oscillator" ? "warn" : "muted";
+  const what = f.verdict === "oscillator"
+    ? `crystal ${f.ppm > 0 ? "fast" : "slow"} by ${Math.abs(f.ppm).toFixed(1)} ppm`
+    : "orbit data, not the receiver";
+  return ` <span class="small ${cls}" title="${esc(`${f.median > 0 ? "+" : ""}${f.median} Hz across ${f.n} readings`)}">· ${esc(what)}</span>`;
+}
 function framesCell(r) {
   const f = r.rx_frames;
   if (!f || !f.frames) return '<span class="muted">–</span>';
@@ -3512,7 +3523,7 @@ function renderSats() {
     const mode = { fixed: "fixed", auto: "learning" }[r.gain_mode] || "knob";
     const snr = r.snr == null ? "–" : `${r.snr} dB`;
     const good = r.images > 0 ? ' style="color:var(--ok,#4ddb7a)"' : "";
-    return `<tr><td>${fmtLocal(r.start)}</td><td>${esc(r.name || r.sat)}${r.rx === "rx2" ? ' <span class="muted small" title="Recorded on the second receiver">· 2nd rx</span>' : ""}${passNoteHtml(r)}</td><td>${r.max_el == null ? "–" : Math.round(r.max_el) + "°"}</td>
+    return `<tr><td>${fmtLocal(r.start)}</td><td>${esc(r.name || r.sat)}${r.rx === "rx2" ? ' <span class="muted small" title="Recorded on the second receiver">· 2nd rx</span>' : ""}${freqCheckHtml(r)}${passNoteHtml(r)}</td><td>${r.max_el == null ? "–" : Math.round(r.max_el) + "°"}</td>
       <td>${r.gain == null ? "AGC" : r.gain} <span class="muted small">${mode}</span></td>
       <td title="${r.samples ? r.samples + " readings" : "no signal readings"}${r.score != null ? " · distance-corrected " + r.score + " dB" : ""}">${snr}</td>
       <td${good}>${esc(r.result)}${r.stopped ? ' <span class="muted small">(cut short)</span>' : ""}</td>

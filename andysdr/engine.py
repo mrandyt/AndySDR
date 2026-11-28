@@ -27,7 +27,7 @@ from .dsp import (AUDIO_RATE, BLOCK_SECONDS, MODES, Receiver, Spectrum, find_pea
 from .memory import MemoryBank
 from .scheduler import Scheduler
 from .biasmon import BiasMonitor, judge
-from . import framesnr, gaincal, passlog, rigctl
+from . import framesnr, freqcheck, gaincal, passlog, rigctl
 from .sstv import SstvDecoder
 
 log = logging.getLogger("andysdr.engine")
@@ -53,6 +53,8 @@ AG_DROP_MAX_DB = 20.0    # ... and whatever the fractions work out at, never fur
 # meaning and backing off a distorting signal genuinely helps.
 AG_STEADY = frozenset({"adsb", "meshsdr", "ism", "aero", "goes", "metop", "lrpt", "acars", "wefax", "sstv",
                        "vdl2", "ft8", "sonde"})
+FREQ_CHECK_EVERY_S = 6.0     # how often to check where the carrier really is during a pass
+
 AUTO_MODE_VOTES = 4          # readings in a row, all taken on a real signal, before the demodulator is changed
 AUTO_MODE_HOLD_S = 15.0      # ... and this long between changes, so a change can be heard before the next one
 AUTO_MODE_MIN_SNR = 8.0      # with no squelch to go by, a reading this weak is the gap between bursts, not a signal
@@ -132,6 +134,7 @@ class Radio:
         self.pass_images = 0      # pictures that came out while the pass was running
         self.job_gain = None      # RF gain chosen for the satellite pass being recorded (None = the knob's value)
         self.pass_meter = None    # measures the signal during a satellite pass
+        self.freq_check = None    # ...and whether the receiver is really on the frequency the orbit says
         self.pass_el = None       # ts -> (elevation, range km) of that satellite
         self.passlog = passlog.PassLog(os.path.join(data_dir(), "passes.jsonl"))
         self.decoders.pass_done = self._pass_images_done
@@ -648,6 +651,7 @@ class Radio:
             self.passlog.open_key = None
             if job.get("sat") and not job.get("geo"):              # a satellite pass: measure it, and use the gain picked for it
                 self.pass_meter = passlog.PassMeter(self.pass_el)
+                self.freq_check = freqcheck.Tracker(self._nominal_freq(job), "rx1")
                 self.passlog.open_key = job["id"]
                 g = job.get("gain")
                 if g is not None and self.dev and not (self.s["agc"] or getattr(self.dev, "agc", False)):
@@ -673,11 +677,30 @@ class Radio:
         m = self.pass_meter
         if m is None or not self.job or now - m._last < 1.0 or not self.dev:
             return
-        snr = passlog.band_snr(spec_db, self.dev.center, fs, self.freq, passlog.BAND_HALF_HZ.get(self.job.get("action"), 20e3))
+        half = passlog.BAND_HALF_HZ.get(self.job.get("action"), 20e3)
+        snr = passlog.band_snr(spec_db, self.dev.center, fs, self.freq, half)
         m.add(now, snr, self.job_gain if self.job_gain is not None else (None if self.s["agc"] else float(self.s["rf_gain"])))
+        fc = self.freq_check
+        if fc is not None and now - getattr(self, "_fc_t", 0.0) >= FREQ_CHECK_EVERY_S:
+            self._fc_t = now
+            try:
+                off = freqcheck.carrier_offset(spec_db, self.dev.center, fs, self.freq, half)
+                look = self.pass_el(now) if callable(getattr(self, "pass_el", None)) else None
+                fc.add(now - m.t0, off, el=(look[0] if look else None),
+                       doppler=(self.freq - fc.freq) if fc.freq else None)
+            except Exception:                              # noqa: BLE001
+                log.exception("frequency check")
+
+    def _nominal_freq(self, job):
+        """The satellite's own frequency, before any Doppler correction - what the error is measured against."""
+        try:
+            return float(self.scheduler.sats.cfg()[job["sat"]]["freq"])
+        except Exception:                                  # noqa: BLE001
+            return float(job.get("freq") or 0.0)
 
     def _finish_pass(self, job, why):
         meter, self.pass_meter = self.pass_meter, None
+        fc, self.freq_check = self.freq_check, None
         self.passlog.open_key = None
         had_gain, self.job_gain = self.job_gain, None
         if had_gain is not None and self.dev:                       # the knob's gain comes back
@@ -689,6 +712,12 @@ class Radio:
         rec = {"key": job["id"], "sat": job["sat"], "name": str(job["name"]).split(" pass")[0], "action": job.get("action"),
                "start": int(meter.t0), "end": int(time.time()), "max_el": job.get("max_el"), "gain_mode": job.get("gain_mode"),
                "stopped": why, "images": self.pass_images, **sm}
+        fres = fc.result() if fc is not None else None
+        if fres:
+            rec["freq_check"] = {k: fres[k] for k in ("median", "ppm", "spread", "n", "verdict")}
+            log.info("%s", freqcheck.sentence(fres))
+            if fres["verdict"] in ("oscillator", "orbit"):
+                self._emit("event", {"level": "warn", "text": freqcheck.sentence(fres)})
         if rec.get("gain") is None and had_gain is not None:
             rec["gain"] = round(had_gain, 1)
         self.pass_images = 0
