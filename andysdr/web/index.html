@@ -736,7 +736,7 @@
     <div class="card"><div class="row wrapline"><b>Pictures from this receiver</b><span class="grow"></span><button class="btn sm" id="rx2AllPics">All weather images ›</button></div>
       <div id="rx2Pics" class="rx2-pics"></div></div>
     <div class="card"><b>Its recent passes</b>
-      <div class="tablewrap"><table class="grid" id="rx2Passes"><thead><tr><th>When</th><th>Satellite</th><th>Peak</th><th>Gain</th><th>Signal</th><th>Result</th><th title="How much of the picture is filled in – scan lines that have data, between the first and the last">Fill</th></tr></thead><tbody></tbody></table></div></div>
+      <div class="tablewrap"><table class="grid" id="rx2Passes"><thead><tr><th>When</th><th>Satellite</th><th>Peak</th><th>Gain</th><th>Signal</th><th>Result</th><th title="Of the frames the satellite sent while it was in reach, how many arrived – and the weakest signal that was still producing them">Frames</th><th title="How much of the picture is filled in – scan lines that have data, between the first and the last">Fill</th></tr></thead><tbody></tbody></table></div></div>
     <div class="card"><b>What it has just done</b><ul id="rx2Log" class="rx2-log"></ul></div>
   </div>
 
@@ -807,7 +807,7 @@
     <div class="card">
       <div class="row wrapline" style="margin-top:14px" data-help="passreport"><b>Pass report – how each recorded pass went</b><span class="grow"></span><span class="muted small">Signal = how far the satellite stood above the noise, at its best</span></div>
       <div class="tablewrap"><table class="grid" id="satLog">
-        <thead><tr><th>When</th><th>Satellite</th><th>Peak</th><th>RF gain</th><th>Signal</th><th>Result</th><th title="How much of the picture is filled in – scan lines that have data, between the first and the last">Fill</th></tr></thead><tbody></tbody></table></div>
+        <thead><tr><th>When</th><th>Satellite</th><th>Peak</th><th>RF gain</th><th>Signal</th><th>Result</th><th title="Of the frames the satellite sent while it was in reach, how many arrived – and the weakest signal that was still producing them">Frames</th><th title="How much of the picture is filled in – scan lines that have data, between the first and the last">Fill</th></tr></thead><tbody></tbody></table></div>
     </div>
     <div class="row wrapline small" style="margin-top:6px"><label>Set aside pictures that are less than <input id="tidyFill" class="inp" type="number" min="0" max="95" step="5" style="width:4.5em" value="0">% filled in</label><span class="muted">0 = keep everything. They go to a separate 'poor pictures' folder, not the bin, and the pass report says so.</span></div>
     <details class="card" id="amBox" style="margin-top:10px" data-help="antennamap">

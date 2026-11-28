@@ -27,7 +27,7 @@ from .dsp import (AUDIO_RATE, BLOCK_SECONDS, MODES, Receiver, Spectrum, find_pea
 from .memory import MemoryBank
 from .scheduler import Scheduler
 from .biasmon import BiasMonitor, judge
-from . import gaincal, passlog
+from . import framesnr, gaincal, passlog
 from .sstv import SstvDecoder
 
 log = logging.getLogger("andysdr.engine")
@@ -116,6 +116,10 @@ class Radio:
         self.merger = satmerge.Merger(self.decoders.images_dir, find_exe, self.s,
                                       log_cb=lambda t: self.decoders.log(t),
                                       done_cb=self._merged_pass_done)
+        # The .cadu files of every pass already recorded are sitting in the images folder, so how much of each one
+        # actually arrived can be worked out now rather than only from here on. Reading them takes a moment, so it
+        # happens out of the way of starting up.
+        threading.Thread(target=self._backfill_frames, daemon=True, name="framesnr-backfill").start()
         self.sq_open = False
         self.channel = None               # (bank, ch, entry) when on a memory channel
         self.classifier = SignalClassifier()
@@ -629,9 +633,20 @@ class Radio:
                  rec["name"], rec.get("max_el"), rec.get("gain"), rec.get("snr_peak"), rec.get("snr_med"), rec.get("score"),
                  rec.get("samples", 0), self.passlog.result(rec))
 
+    def _backfill_frames(self):
+        try:
+            time.sleep(8)                                # let the radio get going first
+            framesnr.backfill(self.passlog, self.decoders.images_dir)
+        except Exception:                                # noqa: BLE001
+            log.exception("frame coverage backfill")
+
     def _pass_images_done(self, key, shown, total, note="", out_dir=None, fill=None):
         """SatDump finished working on a recorded pass: say how many pictures came out."""
         self.passlog.set_images(key, shown, total, note, fill)
+        try:                                                # what level was actually producing frames, from the .cadu
+            framesnr.for_pass(self.passlog, key, out_dir)
+        except Exception:                                   # noqa: BLE001
+            log.exception("frame measurement")
         self.merger.report(key, out_dir, "rx1")             # if the second receiver took this pass too, merge them
         rec = self.passlog.find(key)
         if rec:

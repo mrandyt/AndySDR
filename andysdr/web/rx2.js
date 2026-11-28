@@ -245,8 +245,8 @@ function rx2Passes() {
   if (document.activeElement && document.activeElement.classList.contains("pn-in")) return;     // a note is being typed
   bindPassNotes(rx2$("rx2Passes").querySelector("tbody"), rx2Passes);
   rx2$("rx2Passes").querySelector("tbody").innerHTML = rows.length ? rows.map((r) =>
-    `<tr><td>${fmtLocal(r.start)}</td><td>${esc(r.name || r.sat)}${passNoteHtml(r)}</td><td>${r.max_el == null ? "–" : Math.round(r.max_el) + "°"}</td><td>${r.gain == null ? "–" : r.gain}</td><td>${r.snr == null ? "–" : r.snr + " dB"}</td><td${r.images > 0 ? ' style="color:var(--ok,#4ddb7a)"' : ""}>${esc(r.result)}</td><td>${r.fill == null ? "–" : r.fill + "%"}${r.merged_fill != null ? ` <span class="muted small">→ ${r.merged_fill}%</span>` : ""}</td></tr>`).join("")
-    : `<tr><td colspan="7" class="muted">No pass has been recorded on this receiver yet.</td></tr>`;
+    `<tr><td>${fmtLocal(r.start)}</td><td>${esc(r.name || r.sat)}${passNoteHtml(r)}</td><td>${r.max_el == null ? "–" : Math.round(r.max_el) + "°"}</td><td>${r.gain == null ? "–" : r.gain}</td><td>${r.snr == null ? "–" : r.snr + " dB"}</td><td${r.images > 0 ? ' style="color:var(--ok,#4ddb7a)"' : ""}>${esc(r.result)}</td><td>${framesCell(r)}</td><td>${r.fill == null ? "–" : r.fill + "%"}${r.merged_fill != null ? ` <span class="muted small">→ ${r.merged_fill}%</span>` : ""}</td></tr>`).join("")
+    : `<tr><td colspan="8" class="muted">No pass has been recorded on this receiver yet.</td></tr>`;
 }
 function rx2LogRender() {
   rx2$("rx2Log").innerHTML = RX2.log.length ? RX2.log.map((e) => `<li class="${e.level || ""}"><span class="muted">${new Date(e.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span> ${esc(e.text)}</li>`).join("")

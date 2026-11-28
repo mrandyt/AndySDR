@@ -14,7 +14,7 @@ import time
 
 import numpy as np
 
-from . import devices, gaincal, passlog
+from . import devices, framesnr, gaincal, passlog
 from .config import data_dir
 from .decoders import DecoderManager
 from .dsp import Receiver, Spectrum
@@ -520,6 +520,10 @@ class SatRx:
 
     def _pass_images_done(self, key, shown, total, note="", out_dir=None, fill=None):
         self.passlog.set_images(key, shown, total, note, fill)
+        try:                                                # what level was actually producing frames, from the .cadu
+            framesnr.for_pass(self.passlog, key, out_dir)
+        except Exception:                                   # noqa: BLE001
+            log.exception("second receiver frame measurement")
         merger = getattr(self.radio, "merger", None)        # if the main radio took this pass too, merge them
         if merger is not None:
             try:

@@ -21,6 +21,8 @@ WINDOW = 12                # learning looks at the last dozen scored passes, so 
 KEEP = 300                 # lines kept in the file
 TRACK_EVERY = 3            # one point on the antenna map for every third reading (about every 3 s)
 TRACK_MAX = 400            # most points kept per pass
+TRACE_EVERY_S = 3          # the signal trace keeps a reading every few seconds...
+TRACE_MAX = 400            # ...and no more than this many
 MIN_SAMPLES = 25           # about 25 s of signal needed before a pass counts for learning
 REF_RANGE_KM = 1000.0      # SNR is scaled to this distance so a low pass and a high pass can be compared
 BAND_HALF_HZ = {"lrpt": 60e3, "sstv": 8e3, "record": 8e3, "wefax": 8e3, "goes": 300e3, "metop": 300e3}
@@ -86,7 +88,7 @@ class PassMeter:
                 el, rng = r[0], r[1]
                 az = r[2] if len(r) > 2 else None
         norm = snr + 20.0 * math.log10(max(rng, 200.0) / REF_RANGE_KM) if rng else None
-        self.s.append((snr, norm, el, gain))
+        self.s.append((snr, norm, el, gain, now - self.t0))
         if az is not None and el is not None and norm is not None and len(self.s) % TRACK_EVERY == 0:
             self.track.append((int(round(az)) % 360, int(round(el)), round(norm, 1)))
 
@@ -104,7 +106,25 @@ class PassMeter:
             out["score"] = round(statistics.median(high), 1)       # distance-corrected, comparable between passes
         if self.track:
             out["track"] = [list(p) for p in self.track[-TRACK_MAX:]]     # [azimuth, elevation, strength] for the antenna map
+        tr = self.trace()
+        if tr:
+            out["snr_trace"] = tr
         return out
+
+    def trace(self, every=TRACE_EVERY_S):
+        """[[seconds from the start of the recording, SNR dB]], thinned.
+
+        Kept only until the decoder has finished, so the signal can be laid against the frames that arrived and the
+        level that actually produced them worked out; `PassLog.set_frames` throws it away afterwards.
+        """
+        out, nxt = [], 0.0
+        for x in self.s:
+            if len(x) < 5 or x[4] is None:
+                continue
+            if x[4] >= nxt:
+                out.append([int(round(x[4])), round(x[0], 1)])
+                nxt = x[4] + every
+        return out[:TRACE_MAX]
 
 
 # --------------------------------------------------------------------------- the file
@@ -172,6 +192,23 @@ class PassLog:
                     r["note"] = f"{total - shown} blank discarded"
                 self._save()
 
+    def set_frames(self, key, m):
+        """File what the frames say about this pass, and drop the signal trace they were measured against.
+
+        `m` is what `framesnr.measure` returned: how many of the frames the satellite sent actually arrived, and -
+        when the window could be placed against the trace - the signal level that was producing them.
+        """
+        with self.lock:
+            r = self.find(key)
+            if r is None:
+                return
+            if m:
+                keep = {k: m[k] for k in ("frames", "sent", "pct", "secs", "snr_lo", "snr_med", "snr_hi") if k in m}
+                if keep:
+                    r["rx_frames"] = keep
+            r.pop("snr_trace", None)                      # served its purpose: it is big and nothing else reads it
+            self._save()
+
     def set_merged(self, key, rep, images):
         """File what came out of putting both receivers' frames together on this pass."""
         with self.lock:
@@ -217,6 +254,7 @@ class PassLog:
                         "result": self.result(r, now), "images": r.get("images", 0), "stopped": r.get("stopped"),
                         "fill": r.get("fill"), "fill_good": r.get("fill_good"), "fill_n": r.get("fill_n"),
                         "merged_fill": (r.get("merged") or {}).get("fill"),
+                        "rx_frames": r.get("rx_frames"), "rx": r.get("rx"),
                         "user_note": r.get("user_note")})
         return out
 
