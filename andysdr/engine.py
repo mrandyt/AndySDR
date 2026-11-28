@@ -53,6 +53,11 @@ AG_DROP_MAX_DB = 20.0    # ... and whatever the fractions work out at, never fur
 # meaning and backing off a distorting signal genuinely helps.
 AG_STEADY = frozenset({"adsb", "meshsdr", "ism", "aero", "goes", "metop", "lrpt", "acars", "wefax", "sstv",
                        "vdl2", "ft8", "sonde"})
+AUTO_MODE_VOTES = 4          # readings in a row, all taken on a real signal, before the demodulator is changed
+AUTO_MODE_HOLD_S = 15.0      # ... and this long between changes, so a change can be heard before the next one
+AUTO_MODE_MIN_SNR = 8.0      # with no squelch to go by, a reading this weak is the gap between bursts, not a signal
+AUTO_MODE_MAX_SWAPS = 3      # changed its mind this often on one frequency: stop, it clearly cannot tell
+
 AG_HOLD_S = 60.0         # ... but not for this long after a strong signal pushed it down again soon after a climb
 MUTE_WHEN_DECODING = ("dsd", "tetra", "tetrapol", "pager", "data")
 REPLAY_MAX_S = 120                    # the replay buffer remembers up to two minutes of what you heard
@@ -149,7 +154,9 @@ class Radio:
         self.auto_busy = False
         self.auto_mode_prev = None        # mode before auto-identify switched it
         self.auto_mode_lock = False       # you picked a mode by hand: Auto leaves the mode alone until you retune
-        self.auto_mode_vote = (None, 0)   # (mode, how many readings in a row asked for it) - two are needed before switching
+        self.auto_mode_vote = (None, 0)   # (mode, how many readings in a row asked for it) - see _auto_voice_mode
+        self.auto_mode_t = 0.0            # when the demodulator was last changed by auto-identify
+        self.auto_mode_swaps = 0          # how many times on this frequency: too many means it cannot tell, so stop
         self.pre = deque(maxlen=60)       # last ~3 s of demodulated blocks, replayed into a decoder auto-identify starts
         self.auto_q = queue.Queue(maxsize=1)
         threading.Thread(target=self._auto_worker, name="autoid", daemon=True).start()
@@ -392,6 +399,8 @@ class Radio:
         self.sstv_watch = None
         self.auto_mode_lock = False
         self.auto_mode_vote = (None, 0)
+        self.auto_mode_t = 0.0
+        self.auto_mode_swaps = 0
         if self.auto_mode_prev:              # put back the mode auto-identify changed
             if self.rx and self.auto_mode_prev != self.mode:
                 self.mode = self.auto_mode_prev
@@ -565,9 +574,19 @@ class Radio:
             self._auto_voice_mode(r)
 
     def _auto_voice_mode(self, r):
-        """Plain analogue voice and no decoder: make sure the demodulator matches what is on the air.  The classifier
-        names FM / AM / USB / LSB only when the evidence is clear; two readings in a row are needed, a mode you chose
-        by hand is never overridden, and WFM / CW are left alone."""
+        """Plain analogue voice and no decoder: make sure the demodulator matches what is on the air.
+
+        The hard part is not naming the mode, it is knowing when to act on the name. A bursty signal - ACARS is the
+        obvious one - is silence most of the time, and the classifier goes on reading between the bursts, where
+        there is nothing to read. Those readings are noise, and noise is as likely to look like FM as AM, so a
+        simple "two readings in a row" vote flips the demodulator back and forth about once a second. Demodulating
+        an AM signal as FM sounds exactly like bad distortion, which is how this was found.
+
+        So: only readings taken while there is actually a signal get a vote, a run of them is needed, and there is a
+        quiet period after each change. And if it still ends up changing its mind repeatedly on one frequency, it
+        stops trying until you retune - a classifier that cannot decide is worse than no classifier, because it is
+        corrupting the audio every time it swaps.
+        """
         want = r.get("mode")
         if not want and r["kind"] == "FM voice" and self.mode in ("DIG", "DIG25"):
             want = "NFM"                     # not digital after all, but a digital demodulator is still selected
@@ -576,17 +595,43 @@ class Radio:
                 or (want == "NFM" and cur == "FM")):
             self.auto_mode_vote = (None, 0)
             return
+        if getattr(self, "auto_mode_swaps", 0) >= AUTO_MODE_MAX_SWAPS:
+            return                           # it has changed its mind too often here: leave the mode alone
+        if not self._auto_on_signal(r):
+            return                           # between bursts: no evidence either way, so the vote is left as it was
+        now = time.time()
+        if now - getattr(self, "auto_mode_t", 0.0) < AUTO_MODE_HOLD_S:
+            return                           # one change at a time: give it a chance to be heard before the next
         vm, vn = getattr(self, "auto_mode_vote", (None, 0))
         vn = vn + 1 if vm == want else 1
         self.auto_mode_vote = (want, vn)
-        if vn < 2:
+        if vn < AUTO_MODE_VOTES:
             return
         self.auto_mode_vote = (None, 0)
+        self.auto_mode_t = now
+        self.auto_mode_swaps = getattr(self, "auto_mode_swaps", 0) + 1
         self.mode = want
         self.rx.set_mode(want)
         what = {"NFM": "analogue FM voice", "AM": "AM voice", "USB": "upper-sideband voice", "LSB": "lower-sideband voice"}.get(want, r["kind"])
         self._emit("event", {"level": "info", "text": f"Auto: {what} – switched to {want}"})
+        if self.auto_mode_swaps >= AUTO_MODE_MAX_SWAPS:
+            self._emit("event", {"level": "warn", "text": "Auto: this signal keeps looking like more than one mode, "
+                                                          "so the demodulator is being left alone until you retune. "
+                                                          "Set the mode by hand if Auto has it wrong."})
         self._push_state(True)
+
+    def _auto_on_signal(self, r):
+        """Is there really a signal to judge, or is this the quiet between bursts?
+
+        The squelch is the honest answer where it is set; where it is wide open, fall back on the classifier's own
+        signal-to-noise figure. Either way the point is the same: do not let silence cast a vote.
+        """
+        if self.sq_open:
+            return True
+        if float(self.s.get("squelch", -119)) > -115:
+            return False                     # a squelch is set and it is shut: nothing is being received
+        snr = r.get("snr")
+        return snr is None or float(snr) >= AUTO_MODE_MIN_SNR
 
     # ------------------------------------------------------------------ scheduled captures
     def begin_job(self, job):

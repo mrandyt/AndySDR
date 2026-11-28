@@ -761,7 +761,10 @@ html, body { touch-action: pan-x pan-y; }   /* a two-finger pinch zooms the spec
 /* The second receiver's panel needs a place of its own in this layout, or the grid has nowhere to put it. */
 [data-theme] .wrap > .rx2p { grid-area: rx2p; }
 @media (max-width: 1100px) {
-  [data-theme] .wrap { grid-template-columns: 1fr; grid-template-areas: "scope" "radio" "tabs"; padding: 14px; gap: 16px; }
+  /* The second receiver's panel needs a square of its own in EVERY layout, not just the wide one: a named area it
+     is not part of leaves it auto-placed into an implicit row below everything, which is how it ended up several
+     thousand pixels down the page on a narrow window. tests/test_layout.py checks every one of these. */
+  [data-theme] .wrap { grid-template-columns: 1fr; grid-template-areas: "scope" "rx2p" "radio" "tabs"; padding: 14px; gap: 16px; }
   [data-theme] .wrap > .scope { position: static; }
 }
 

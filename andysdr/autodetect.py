@@ -37,6 +37,33 @@ _LP_CH = signal.firwin(129, 8500, fs=FS)          # 12.5/25 kHz channel for FSK 
 _LP_DISC = signal.firwin(63, 6000, fs=FS)
 
 
+# Where TETRA is actually allocated. Outside these a 25 kHz digital carrier is something else, and saying so is
+# more use than naming a system that cannot be there.
+TETRA_BANDS = ((380e6, 400e6),      # emergency services across Europe, the UK's Airwave among them
+               (410e6, 430e6),      # civil and commercial TETRA
+               (450e6, 470e6),      # TETRA in a number of countries, business radio in others
+               (806e6, 825e6), (851e6, 870e6),
+               (870e6, 876e6), (915e6, 921e6))
+TETRA_BW_MIN = 18000.0      # a 25 kHz channel; below this it is a 12.5 kHz system measured generously
+TETRA_BW_MAX = 30000.0
+TETRA_ENV_MIN = 0.18        # pi/4-DQPSK does not hold a constant envelope ...
+TETRA_ENV_MAX = 1.5         # ... but it does not swing wildly either: above this it is bursty, not a carrier
+
+
+def _in_band(freq, bands):
+    f = float(freq or 0)
+    return any(lo <= f <= hi for lo, hi in bands)
+
+
+def _tetra_note(freq):
+    """What is worth knowing about a TETRA carrier here, which is usually whether anything can come out of it."""
+    if 380e6 <= float(freq or 0) <= 400e6:
+        # Public-safety TETRA in Europe runs TEA2 air-interface encryption, which covers the data as well as the
+        # speech. Nothing decodes it, so the useful thing to say is "do not spend an evening on this".
+        return "emergency services: encrypted, no voice or data will decode"
+    return "unencrypted networks decode; public-safety ones do not"
+
+
 def _band_power(freqs, p, f0, half):
     m = (freqs > f0 - half) & (freqs < f0 + half)
     return float(p[m].sum())
@@ -204,9 +231,26 @@ class SignalClassifier:
             r.update(extra)
             return r
 
-        # ---- TETRA: about 25 kHz wide, pi/4-DQPSK (envelope not constant)
-        if wide and snr > 15 and env_full > 0.18 and duty > 0.75 and mode not in ("AM", "USB", "LSB", "CW"):
-            return R("TETRA", "TETRA (π/4-DQPSK, 25 kHz) – Airwave is encrypted", "tetra", "", dmode="DIG25", conf=0.8)
+        # ---- TETRA: a 25 kHz channel carrying pi/4-DQPSK, which does not hold a constant envelope.
+        #
+        # There is no proof of modulation here - that would need correlation against TETRA's own training
+        # sequences - so this is a description of the shape of the signal, and the guards matter. It used to accept
+        # anything over 15 kHz wide, which is most of a 12.5 kHz channel measured generously, so ordinary business
+        # radio on 165, 168, 454 and 469 MHz was being announced as TETRA and a decoder started on it that could
+        # never produce anything. Measured on those real signals: the false ones ran 15.1 to 17.5 kHz, while real
+        # TETRA on 380.7875 MHz measured 20.7 kHz. A 25 kHz channel is simply wider than that, so the floor is
+        # raised to where a 12.5 kHz system cannot reach. The envelope now has a ceiling too: TETRA's varies, but
+        # modestly - one of the false calls swung at 4.4, which is a bursty signal, not a carrier.
+        tetra_shape = (TETRA_BW_MIN < bw < TETRA_BW_MAX and snr > 15 and TETRA_ENV_MIN < env_full < TETRA_ENV_MAX
+                       and duty > 0.75 and mode not in ("AM", "USB", "LSB", "CW"))
+        if tetra_shape and _in_band(freq, TETRA_BANDS):
+            return R("TETRA", "TETRA (π/4-DQPSK, 25 kHz) – " + _tetra_note(freq), "tetra", "", dmode="DIG25", conf=0.8)
+        if tetra_shape:
+            # The right shape, but nowhere TETRA is allocated. Say what can actually be seen rather than naming a
+            # system on the strength of a bandwidth, and start no decoder: there is nothing for one to do.
+            return R("Digital (unidentified)", "Wideband digital carrier, about %.0f kHz – the right shape for TETRA "
+                     "but outside the bands TETRA uses, so it is something else" % (bw / 1000.0), "", "",
+                     dmode="DIG25", conf=0.45)
 
         # ---- TETRAPOL: GMSK 8000 Bd in 12.5 kHz (constant envelope).  A cheap 8000 Bd line test first, then the
         # real proof: the frame-sync pattern that repeats every 20 ms (tetrapol.probe).

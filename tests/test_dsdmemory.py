@@ -97,30 +97,35 @@ def eng_idle(mode, lock=False):
                               _set_signal=lambda r: None, _push_state=lambda *a: None, rx=Rx(), _emit=lambda k, d: ev.append(d),
                               auto_mode_lock=lock, auto_mode_vote=(None, 0))
     e._auto_voice_mode = lambda r: E.Radio._auto_voice_mode(e, r)
+    e._auto_on_signal = lambda r: E.Radio._auto_on_signal(e, r)
+    e.sq_open = True
     e.ev = ev; return e
 def feed(e, r, n):
     for _ in range(n): E.Radio._auto_apply(e, dict(r))
 fm_nfm = dict(voice, mode="NFM"); am = {"kind": "AM voice", "stable": True, "decoder": "", "sub": "auto", "mode": "AM"}
 usb = {"kind": "SSB voice", "stable": True, "decoder": "", "sub": "auto", "mode": "USB"}
-e = eng_idle("DIG"); feed(e, voice, 1)
-check("one reading of plain voice in DIG does not switch yet", e.mode == "DIG")
+# A run of readings is needed, not two: two was enough for the silence between ACARS bursts to flip the
+# demodulator to FM and back about once a second. See tests/test_automode.py.
+e = eng_idle("DIG"); feed(e, voice, E.AUTO_MODE_VOTES - 1)
+check("a run one short of the mark does not switch yet", e.mode == "DIG")
 feed(e, voice, 1)
-check("the second one switches DIG to NFM and says so", e.mode == "NFM" and e.rx.mode == "NFM" and len(e.ev) == 1, (e.mode, e.ev))
-e = eng_idle("DIG25"); feed(e, voice, 2); check("... also from DIG25", e.mode == "NFM")
-e = eng_idle("NFM"); feed(e, am, 2)
+check("the one that completes the run switches DIG to NFM and says so",
+      e.mode == "NFM" and e.rx.mode == "NFM" and len(e.ev) == 1, (e.mode, e.ev))
+e = eng_idle("DIG25"); feed(e, voice, E.AUTO_MODE_VOTES); check("... also from DIG25", e.mode == "NFM")
+e = eng_idle("NFM"); feed(e, am, E.AUTO_MODE_VOTES)
 check("AM voice heard in NFM switches to AM", e.mode == "AM" and e.rx.mode == "AM" and "AM" in e.ev[0]["text"], (e.mode, e.ev))
-e = eng_idle("AM"); feed(e, fm_nfm, 2); check("FM voice heard in AM switches to NFM", e.mode == "NFM")
-e = eng_idle("NFM"); feed(e, usb, 2); check("sideband voice switches to USB", e.mode == "USB")
-e = eng_idle("USB"); feed(e, dict(usb, mode="LSB"), 2); check("... or to LSB", e.mode == "LSB")
-e = eng_idle("FM"); feed(e, fm_nfm, 3); check("FM and NFM are the same thing: no change", e.mode == "FM" and e.rx.mode is None)
-e = eng_idle("NFM", lock=True); feed(e, am, 4); check("a mode you picked by hand is never overridden", e.mode == "NFM")
+e = eng_idle("AM"); feed(e, fm_nfm, E.AUTO_MODE_VOTES); check("FM voice heard in AM switches to NFM", e.mode == "NFM")
+e = eng_idle("NFM"); feed(e, usb, E.AUTO_MODE_VOTES); check("sideband voice switches to USB", e.mode == "USB")
+e = eng_idle("USB"); feed(e, dict(usb, mode="LSB"), E.AUTO_MODE_VOTES); check("... or to LSB", e.mode == "LSB")
+e = eng_idle("FM"); feed(e, fm_nfm, E.AUTO_MODE_VOTES + 1); check("FM and NFM are the same thing: no change", e.mode == "FM" and e.rx.mode is None)
+e = eng_idle("NFM", lock=True); feed(e, am, E.AUTO_MODE_VOTES + 2); check("a mode you picked by hand is never overridden", e.mode == "NFM")
 for m_ in ("WFM", "CW"):
-    e = eng_idle(m_); feed(e, am, 3); check(f"{m_} is left alone", e.mode == m_)
-e = eng_idle("NFM"); feed(e, voice, 3); check("plain unsure voice in NFM changes nothing", e.mode == "NFM" and e.rx.mode is None)
-e = eng_idle("NFM"); feed(e, am, 1); feed(e, voice, 1); feed(e, am, 1)
-check("a single odd reading between breaks the run (needs two in a row)", e.mode == "NFM")
-e = eng_idle("DIG"); feed(e, dict(voice, stable=False), 4); check("a not-yet-stable reading changes nothing", e.mode == "DIG")
-e = eng_idle("DIG"); e.decoders.active = "dsd"; feed(e, voice, 4); check("a decoder chosen by the user keeps the digital mode", e.mode == "DIG")
+    e = eng_idle(m_); feed(e, am, E.AUTO_MODE_VOTES + 1); check(f"{m_} is left alone", e.mode == m_)
+e = eng_idle("NFM"); feed(e, voice, E.AUTO_MODE_VOTES + 1); check("plain unsure voice in NFM changes nothing", e.mode == "NFM" and e.rx.mode is None)
+e = eng_idle("NFM"); feed(e, am, E.AUTO_MODE_VOTES - 1); feed(e, voice, 1); feed(e, am, E.AUTO_MODE_VOTES - 1)
+check("a single odd reading in the middle breaks the run", e.mode == "NFM")
+e = eng_idle("DIG"); feed(e, dict(voice, stable=False), E.AUTO_MODE_VOTES + 2); check("a not-yet-stable reading changes nothing", e.mode == "DIG")
+e = eng_idle("DIG"); e.decoders.active = "dsd"; feed(e, voice, E.AUTO_MODE_VOTES + 2); check("a decoder chosen by the user keeps the digital mode", e.mode == "DIG")
 
 # Auto must not be fooled by one false sync, and must not swap a decoder that is really locked
 class Tcp: clients = [object()]
