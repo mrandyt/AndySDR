@@ -875,7 +875,7 @@ class Radio:
 
     def _gcal_finish(self):
         g, self.gcal = self.gcal, None
-        res = gaincal.choose(g["pts"], overload_from=g["ovl_from"])
+        res = gaincal.choose(g["pts"], overload_from=g["ovl_from"], keep=g["was"])
         if not res:
             if self.dev:
                 self.dev.set_gain(float(g["was"]))
@@ -898,6 +898,8 @@ class Radio:
         if self.dev:
             self.dev.set_gain(float(res["gain"]))
         log.info("gain test: %.1f dB chosen at %.4f MHz (%s) - %s", res["gain"], g["freq"] / 1e6, g["band"] or "no band", res["why"])
+        log.info("gain test readings (gain dB -> noise floor dBFS): %s",
+                 ", ".join(f"{a:.1f}->{b:.1f}" for a, b in res["points"]))
         self._emit("gaincal", dict(res, running=False, done=True))
         note = f"RF gain set to {res['gain']:.0f} dB."
         if res.get("squelch") is not None:

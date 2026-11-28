@@ -38,10 +38,16 @@ for knee in (10.0, 20.0, 30.0):
           r and (r["gain"], r["slope"]))
     check(f"bend at {knee:.0f} dB -> the aerial is what you hear", r and r["slope"] >= 0.88, r and r["slope"])
 
-# --- a busy band: the aerial is already louder than the receiver at minimum gain --------------------
+# --- a preamplifier in front: the aerial is already louder than the receiver at every gain ------------
+# Seen for real on a 137 MHz dongle with a powered LNA: the floor rises one-for-one from 0 dB, so the bend is below
+# the range.  Nothing in the sweep says one gain beats another, so the answer must be to keep what is in use, not
+# to drop the gain to the bottom (which is what it used to do).
+r = gaincal.choose(sweep(-15.0), keep=20.0)
+check("with a preamp the gain in use is kept", r and abs(r["gain"] - 20.0) < 0.01, r and r["gain"])
+check("...and it explains that gain is not the limit here", r and "preamplifier" in r["why"], r and r["why"])
+check("...and does not claim a bend it did not see", r and "follows the gain from" not in r["why"], r and r["why"])
 r = gaincal.choose(sweep(-15.0))
-check("a noisy band needs very little gain", r and r["gain"] <= 6.0, r and r["gain"])
-check("...and it says why", r and "follows the gain" in r["why"], r and r["why"])
+check("with nothing to keep it falls back to the lowest tried", r and r["gain"] <= 6.0, r and r["gain"])
 
 # --- a very quiet aerial: the receiver is still the limit at full gain ------------------------------
 r = gaincal.choose(sweep(70.0))

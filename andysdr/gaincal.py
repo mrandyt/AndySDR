@@ -56,11 +56,12 @@ def _slope_at(points, i):
     return sxy / sxx
 
 
-def choose(points, overload_from=None, want=WANT_SLOPE):
+def choose(points, overload_from=None, want=WANT_SLOPE, keep=None):
     """Pick the gain from a sweep.
 
     `points` is [(gain dB, noise floor dBFS)], any order. `overload_from` is the lowest gain at which the receiver
-    reported it was being overloaded, if it did.
+    reported it was being overloaded, if it did. `keep` is the gain in use, kept when the measurement turns out to
+    have nothing to say about which gain is better.
 
     Returns {"gain", "why", "slope", "headroom", "points"} - `why` is a sentence for the screen.
     """
@@ -83,6 +84,15 @@ def choose(points, overload_from=None, want=WANT_SLOPE):
         why = ("The noise floor barely moved across the whole gain range (%.1f dB). Either this aerial is very quiet or "
                "nothing is reaching the receiver - worth checking the aerial and the lead. Using the most gain available "
                "meanwhile." % rise)
+    elif usable[0][1] >= want:
+        # The floor is already following the gain one-for-one at the lowest setting the receiver has, so the bend is
+        # below its range: the aerial - or a preamplifier in front of it - is louder than the receiver everywhere.
+        # Nothing here says one gain is better than another, so changing it would be guessing.  Leave it alone.
+        pick = usable[0][0] if keep is None else max(usable[0][0], min(top, float(keep)))
+        why = ("The noise floor follows the gain even at the lowest setting, so the aerial - or a preamplifier in front "
+               "of it - is already louder than the receiver across the whole range. Gain is not what is limiting you "
+               "here and no setting is better than another for sensitivity, so it has been left where it was. What is "
+               "worth watching at this aerial is overload at the top end, not sensitivity at the bottom.")
     else:
         for g, sl in usable:
             if sl >= want:

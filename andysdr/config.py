@@ -6,7 +6,7 @@ import sys
 import threading
 
 APP_NAME = "AndySDR"
-VERSION = "1.27.2"
+VERSION = "1.27.3"
 GITHUB_REPO = "mrandyt/AndySDR"   # where updates are published (GitHub Releases)
 
 

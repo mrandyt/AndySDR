@@ -415,7 +415,7 @@ class SatRx:
 
     def _gcal_finish(self):
         g, self.gcal = self.gcal, None
-        res = gaincal.choose(g["pts"])
+        res = gaincal.choose(g["pts"], keep=g["was"])
         if not res:
             self.set_gain(g["was"])
             self.radio._emit("satgaincal", {"running": False, "why": "not enough readings to decide"})
@@ -424,6 +424,8 @@ class SatRx:
         res.update(freq=g["freq"], dev=g["dev"], when=int(time.time()), was=g["was"], band="Meteor 137 MHz")
         self.set_gain(float(res["gain"]))
         log.info("second receiver gain test: %.1f dB chosen at %.4f MHz - %s", res["gain"], g["freq"] / 1e6, res["why"])
+        log.info("gain test readings (gain dB -> noise floor dBFS): %s",
+                 ", ".join(f"{a:.1f}->{b:.1f}" for a, b in res["points"]))
         self.radio._emit("satgaincal", dict(res, running=False, done=True))
         self.radio._emit("event", {"level": "info",
                                    "text": f"Second receiver RF gain set to {res['gain']:.0f} dB. {res['why']}"})
